@@ -1,29 +1,18 @@
 # Ink Enhanced Select Input
 
-<!-- **NPM Version** -->
+<div style="display: flex; justify-content: center align-items: center; flex-wrap: wrap; gap: 0.2rem;">
+
 [![npm version](https://img.shields.io/npm/v/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
 
 <!-- **NPM Downloads (Monthly)**   -->
 [![npm downloads](https://img.shields.io/npm/dm/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
 
-<!-- **Bundle Size (Minzipped)**   -->
 [![minzipped size](https://img.shields.io/bundlephobia/minzip/ink-enhanced-select-input.svg)](https://bundlephobia.com/result?p=ink-enhanced-select-input)
 
-<!-- **Build Status (GitHub Actions)**  
-*(Adjust the workflow name if it differs)*  
-[![CI](https://github.com/gfargo/ink-enhanced-select-input/actions/workflows/ci.yml/badge.svg)](https://github.com/gfargo/ink-enhanced-select-input/actions/workflows/ci.yml) -->
-
-<!-- **Issue Tracking**   -->
 [![GitHub issues](https://img.shields.io/github/issues/gfargo/ink-enhanced-select-input.svg)](https://github.com/gfargo/ink-enhanced-select-input/issues)
 
-<!-- **GitHub Stars**   -->
-[![GitHub stars](https://img.shields.io/github/stars/gfargo/ink-enhanced-select-input.svg)](https://github.com/gfargo/ink-enhanced-select-input/stargazers)
-
-<!-- **Code Coverage (Codecov)**  
-*(Requires integration with Codecov)*  
-[![Coverage Status](https://img.shields.io/codecov/c/github/gfargo/ink-enhanced-select-input.svg)](https://codecov.io/gh/gfargo/ink-enhanced-select-input) -->
-
 [![license](https://img.shields.io/github/license/gfargo/ink-enhanced-select-input.svg)](./LICENSE)
+</div>
 
 An enhanced, customizable select input component for [Ink](https://github.com/vadimdemedes/ink) that supports both vertical and horizontal orientations, hotkeys, and flexible rendering. Ideal for building rich, interactive CLI apps with React.
 
@@ -89,6 +78,7 @@ render(<Demo />);
 ```
 
 Run your Ink application:
+
 ```bash
 node your-app.js
 ```
@@ -186,27 +176,33 @@ function MyItem({ isSelected, isDisabled, label }) {
 ## Development Setup
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/gfargo/ink-enhanced-select-input.git
    cd ink-enhanced-select-input
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Build and run the storybook-like test application locally:
+
    ```bash
    npm run build
    npm start
    ```
+
    This will run `dist/storybook.js`, a local testing interface to interact with and visualize different configurations of the component.
 
 4. Run tests:
+
    ```bash
    npm test
    ```
+
    Uses [AVA](https://github.com/avajs/ava) for a fast test suite.
 
 ## Contributing
@@ -216,4 +212,5 @@ Contributions are welcome! Feel free to open issues, submit pull requests, or pr
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
 ```
