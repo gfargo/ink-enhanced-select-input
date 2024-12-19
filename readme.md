@@ -1,18 +1,12 @@
 # Ink Enhanced Select Input
 
-<div style="display: flex; justify-content: center align-items: center; flex-wrap: wrap; gap: 0.2rem;">
 
 [![npm version](https://img.shields.io/npm/v/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
-
-<!-- **NPM Downloads (Monthly)**   -->
 [![npm downloads](https://img.shields.io/npm/dm/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
-
 [![minzipped size](https://img.shields.io/bundlephobia/minzip/ink-enhanced-select-input.svg)](https://bundlephobia.com/result?p=ink-enhanced-select-input)
-
 [![GitHub issues](https://img.shields.io/github/issues/gfargo/ink-enhanced-select-input.svg)](https://github.com/gfargo/ink-enhanced-select-input/issues)
-
 [![license](https://img.shields.io/github/license/gfargo/ink-enhanced-select-input.svg)](./LICENSE)
-</div>
+
 
 An enhanced, customizable select input component for [Ink](https://github.com/vadimdemedes/ink) that supports both vertical and horizontal orientations, hotkeys, and flexible rendering. Ideal for building rich, interactive CLI apps with React.
 
