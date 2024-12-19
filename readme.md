@@ -1,12 +1,10 @@
 # Ink Enhanced Select Input
 
-
 [![npm version](https://img.shields.io/npm/v/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
 [![npm downloads](https://img.shields.io/npm/dm/ink-enhanced-select-input.svg)](https://www.npmjs.com/package/ink-enhanced-select-input)
 [![minzipped size](https://img.shields.io/bundlephobia/minzip/ink-enhanced-select-input.svg)](https://bundlephobia.com/result?p=ink-enhanced-select-input)
 [![GitHub issues](https://img.shields.io/github/issues/gfargo/ink-enhanced-select-input.svg)](https://github.com/gfargo/ink-enhanced-select-input/issues)
 [![license](https://img.shields.io/github/license/gfargo/ink-enhanced-select-input.svg)](./LICENSE)
-
 
 An enhanced, customizable select input component for [Ink](https://github.com/vadimdemedes/ink) that supports both vertical and horizontal orientations, hotkeys, and flexible rendering. Ideal for building rich, interactive CLI apps with React.
 
@@ -69,12 +67,6 @@ function Demo() {
 }
 
 render(<Demo />);
-```
-
-Run your Ink application:
-
-```bash
-node your-app.js
 ```
 
 ## Props
@@ -169,19 +161,8 @@ function MyItem({ isSelected, isDisabled, label }) {
 
 ## Development Setup
 
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/gfargo/ink-enhanced-select-input.git
-   cd ink-enhanced-select-input
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
+1. Clone the repository and navigate to the project directory.
+2. Install dependencies
 3. Build and run the storybook-like test application locally:
 
    ```bash
@@ -201,10 +182,8 @@ function MyItem({ isSelected, isDisabled, label }) {
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues, submit pull requests, or provide feedback. Suggestions for improvements, new features, or bug reports are all appreciated.
+Contributions are welcome! Feel free to open [issues](https://github.com/gfargo/ink-enhanced-select-input/issues), submit pull requests, or provide feedback. Suggestions for improvements, new features, or bug reports are all appreciated.
 
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
-
-```
