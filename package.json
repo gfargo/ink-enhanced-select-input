@@ -1,6 +1,6 @@
 {
   "name": "ink-enhanced-select-input",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "An enhanced variant of the select input component for Ink",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
