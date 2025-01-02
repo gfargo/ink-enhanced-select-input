@@ -4,6 +4,7 @@
   "description": "An enhanced variant of the select input component for Ink",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
+  "main": "dist/index.js",
   "module": "dist/index.js",
   "type": "module",
   "engines": {

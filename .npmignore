@@ -1,0 +1,11 @@
+**.test.**
+**.spec.**
+**.test.js
+**.spec.js
+
+tests/
+examples/
+prompts/
+
+storybook.**
+test.**
