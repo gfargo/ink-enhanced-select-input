@@ -35,7 +35,7 @@ yarn add ink-enhanced-select-input
 ```jsx
 import React from 'react';
 import { render, Text } from 'ink';
-import EnhancedSelectInput from 'ink-enhanced-select-input';
+import { EnhancedSelectInput } from 'ink-enhanced-select-input';
 
 const items = [
   { label: 'Option 1', value: 'one', hotkey: '1' },
