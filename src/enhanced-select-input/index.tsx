@@ -116,30 +116,51 @@ export function EnhancedSelectInput<V>({
         return
       }
 
-      let nextIndex = selectedIndex
-
+      // Use functional setState to handle rapid keypresses correctly
+      // This ensures each keypress gets the latest index value, not a stale closure value
       if (orientation === 'vertical') {
         if (key.upArrow || input === 'k') {
-          nextIndex = findNextValidIndex(selectedIndex, -1)
+          setSelectedIndex(currentIndex => {
+            const nextIndex = findNextValidIndex(currentIndex, -1)
+            if (nextIndex !== currentIndex && limit) {
+              setRotateIndex(Math.floor(nextIndex / limit) * limit)
+            }
+            return nextIndex
+          })
+          return
         }
 
         if (key.downArrow || input === 'j') {
-          nextIndex = findNextValidIndex(selectedIndex, 1)
+          setSelectedIndex(currentIndex => {
+            const nextIndex = findNextValidIndex(currentIndex, 1)
+            if (nextIndex !== currentIndex && limit) {
+              setRotateIndex(Math.floor(nextIndex / limit) * limit)
+            }
+            return nextIndex
+          })
+          return
         }
       } else {
         if (key.leftArrow || input === 'h') {
-          nextIndex = findNextValidIndex(selectedIndex, -1)
+          setSelectedIndex(currentIndex => {
+            const nextIndex = findNextValidIndex(currentIndex, -1)
+            if (nextIndex !== currentIndex && limit) {
+              setRotateIndex(Math.floor(nextIndex / limit) * limit)
+            }
+            return nextIndex
+          })
+          return
         }
 
         if (key.rightArrow || input === 'l') {
-          nextIndex = findNextValidIndex(selectedIndex, 1)
-        }
-      }
-
-      if (nextIndex !== selectedIndex) {
-        setSelectedIndex(nextIndex)
-        if (limit) {
-          setRotateIndex(Math.floor(nextIndex / limit) * limit)
+          setSelectedIndex(currentIndex => {
+            const nextIndex = findNextValidIndex(currentIndex, 1)
+            if (nextIndex !== currentIndex && limit) {
+              setRotateIndex(Math.floor(nextIndex / limit) * limit)
+            }
+            return nextIndex
+          })
+          return
         }
       }
 
