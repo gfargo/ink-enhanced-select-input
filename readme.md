@@ -18,123 +18,87 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
 - **Limit Displayed Items:** Restrict how many options to show at once.
 
+## Compatibility
+
+| Dependency | Required Version |
+|---|---|
+| Node.js | >= 20 |
+| React | >= 19 |
+| Ink | >= 6 |
+
+> For Ink 5 / React 18 support, use `ink-enhanced-select-input@0.2.0`.
+
 ## Installation
 
 ```bash
-npm install ink-enhanced-select-input
+npm install ink-enhanced-select-input ink react
 ```
 
 or
 
 ```bash
-yarn add ink-enhanced-select-input
+yarn add ink-enhanced-select-input ink react
 ```
 
-## Usage Example
+## Usage
 
-```jsx
-import React from 'react';
-import { render, Text } from 'ink';
-import { EnhancedSelectInput } from 'ink-enhanced-select-input';
+```tsx
+import React from 'react'
+import { render, Text } from 'ink'
+import { EnhancedSelectInput } from 'ink-enhanced-select-input'
 
 const items = [
   { label: 'Option 1', value: 'one', hotkey: '1' },
   { label: 'Option 2', value: 'two', hotkey: '2' },
   { label: 'Option 3', value: 'three', disabled: true },
-  { label: 'Option 4', value: 'four', hotkey: '4' }
-];
+  { label: 'Option 4', value: 'four', hotkey: '4' },
+]
 
 function Demo() {
-  const handleSelect = (item) => {
-    console.log(`Selected: ${item.value}`);
-  };
-
-  const handleHighlight = (item) => {
-    console.log(`Highlighted: ${item.value}`);
-  };
-
   return (
-    <>
-      <Text>Select an option:</Text>
-      <EnhancedSelectInput
-        items={items}
-        orientation="horizontal"
-        onSelect={handleSelect}
-        onHighlight={handleHighlight}
-      />
-    </>
-  );
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => console.log(`Selected: ${item.value}`)}
+      onHighlight={(item) => console.log(`Highlighted: ${item.value}`)}
+    />
+  )
 }
 
-render(<Demo />);
+render(<Demo />)
 ```
 
-## Props
+### Horizontal Layout
 
-### `items` (required)
+```tsx
+<EnhancedSelectInput
+  items={items}
+  orientation="horizontal"
+  onSelect={(item) => console.log(item.value)}
+/>
+```
 
-- **Type:** `Array<{ label: string; value: V; hotkey?: string; indicator?: React.ReactNode; disabled?: boolean }>`
-- **Description:** The list of items to display. Each item defines its own label, value, an optional hotkey for quick selection, optional custom indicator, and whether it’s disabled.
+### Per-Item Indicators
 
-### `isFocused`
+```tsx
+<EnhancedSelectInput
+  items={[
+    { label: 'Save', value: 'save', indicator: <Text color="green">✔</Text> },
+    { label: 'Delete', value: 'delete', indicator: <Text color="red">✘</Text> },
+    { label: 'Cancel', value: 'cancel', hotkey: 'c' },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
 
-- **Type:** `boolean`
-- **Default:** `true`
-- **Description:** When `false`, the component won’t respond to input.
+### Custom Components
 
-### `initialIndex`
-
-- **Type:** `number`
-- **Default:** `0`
-- **Description:** The index of the item that should be highlighted initially.
-
-### `limit`
-
-- **Type:** `number`
-- **Default:** *undefined*
-- **Description:** How many items to display at once. If provided, only that many items are rendered.
-
-### `indicatorComponent`
-
-- **Type:** `React.FC<{isSelected: boolean; item: Item<V>;}>`
-- **Default:** A simple `>` arrow when selected.
-- **Description:** Custom component to render in front of selected item labels.
-
-### `itemComponent`
-
-- **Type:** `React.FC<{isSelected: boolean; label: string; isDisabled: boolean;}>`
-- **Default:** Renders the item label in green if selected, gray if disabled, or default otherwise.
-- **Description:** Custom renderer for the individual item line.
-
-### `onSelect`
-
-- **Type:** `(item: Item<V>) => void`
-- **Default:** *undefined*
-- **Description:** Called when the user confirms a selection (via `Enter` or a hotkey).
-
-### `onHighlight`
-
-- **Type:** `(item: Item<V>) => void`
-- **Default:** *undefined*
-- **Description:** Called whenever the highlighted (focused) item changes.
-
-### `orientation`
-
-- **Type:** `'vertical' | 'horizontal'`
-- **Default:** `'vertical'`
-- **Description:** Sets the layout direction of items.
-
-## Customization
-
-You can customize how items and indicators are rendered:
-
-```jsx
+```tsx
 function MyIndicator({ isSelected }) {
   return (
     <Text color={isSelected ? 'magenta' : undefined}>
       {isSelected ? '👉' : '  '}
     </Text>
-  );
+  )
 }
 
 function MyItem({ isSelected, isDisabled, label }) {
@@ -145,45 +109,74 @@ function MyItem({ isSelected, isDisabled, label }) {
     >
       {label}
     </Text>
-  );
+  )
 }
 
 <EnhancedSelectInput
-  items={[
-    { label: 'First', value: '1' },
-    { label: 'Second', value: '2', disabled: true },
-    { label: 'Third', value: '3', hotkey: 't' }
-  ]}
+  items={items}
   indicatorComponent={MyIndicator}
   itemComponent={MyItem}
 />
 ```
 
-## Development Setup
+## Props
 
-1. Clone the repository and navigate to the project directory.
-2. Install dependencies
-3. Build and run the storybook-like test application locally:
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `items` | `Array<Item<V>>` | *required* | List of selectable items |
+| `isFocused` | `boolean` | `true` | Whether the component responds to input |
+| `initialIndex` | `number` | `0` | Index of the initially highlighted item |
+| `limit` | `number` | — | Max number of visible items |
+| `indicatorComponent` | `FC<IndicatorProps>` | `DefaultIndicatorComponent` | Custom selection indicator |
+| `itemComponent` | `FC<ItemProps>` | `DefaultItemComponent` | Custom item renderer |
+| `onSelect` | `(item: Item<V>) => void` | — | Called on selection (Enter or hotkey) |
+| `onHighlight` | `(item: Item<V>) => void` | — | Called when the highlighted item changes |
+| `orientation` | `'vertical' \| 'horizontal'` | `'vertical'` | Layout direction |
 
-   ```bash
-   npm run build
-   npm start
-   ```
+### Item Shape
 
-   This will run `dist/storybook.js`, a local testing interface to interact with and visualize different configurations of the component.
+```ts
+type Item<V> = {
+  key?: string
+  label: string
+  value: V
+  hotkey?: string
+  indicator?: React.ReactNode
+  disabled?: boolean
+}
+```
 
-4. Run tests:
+## Keyboard Navigation
 
-   ```bash
-   npm test
-   ```
+| Orientation | Previous | Next | Select |
+|---|---|---|---|
+| Vertical | `↑` / `k` | `↓` / `j` | `Enter` |
+| Horizontal | `←` / `h` | `→` / `l` | `Enter` |
 
-   Uses [AVA](https://github.com/avajs/ava) for a fast test suite.
+Hotkeys (when assigned) select the item immediately.
+
+Disabled items are automatically skipped during navigation.
+
+## Development
+
+```bash
+git clone https://github.com/gfargo/ink-enhanced-select-input.git
+cd ink-enhanced-select-input
+yarn install
+```
+
+| Command | Description |
+|---|---|
+| `yarn build` | Compile TypeScript to `dist/` |
+| `yarn start` | Build and run the interactive storybook demo |
+| `yarn test` | Build and run tests |
+| `yarn lint` | Check formatting and lint |
+| `yarn lint:fix` | Auto-fix formatting and lint issues |
 
 ## Contributing
 
-Contributions are welcome! Feel free to open [issues](https://github.com/gfargo/ink-enhanced-select-input/issues), submit pull requests, or provide feedback. Suggestions for improvements, new features, or bug reports are all appreciated.
+Contributions are welcome. Feel free to open [issues](https://github.com/gfargo/ink-enhanced-select-input/issues), submit pull requests, or provide feedback.
 
 ## License
 
-This project is licensed under the [MIT License](./LICENSE).
+[MIT](./LICENSE)
