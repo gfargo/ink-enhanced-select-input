@@ -8,7 +8,7 @@
   "module": "dist/index.js",
   "type": "module",
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   },
   "scripts": {
     "prestart": "yarn build",
@@ -26,13 +26,13 @@
     "dist"
   ],
   "dependencies": {
-    "ink": "^5.1.0",
-    "react": "^18.2.0"
+    "ink": "^6.0.0",
+    "react": "^19.0.0"
   },
   "devDependencies": {
     "@ava/typescript": "^5.0.0",
     "@types/node": "^22.8.2",
-    "@types/react": "^18.0.32",
+    "@types/react": "^19.0.0",
     "ava": "^6.2.0",
     "chalk": "^5.2.0",
     "eslint-config-xo-react": "^0.27.0",
