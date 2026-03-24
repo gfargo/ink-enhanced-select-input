@@ -70,9 +70,19 @@ export function EnhancedSelectInput<V>({
   onHighlight,
   orientation = 'vertical',
 }: Properties<V>) {
-  // Ensure initialIndex is within bounds
-  const safeInitialIndex =
-    items.length > 0 ? Math.min(initialIndex, items.length - 1) : 0
+  // Ensure initialIndex is within bounds and not on a disabled item
+  const safeInitialIndex = (() => {
+    if (items.length === 0) return 0
+    const clamped = Math.min(initialIndex, items.length - 1)
+    if (!items[clamped]?.disabled) return clamped
+    // Search forward for the nearest enabled item, wrapping around
+    for (let i = 1; i < items.length; i++) {
+      const nextIndex = (clamped + i) % items.length
+      if (!items[nextIndex]?.disabled) return nextIndex
+    }
+
+    return clamped
+  })()
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
     limit ? Math.floor(safeInitialIndex / limit) * limit : 0
