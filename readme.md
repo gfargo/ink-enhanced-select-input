@@ -21,10 +21,10 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 ## Compatibility
 
 | Dependency | Required Version |
-|---|---|
-| Node.js | >= 20 |
-| React | >= 19 |
-| Ink | >= 6 |
+| ---------- | ---------------- |
+| Node.js    | >= 20            |
+| React      | >= 19            |
+| Ink        | >= 6             |
 
 > For Ink 5 / React 18 support, use `ink-enhanced-select-input@0.2.0`.
 
@@ -112,7 +112,7 @@ function MyItem({ isSelected, isDisabled, label }) {
   )
 }
 
-<EnhancedSelectInput
+;<EnhancedSelectInput
   items={items}
   indicatorComponent={MyIndicator}
   itemComponent={MyItem}
@@ -121,17 +121,17 @@ function MyItem({ isSelected, isDisabled, label }) {
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `items` | `Array<Item<V>>` | *required* | List of selectable items |
-| `isFocused` | `boolean` | `true` | Whether the component responds to input |
-| `initialIndex` | `number` | `0` | Index of the initially highlighted item |
-| `limit` | `number` | — | Max number of visible items |
-| `indicatorComponent` | `FC<IndicatorProps>` | `DefaultIndicatorComponent` | Custom selection indicator |
-| `itemComponent` | `FC<ItemProps>` | `DefaultItemComponent` | Custom item renderer |
-| `onSelect` | `(item: Item<V>) => void` | — | Called on selection (Enter or hotkey) |
-| `onHighlight` | `(item: Item<V>) => void` | — | Called when the highlighted item changes |
-| `orientation` | `'vertical' \| 'horizontal'` | `'vertical'` | Layout direction |
+| Prop                 | Type                         | Default                     | Description                              |
+| -------------------- | ---------------------------- | --------------------------- | ---------------------------------------- |
+| `items`              | `Array<Item<V>>`             | _required_                  | List of selectable items                 |
+| `isFocused`          | `boolean`                    | `true`                      | Whether the component responds to input  |
+| `initialIndex`       | `number`                     | `0`                         | Index of the initially highlighted item  |
+| `limit`              | `number`                     | —                           | Max number of visible items              |
+| `indicatorComponent` | `FC<IndicatorProps>`         | `DefaultIndicatorComponent` | Custom selection indicator               |
+| `itemComponent`      | `FC<ItemProps>`              | `DefaultItemComponent`      | Custom item renderer                     |
+| `onSelect`           | `(item: Item<V>) => void`    | —                           | Called on selection (Enter or hotkey)    |
+| `onHighlight`        | `(item: Item<V>) => void`    | —                           | Called when the highlighted item changes |
+| `orientation`        | `'vertical' \| 'horizontal'` | `'vertical'`                | Layout direction                         |
 
 ### Item Shape
 
@@ -148,10 +148,10 @@ type Item<V> = {
 
 ## Keyboard Navigation
 
-| Orientation | Previous | Next | Select |
-|---|---|---|---|
-| Vertical | `↑` / `k` | `↓` / `j` | `Enter` |
-| Horizontal | `←` / `h` | `→` / `l` | `Enter` |
+| Orientation | Previous  | Next      | Select  |
+| ----------- | --------- | --------- | ------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Enter` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Enter` |
 
 Hotkeys (when assigned) select the item immediately.
 
@@ -165,13 +165,13 @@ cd ink-enhanced-select-input
 yarn install
 ```
 
-| Command | Description |
-|---|---|
-| `yarn build` | Compile TypeScript to `dist/` |
-| `yarn start` | Build and run the interactive storybook demo |
-| `yarn test` | Build and run tests |
-| `yarn lint` | Check formatting and lint |
-| `yarn lint:fix` | Auto-fix formatting and lint issues |
+| Command         | Description                                  |
+| --------------- | -------------------------------------------- |
+| `yarn build`    | Compile TypeScript to `dist/`                |
+| `yarn start`    | Build and run the interactive storybook demo |
+| `yarn test`     | Build and run tests                          |
+| `yarn lint`     | Check formatting and lint                    |
+| `yarn lint:fix` | Auto-fix formatting and lint issues          |
 
 ## Contributing
 

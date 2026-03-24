@@ -176,11 +176,14 @@ export function Storybook() {
                 </Text>
               </Box>
             )}
-            indicatorComponent={({ isSelected, item }) => (
-              <Text color={isSelected ? 'blue' : 'white'}>
-                {isSelected ? '→ ' : (item.indicator ?? '  ')}
-              </Text>
-            )}
+            indicatorComponent={({ isSelected, item }) => {
+              const icon = item.indicator ?? '  '
+              return (
+                <Text color={isSelected ? 'blue' : 'white'}>
+                  {isSelected ? '→ ' : icon}
+                </Text>
+              )
+            }}
             orientation={orientation}
             items={[
               {

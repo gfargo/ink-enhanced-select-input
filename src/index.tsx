@@ -1,2 +1,1 @@
-export { EnhancedSelectInput } from './enhanced-select-input/index.js';
-
+export { EnhancedSelectInput } from './enhanced-select-input/index.js'
