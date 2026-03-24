@@ -9,7 +9,10 @@ const ARROW_UP = '\u001B[A'
 const ARROW_DOWN = '\u001B[B'
 
 // Small delay to let React/Ink process state updates
-const delay = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms))
+const delay = async (ms = 50) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
 
 test('render with default options', (t) => {
   const { lastFrame } = render(
@@ -178,9 +181,7 @@ test('limit restricts visible items', (t) => {
     { label: 'D', value: 'd' },
   ]
 
-  const { lastFrame } = render(
-    <EnhancedSelectInput items={items} limit={2} />
-  )
+  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={2} />)
 
   const frame = lastFrame()!
   // Only 2 items should be visible initially
