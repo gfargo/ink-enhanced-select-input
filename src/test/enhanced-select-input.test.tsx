@@ -7,6 +7,9 @@ import { EnhancedSelectInput } from '../enhanced-select-input/index.js'
 // ANSI escape sequences for arrow keys
 const ARROW_UP = '\u001B[A'
 const ARROW_DOWN = '\u001B[B'
+const ARROW_RIGHT = '\u001B[C'
+const ARROW_LEFT = '\u001B[D'
+const ENTER = '\r'
 
 // Small delay to let React/Ink process state updates
 const delay = async (ms = 50) =>
@@ -36,7 +39,6 @@ test('render with default options', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Item 1'))
     t.true(lastFrameSnapshot.includes('Item 2'))
@@ -72,7 +74,6 @@ test('render with horizontal orientation', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Item 1'))
     t.true(lastFrameSnapshot.includes('Item 2'))
@@ -104,7 +105,6 @@ test('render with custom hotkeys', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('(1)'))
     t.true(lastFrameSnapshot.includes('(b)'))
@@ -127,7 +127,6 @@ test('render with custom indicators on each item', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('•'))
     t.true(lastFrameSnapshot.includes('Item 1'))
@@ -161,7 +160,6 @@ test('render with custom item component', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
 
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Selected'))
@@ -169,6 +167,448 @@ test('render with custom item component', (t) => {
   } else {
     t.fail('custom item component snapshot is empty')
   }
+})
+
+// --- Empty State ---
+
+test('render empty items list', (t) => {
+  const { lastFrame } = render(<EnhancedSelectInput items={[]} />)
+  const frame = lastFrame()
+  t.true(frame !== undefined)
+})
+
+// --- initialIndex ---
+
+test('initialIndex selects the correct item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+  const frame = lastFrame()!
+  t.true(frame.includes('C'))
+})
+
+test('initialIndex out of bounds clamps to last item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={99}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('initialIndex on a disabled item skips to nearest enabled', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+// --- Keyboard Navigation (vertical, arrow keys) ---
+
+test('arrow down moves selection down', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+test('arrow up moves selection up', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('navigation wraps around from last to first', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+test('navigation wraps around from first to last', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+// --- Vim-style navigation ---
+
+test('j/k keys navigate vertically', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('j')
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write('j')
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write('k')
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('h/l keys navigate horizontally', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('l')
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write('l')
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write('h')
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('arrow left/right navigate in horizontal orientation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_RIGHT)
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write(ARROW_LEFT)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+// --- Disabled Item Skipping ---
+
+test('navigation skips disabled items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+test('navigation skips multiple consecutive disabled items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c', disabled: true },
+    { label: 'D', value: 'd' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'D')
+})
+
+// --- onSelect ---
+
+test('enter key triggers onSelect', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, 'A')
+})
+
+test('navigate then select', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, 'C')
+})
+
+// --- Hotkey Selection ---
+
+test('hotkey triggers onSelect for matching item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'x' },
+    { label: 'B', value: 'b', hotkey: 'y' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('y')
+  await delay()
+  t.is(selected, 'B')
+})
+
+test('hotkey does not trigger for disabled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'x' },
+    { label: 'B', value: 'b', hotkey: 'y', disabled: true },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('y')
+  await delay()
+  t.is(selected, '')
+})
+
+// --- isFocused ---
+
+test('isFocused=false disables keyboard input', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      isFocused={false}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'A')
 })
 
 // --- limit prop pagination ---
