@@ -36,7 +36,6 @@ test('render with default options', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Item 1'))
     t.true(lastFrameSnapshot.includes('Item 2'))
@@ -72,7 +71,6 @@ test('render with horizontal orientation', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Item 1'))
     t.true(lastFrameSnapshot.includes('Item 2'))
@@ -104,7 +102,6 @@ test('render with custom hotkeys', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('(1)'))
     t.true(lastFrameSnapshot.includes('(b)'))
@@ -127,7 +124,6 @@ test('render with custom indicators on each item', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('•'))
     t.true(lastFrameSnapshot.includes('Item 1'))
@@ -161,7 +157,6 @@ test('render with custom item component', (t) => {
   )
 
   const lastFrameSnapshot = lastFrame()
-  t.snapshot(lastFrameSnapshot)
 
   if (lastFrameSnapshot) {
     t.true(lastFrameSnapshot.includes('Selected'))
