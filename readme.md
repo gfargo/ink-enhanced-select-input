@@ -17,6 +17,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Keyboard Navigation:** Arrow keys and Vim-like keys (`h/j/k/l`) supported.
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
 - **Limit Displayed Items:** Restrict how many options to show at once.
+- **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
 
 ## Compatibility
 
@@ -75,6 +76,41 @@ render(<Demo />)
   orientation="horizontal"
   onSelect={(item) => console.log(item.value)}
 />
+```
+
+### Multi-select
+
+Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
+
+```tsx
+import React, { useState } from 'react'
+import { render, Text } from 'ink'
+import { EnhancedSelectInput } from 'ink-enhanced-select-input'
+
+const options = [
+  { label: 'TypeScript', value: 'ts' },
+  { label: 'React', value: 'react' },
+  { label: 'Ink', value: 'ink' },
+  { label: 'Legacy (unsupported)', value: 'legacy', disabled: true },
+]
+
+function MultiDemo() {
+  return (
+    <EnhancedSelectInput
+      items={options}
+      multiple
+      defaultSelectedKeys={['ts']}
+      onToggle={(item, checked) =>
+        console.log(`${item.label} is now ${checked ? 'checked' : 'unchecked'}`)
+      }
+      onConfirm={(selected) =>
+        console.log('Confirmed:', selected.map((i) => i.value))
+      }
+    />
+  )
+}
+
+render(<MultiDemo />)
 ```
 
 ### Per-Item Indicators
@@ -144,23 +180,27 @@ function MyCustomSelect({ items, onSelect }) {
 }
 ```
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow }`.
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`.
 
 ## Props
 
-| Prop                 | Type                         | Default                     | Description                              |
-| -------------------- | ---------------------------- | --------------------------- | ---------------------------------------- |
-| `items`              | `Array<Item<V>>`             | _required_                  | List of selectable items                 |
-| `isFocused`          | `boolean`                    | `true`                      | Whether the component responds to input  |
-| `initialIndex`       | `number`                     | `0`                         | Index of the initially highlighted item  |
-| `limit`              | `number`                     | —                           | Max number of visible items              |
-| `indicatorComponent` | `FC<IndicatorProps>`         | `DefaultIndicatorComponent` | Custom selection indicator               |
-| `itemComponent`      | `FC<ItemProps>`              | `DefaultItemComponent`      | Custom item renderer                     |
-| `onSelect`           | `(item: Item<V>) => void`    | —                           | Called on selection (Enter or hotkey)    |
-| `onHighlight`        | `(item: Item<V>) => void`    | —                           | Called when the highlighted item changes |
-| `onCancel`           | `() => void`                 | —                           | Called when Escape is pressed            |
-| `orientation`        | `'vertical' \| 'horizontal'` | `'vertical'`                | Layout direction                         |
-| `showScrollIndicators` | `boolean`                  | `false`                     | Show ▲/▼ or ◀/▶ counts when `limit` clips the list |
+| Prop                   | Type                              | Default                     | Description                              |
+| ---------------------- | --------------------------------- | --------------------------- | ---------------------------------------- |
+| `items`                | `Array<Item<V>>`                  | _required_                  | List of selectable items                 |
+| `isFocused`            | `boolean`                         | `true`                      | Whether the component responds to input  |
+| `initialIndex`         | `number`                          | `0`                         | Index of the initially highlighted item  |
+| `limit`                | `number`                          | —                           | Max number of visible items              |
+| `indicatorComponent`   | `FC<IndicatorProps>`              | `DefaultIndicatorComponent` | Custom selection indicator               |
+| `itemComponent`        | `FC<ItemProps>`                   | `DefaultItemComponent`      | Custom item renderer                     |
+| `onSelect`             | `(item: Item<V>) => void`         | —                           | Called on selection (Enter or hotkey) — single-select only |
+| `onHighlight`          | `(item: Item<V>) => void`         | —                           | Called when the highlighted item changes |
+| `onCancel`             | `() => void`                      | —                           | Called when Escape is pressed            |
+| `orientation`          | `'vertical' \| 'horizontal'`      | `'vertical'`                | Layout direction                         |
+| `showScrollIndicators` | `boolean`                         | `false`                     | Show ▲/▼ or ◀/▶ counts when `limit` clips the list |
+| `multiple`             | `boolean`                         | `false`                     | Enable multi-select mode (Space toggles, Enter confirms) |
+| `defaultSelectedKeys`  | `string[]`                        | —                           | Pre-checked item keys for multi-select   |
+| `onConfirm`            | `(items: Array<Item<V>>) => void` | —                           | Called on Enter in multi-select mode with all checked items |
+| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —             | Called each time an item is toggled in multi-select mode |
 
 ### Item Shape
 
@@ -183,12 +223,14 @@ type Item<V> = {
 
 ## Keyboard Navigation
 
-| Orientation | Previous  | Next      | First    | Last    | Select  | Cancel   |
-| ----------- | --------- | --------- | -------- | ------- | ------- | -------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Home`   | `End`   | `Enter` | `Escape` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Home`   | `End`   | `Enter` | `Escape` |
+| Orientation | Previous  | Next      | First    | Last    | Select / Confirm | Toggle (multi) | Cancel   |
+| ----------- | --------- | --------- | -------- | ------- | ---------------- | -------------- | -------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Home`   | `End`   | `Enter`          | `Space`        | `Escape` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Home`   | `End`   | `Enter`          | `Space`        | `Escape` |
 
-Hotkeys (when assigned) select the item immediately. Disabled items are automatically skipped during navigation, including by `Home` and `End`.
+In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
+
+Disabled items are automatically skipped during navigation, including by `Home` and `End`.
 
 `Escape` calls the `onCancel` prop when provided — useful for multi-step CLI flows that need a "go back" action.
 
