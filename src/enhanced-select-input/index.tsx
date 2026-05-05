@@ -68,13 +68,6 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
    */
   // eslint-disable-next-line react/boolean-prop-naming
   readonly showScrollIndicators?: boolean
-  /**
-   * Enable searchable/filterable mode. When true, printable characters
-   * build a search query that filters items by label. Hotkeys and vim
-   * navigation keys are disabled in this mode.
-   */
-  // eslint-disable-next-line react/boolean-prop-naming
-  readonly searchable?: boolean
   /** Placeholder text shown in the search input when the query is empty. */
   readonly searchPlaceholder?: string
 }
@@ -484,7 +477,6 @@ export function EnhancedSelectInput<V>({
   itemComponent = DefaultItemComponent,
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
-  searchable = false,
   searchPlaceholder = 'Search...',
   // All remaining props are forwarded to the hook
   ...hookProperties
@@ -498,7 +490,9 @@ export function EnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
-  } = useEnhancedSelectInput({ ...hookProperties, searchable })
+  } = useEnhancedSelectInput(hookProperties)
+
+  const searchable = hookProperties.searchable === true
 
   if (!hasItems && !searchable) {
     return <Box />
@@ -607,5 +601,3 @@ export function EnhancedSelectInput<V>({
     </Box>
   )
 }
-
-export default EnhancedSelectInput
