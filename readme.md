@@ -131,13 +131,14 @@ function MyItem({ isSelected, isDisabled, label }) {
 | `itemComponent`      | `FC<ItemProps>`              | `DefaultItemComponent`      | Custom item renderer                     |
 | `onSelect`           | `(item: Item<V>) => void`    | —                           | Called on selection (Enter or hotkey)    |
 | `onHighlight`        | `(item: Item<V>) => void`    | —                           | Called when the highlighted item changes |
+| `onCancel`           | `() => void`                 | —                           | Called when Escape is pressed            |
 | `orientation`        | `'vertical' \| 'horizontal'` | `'vertical'`                | Layout direction                         |
 
 ### Item Shape
 
 ```ts
 type Item<V> = {
-  key?: string
+  key?: string        // Required when V is an object — see note below
   label: string
   value: V
   hotkey?: string
@@ -146,16 +147,22 @@ type Item<V> = {
 }
 ```
 
+> **`key` field:** React uses `key` (or `String(value)` as a fallback) to track
+> list items. When `V` is a non-primitive type such as an object, `String(value)`
+> always produces `"[object Object]"`, causing duplicate key warnings and
+> potential rendering bugs. Always set `key` to a stable unique string when
+> `value` is an object.
+
 ## Keyboard Navigation
 
-| Orientation | Previous  | Next      | Select  |
-| ----------- | --------- | --------- | ------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Enter` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Enter` |
+| Orientation | Previous  | Next      | First    | Last    | Select  | Cancel   |
+| ----------- | --------- | --------- | -------- | ------- | ------- | -------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Home`   | `End`   | `Enter` | `Escape` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Home`   | `End`   | `Enter` | `Escape` |
 
-Hotkeys (when assigned) select the item immediately.
+Hotkeys (when assigned) select the item immediately. Disabled items are automatically skipped during navigation, including by `Home` and `End`.
 
-Disabled items are automatically skipped during navigation.
+`Escape` calls the `onCancel` prop when provided — useful for multi-step CLI flows that need a "go back" action.
 
 > **Hotkey constraints:** Navigation keys take priority over hotkeys. In vertical
 > orientation the characters `j` and `k` are reserved for navigation — an item

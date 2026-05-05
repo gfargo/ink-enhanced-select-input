@@ -13,6 +13,9 @@ const ARROW_DOWN = '\u001B[B'
 const ARROW_RIGHT = '\u001B[C'
 const ARROW_LEFT = '\u001B[D'
 const ENTER = '\r'
+const ESCAPE = '\u001B'
+const HOME = '\u001B[H'
+const END = '\u001B[F'
 
 // Small delay to let React/Ink process state updates
 const delay = async (ms = 50) =>
@@ -924,4 +927,215 @@ test('horizontal navigation wraps around from first to last', async (t) => {
   stdin.write(ARROW_LEFT)
   await delay()
   t.is(highlighted, 'B')
+})
+
+// --- onCancel (Escape key) ---
+
+test('Escape calls onCancel', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.true(cancelled)
+})
+
+test('Escape does not call onCancel when isFocused=false', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      isFocused={false}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+})
+
+test('Escape is a no-op when onCancel is not provided', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  // Component keeps working normally after an ignored Escape
+  t.is(highlighted, 'A')
+})
+
+// --- Home / End keys ---
+
+test('Home key jumps to first enabled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+test('End key jumps to last enabled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+test('Home skips leading disabled items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={3}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'D')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+test('End skips trailing disabled items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c', disabled: true },
+    { label: 'D', value: 'd', disabled: true },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('Home/End update rotateIndex when limit is active', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let highlighted = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={2}
+      initialIndex={0}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'D')
+
+  // Window should have scrolled to show D
+  const frame = lastFrame()!
+  t.true(frame.includes('D'))
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'A')
+
+  // Window should have scrolled back to show A
+  const frame2 = lastFrame()!
+  t.true(frame2.includes('A'))
 })
