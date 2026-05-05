@@ -48,6 +48,12 @@ export type UseEnhancedSelectInputProperties<V> = {
    * Receives the toggled item and whether it is now checked.
    */
   readonly onToggle?: (item: Item<V>, checked: boolean) => void
+  /**
+   * Enable searchable/filterable mode. When true, printable characters
+   * build a search query that filters items by label. Hotkeys and vim
+   * navigation keys are disabled in this mode.
+   */
+  readonly searchable?: boolean
 }
 
 /** Full component props — hook props plus rendering customisation. */
@@ -62,6 +68,15 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
    */
   // eslint-disable-next-line react/boolean-prop-naming
   readonly showScrollIndicators?: boolean
+  /**
+   * Enable searchable/filterable mode. When true, printable characters
+   * build a search query that filters items by label. Hotkeys and vim
+   * navigation keys are disabled in this mode.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly searchable?: boolean
+  /** Placeholder text shown in the search input when the query is empty. */
+  readonly searchPlaceholder?: string
 }
 
 export type IndicatorProperties = {
@@ -147,13 +162,13 @@ function itemKey<V>(item: Item<V>): string {
 }
 
 export type UseEnhancedSelectInputResult<V> = {
-  /** Index of the currently highlighted item within the full items array. */
+  /** Index of the currently highlighted item within the filtered items array. */
   selectedIndex: number
   /** Start of the current pagination window (0 when limit is not set). */
   rotateIndex: number
   /** The slice of items visible in the current window. */
   visibleItems: Array<Item<V>>
-  /** True when items is non-empty. */
+  /** True when filtered items is non-empty. */
   hasItems: boolean
   /** Number of items hidden above the current window. */
   itemsAbove: number
@@ -161,6 +176,8 @@ export type UseEnhancedSelectInputResult<V> = {
   itemsBelow: number
   /** Keys of checked items. Only populated in multi-select mode. */
   checkedKeys: Set<string>
+  /** Current search query. Empty string when searchable is false or no input yet. */
+  searchQuery: string
 }
 
 /**
@@ -181,8 +198,19 @@ export function useEnhancedSelectInput<V>({
   defaultSelectedKeys,
   onConfirm,
   onToggle,
+  searchable = false,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
-  const safeInitialIndex = resolveInitialIndex(items, initialIndex)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Filter items based on search query
+  const filteredItems =
+    searchable && searchQuery
+      ? items.filter((item) =>
+          item.label.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : items
+
+  const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
     limit ? Math.floor(safeInitialIndex / limit) * limit : 0
@@ -191,12 +219,14 @@ export function useEnhancedSelectInput<V>({
     () => new Set(defaultSelectedKeys ?? [])
   )
 
-  const hasItems = items.length > 0
+  const hasItems = filteredItems.length > 0
   const visibleItems = limit
-    ? items.slice(rotateIndex, rotateIndex + limit)
-    : items
+    ? filteredItems.slice(rotateIndex, rotateIndex + limit)
+    : filteredItems
   const itemsAbove = rotateIndex
-  const itemsBelow = limit ? Math.max(0, items.length - rotateIndex - limit) : 0
+  const itemsBelow = limit
+    ? Math.max(0, filteredItems.length - rotateIndex - limit)
+    : 0
 
   // When the items array changes, re-validate the current selectedIndex.
   // If the item at that position is still enabled we keep it; otherwise we
@@ -226,22 +256,27 @@ export function useEnhancedSelectInput<V>({
       }
     }
 
-    if (items.length === 0) return
-    const currentItem = items[selectedIndex]
+    if (filteredItems.length === 0) {
+      setSelectedIndex(0)
+      if (limit) setRotateIndex(0)
+      return
+    }
+
+    const currentItem = filteredItems[selectedIndex]
     if (!currentItem || currentItem.disabled) {
-      const newIndex = resolveInitialIndex(items, selectedIndex)
+      const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
       setSelectedIndex(newIndex)
       if (limit) setRotateIndex(Math.floor(newIndex / limit) * limit)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items])
+  }, [items, searchQuery])
 
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every
   // parent re-render that passes a new array with identical content).
   useEffect(() => {
     if (hasItems) {
-      const highlightedItem = items[selectedIndex]
+      const highlightedItem = filteredItems[selectedIndex]
       if (highlightedItem) {
         onHighlight?.(highlightedItem)
       }
@@ -259,21 +294,38 @@ export function useEnhancedSelectInput<V>({
   useInput(
     // eslint-disable-next-line complexity
     (input, key) => {
-      if (!hasItems) return
+      // In searchable mode, handle Backspace to remove last character
+      if (searchable && key.backspace) {
+        setSearchQuery((previous) => previous.slice(0, -1))
+        setSelectedIndex(0)
+        if (limit) setRotateIndex(0)
+        return
+      }
+
+      // In searchable mode, Escape clears the query first; if already
+      // empty, it falls through to onCancel.
+      if (searchable && key.escape && searchQuery) {
+        setSearchQuery('')
+        setSelectedIndex(0)
+        if (limit) setRotateIndex(0)
+        return
+      }
+
+      if (!hasItems && !searchable) return
 
       // eslint-disable-next-line unicorn/prevent-abbreviations
       const navKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
       // eslint-disable-next-line unicorn/prevent-abbreviations
-      const isNavKey = navKeys.has(input)
+      const isNavKey = !searchable && navKeys.has(input)
 
       if (key.home) {
-        updateSelection(findFirstValidIndex(items))
+        updateSelection(findFirstValidIndex(filteredItems))
         return
       }
 
       if (key.end) {
-        updateSelection(findLastValidIndex(items))
+        updateSelection(findLastValidIndex(filteredItems))
         return
       }
 
@@ -282,9 +334,10 @@ export function useEnhancedSelectInput<V>({
         return
       }
 
-      // Space: toggle in multi-select mode
-      if (multiple && input === ' ') {
-        const item = items[selectedIndex]
+      // Space: toggle in multi-select mode (but not in searchable mode
+      // where space is a valid search character)
+      if (multiple && !searchable && input === ' ') {
+        const item = filteredItems[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
           setCheckedKeys((previous) => {
@@ -303,20 +356,20 @@ export function useEnhancedSelectInput<V>({
       let nextIndex = selectedIndex
 
       if (orientation === 'vertical') {
-        if (key.upArrow || input === 'k') {
-          nextIndex = findNextValidIndex(items, selectedIndex, -1)
+        if (key.upArrow || (!searchable && input === 'k')) {
+          nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
-        if (key.downArrow || input === 'j') {
-          nextIndex = findNextValidIndex(items, selectedIndex, 1)
+        if (key.downArrow || (!searchable && input === 'j')) {
+          nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
       } else {
-        if (key.leftArrow || input === 'h') {
-          nextIndex = findNextValidIndex(items, selectedIndex, -1)
+        if (key.leftArrow || (!searchable && input === 'h')) {
+          nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
-        if (key.rightArrow || input === 'l') {
-          nextIndex = findNextValidIndex(items, selectedIndex, 1)
+        if (key.rightArrow || (!searchable && input === 'l')) {
+          nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
       }
 
@@ -327,26 +380,37 @@ export function useEnhancedSelectInput<V>({
       if (key.return) {
         if (multiple) {
           // In multi-select mode Enter confirms the full selection
-          const confirmed = items.filter((item) =>
+          const confirmed = filteredItems.filter((item) =>
             checkedKeys.has(itemKey(item))
           )
           onConfirm?.(confirmed)
         } else {
-          const selectedItem = items[selectedIndex]
+          const selectedItem = filteredItems[selectedIndex]
           if (selectedItem && !selectedItem.disabled) {
             onSelect?.(selectedItem)
           }
         }
+
+        return
+      }
+
+      // In searchable mode, capture printable characters as search input.
+      // This must come after navigation key handling.
+      if (searchable && input && !key.ctrl && !key.meta) {
+        setSearchQuery((previous) => previous + input)
+        setSelectedIndex(0)
+        if (limit) setRotateIndex(0)
+        return
       }
 
       // Hotkeys: nav keys for the active orientation take priority.
-      // Hotkeys are not active in multi-select mode to avoid ambiguity.
-      if (!multiple && !isNavKey) {
-        const hotkeyItem = items.find(
+      // Hotkeys are not active in multi-select or searchable mode.
+      if (!multiple && !searchable && !isNavKey) {
+        const hotkeyItem = filteredItems.find(
           (item) => item.hotkey === input && !item.disabled
         )
         if (hotkeyItem) {
-          const hotkeyIndex = items.indexOf(hotkeyItem)
+          const hotkeyIndex = filteredItems.indexOf(hotkeyItem)
           updateSelection(hotkeyIndex)
           onSelect?.(hotkeyItem)
         }
@@ -363,6 +427,7 @@ export function useEnhancedSelectInput<V>({
     itemsAbove,
     itemsBelow,
     checkedKeys,
+    searchQuery,
   }
 }
 
@@ -419,6 +484,8 @@ export function EnhancedSelectInput<V>({
   itemComponent = DefaultItemComponent,
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
+  searchable = false,
+  searchPlaceholder = 'Search...',
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -430,9 +497,10 @@ export function EnhancedSelectInput<V>({
     itemsAbove,
     itemsBelow,
     checkedKeys,
-  } = useEnhancedSelectInput(hookProperties)
+    searchQuery,
+  } = useEnhancedSelectInput({ ...hookProperties, searchable })
 
-  if (!hasItems) {
+  if (!hasItems && !searchable) {
     return <Box />
   }
 
@@ -445,8 +513,29 @@ export function EnhancedSelectInput<V>({
   // Track which groups have already rendered a header in this window.
   const renderedGroups = new Set<string>()
 
+  const searchInput = searchable ? (
+    <Box>
+      <Text dimColor>
+        {searchQuery ? `/ ${searchQuery}` : `/ ${searchPlaceholder}`}
+      </Text>
+    </Box>
+  ) : null
+
+  if (!hasItems) {
+    // Searchable mode with no matching results
+    return (
+      <Box flexDirection="column">
+        {searchInput}
+        <Box>
+          <Text dimColor>No matches</Text>
+        </Box>
+      </Box>
+    )
+  }
+
   return (
     <Box flexDirection={isVertical ? 'column' : 'row'}>
+      {searchInput}
       {showScrollIndicators && itemsAbove > 0 && (
         <Box marginRight={isVertical ? 0 : 1}>
           <Text dimColor>
