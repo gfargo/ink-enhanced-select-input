@@ -5,7 +5,9 @@ import React from 'react'
 import {
   DefaultIndicatorComponent,
   EnhancedSelectInput,
+  useEnhancedSelectInput,
 } from '../enhanced-select-input/index.js'
+import type { UseEnhancedSelectInputResult } from '../enhanced-select-input/index.js'
 
 // ANSI escape sequences for arrow keys
 const ARROW_UP = '\u001B[A'
@@ -1225,4 +1227,120 @@ test('showScrollIndicators not shown when all items fit in window', (t) => {
   const frame = lastFrame()!
   t.false(frame.includes('▲'))
   t.false(frame.includes('▼'))
+})
+
+// --- useEnhancedSelectInput hook ---
+
+// HookHarness renders nothing but calls the hook and forwards the result.
+// Value type is unknown since tests only assert on index/count fields.
+type HookHarnessProps = {
+  items: Array<import('../enhanced-select-input/index.js').Item<unknown>>
+  initialIndex?: number
+  limit?: number
+  isFocused?: boolean
+  orientation?: 'vertical' | 'horizontal'
+  onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
+}
+
+function HookHarness(props: HookHarnessProps) {
+  const { onResult, ...hookProps } = props
+  const result = useEnhancedSelectInput(hookProps)
+  onResult(result)
+  return null
+}
+
+test('hook returns correct initial state', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      initialIndex={1}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectedIndex, 1)
+  t.is(result?.hasItems, true)
+  t.is(result?.visibleItems.length, 3)
+  t.is(result?.rotateIndex, 0)
+})
+
+test('hook returns correct pagination state', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      limit={2}
+      initialIndex={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectedIndex, 2)
+  t.is(result?.rotateIndex, 2)
+  t.is(result?.visibleItems.length, 2)
+  t.is(result?.itemsAbove, 2)
+  t.is(result?.itemsBelow, 0)
+})
+
+test('hook responds to keyboard input', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectedIndex, 0)
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(result?.selectedIndex, 1)
+})
+
+test('hook returns empty state for empty items', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={[]}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.hasItems, false)
+  t.is(result?.visibleItems.length, 0)
 })
