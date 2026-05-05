@@ -27,6 +27,12 @@ export type Properties<V> = {
   /** Called when Escape is pressed while the component is focused. */
   readonly onCancel?: () => void
   readonly orientation?: 'vertical' | 'horizontal'
+  /**
+   * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
+   * when the limit window doesn't cover the full list. Only meaningful when
+   * `limit` is set. Defaults to false.
+   */
+  readonly showScrollIndicators?: boolean
 }
 
 export type IndicatorProperties = {
@@ -134,6 +140,7 @@ export function EnhancedSelectInput<V>({
   onHighlight,
   onCancel,
   orientation = 'vertical',
+  showScrollIndicators = false,
 }: Properties<V>) {
   const safeInitialIndex = resolveInitialIndex(items, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
@@ -145,6 +152,9 @@ export function EnhancedSelectInput<V>({
     ? items.slice(rotateIndex, rotateIndex + limit)
     : items
   const hasItems = items.length > 0
+
+  const itemsAbove = rotateIndex
+  const itemsBelow = limit ? Math.max(0, items.length - rotateIndex - limit) : 0
 
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every
@@ -244,38 +254,51 @@ export function EnhancedSelectInput<V>({
 
   const IndicatorComponent = indicatorComponent
   const ItemComponent = itemComponent
+  const isVertical = orientation === 'vertical'
 
   return (
-    <Box
-      flexDirection={orientation === 'vertical' ? 'column' : 'row'}
-      gap={orientation === 'vertical' ? 0 : 2}
-    >
-      {visibleItems.map((item, index) => {
-        const isSelected = index + rotateIndex === selectedIndex
+    <Box flexDirection={isVertical ? 'column' : 'row'}>
+      {showScrollIndicators && itemsAbove > 0 && (
+        <Box marginRight={isVertical ? 0 : 1}>
+          <Text dimColor>{isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}</Text>
+        </Box>
+      )}
+      <Box
+        flexDirection={isVertical ? 'column' : 'row'}
+        gap={isVertical ? 0 : 2}
+      >
+        {visibleItems.map((item, index) => {
+          const isSelected = index + rotateIndex === selectedIndex
 
-        return (
-          <Box key={item.key ?? String(item.value)}>
-            {item.indicator ? (
-              <Box marginRight={1}>
-                <Text>{isSelected ? item.indicator : ' '}</Text>
-              </Box>
-            ) : (
-              <IndicatorComponent isSelected={isSelected} item={item} />
-            )}
-            <ItemComponent
-              isSelected={isSelected}
-              label={item.label}
-              isDisabled={Boolean(item.disabled)}
-            />
-            {item.hotkey && (
-              <Text dimColor color="gray">
-                {' '}
-                ({item.hotkey})
-              </Text>
-            )}
-          </Box>
-        )
-      })}
+          return (
+            <Box key={item.key ?? String(item.value)}>
+              {item.indicator ? (
+                <Box marginRight={1}>
+                  <Text>{isSelected ? item.indicator : ' '}</Text>
+                </Box>
+              ) : (
+                <IndicatorComponent isSelected={isSelected} item={item} />
+              )}
+              <ItemComponent
+                isSelected={isSelected}
+                label={item.label}
+                isDisabled={Boolean(item.disabled)}
+              />
+              {item.hotkey && (
+                <Text dimColor color="gray">
+                  {' '}
+                  ({item.hotkey})
+                </Text>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
+      {showScrollIndicators && itemsBelow > 0 && (
+        <Box marginLeft={isVertical ? 0 : 1}>
+          <Text dimColor>{isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}</Text>
+        </Box>
+      )}
     </Box>
   )
 }
