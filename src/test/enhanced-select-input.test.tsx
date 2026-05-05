@@ -1468,3 +1468,54 @@ test('selection preserved when items update but current slot is still valid', as
   await delay()
   t.is(highlighted, 'B')
 })
+
+// --- #16: duplicate key warning ---
+
+test('warns in development when object-valued items have no key field', async (t) => {
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    warnings.push(String(args[0]))
+  }
+
+  try {
+    render(
+      <EnhancedSelectInput
+        items={[
+          { label: 'A', value: { id: 1 } },
+          { label: 'B', value: { id: 2 } },
+        ]}
+      />
+    )
+
+    await delay()
+    t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+    t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test('no duplicate key warning when all items have explicit keys', async (t) => {
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    warnings.push(String(args[0]))
+  }
+
+  try {
+    render(
+      <EnhancedSelectInput
+        items={[
+          { key: 'item-1', label: 'A', value: { id: 1 } },
+          { key: 'item-2', label: 'B', value: { id: 2 } },
+        ]}
+      />
+    )
+
+    await delay()
+    t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+  } finally {
+    console.warn = originalWarn
+  }
+})
