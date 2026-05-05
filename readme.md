@@ -14,10 +14,14 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Custom Indicators & Items:** Easily swap out the default indicator and item rendering.
 - **Hotkey Support:** Assign single-character hotkeys for quick selection.
 - **Disabled Items:** Gracefully skip unselectable items during navigation.
-- **Keyboard Navigation:** Arrow keys and Vim-like keys (`h/j/k/l`) supported.
+- **Keyboard Navigation:** Arrow keys, Vim-like keys (`h/j/k/l`), Home/End supported.
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
-- **Limit Displayed Items:** Restrict how many options to show at once.
+- **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
+- **Searchable Mode:** Type to filter items inline with case-insensitive matching.
+- **Item Groups:** Organize items under non-navigable section headers.
+- **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
+- **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
 
 ## Compatibility
 
@@ -329,6 +333,10 @@ Disabled items are automatically skipped during navigation, including by `Home` 
 > hotkey set to either of these values will never fire. Similarly, `h` and `l`
 > are reserved in horizontal orientation. Choose hotkeys outside these sets to
 > avoid conflicts.
+
+> **Searchable mode:** When `searchable` is enabled, vim keys and hotkeys are
+> disabled — all printable characters go to the search query. Arrow keys still
+> navigate. Backspace edits the query. Escape clears it.
 
 ## Development
 

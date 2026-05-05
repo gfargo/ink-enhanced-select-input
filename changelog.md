@@ -4,8 +4,8 @@
 
 ### 🌟 New Features
 
-* add item group support with section headers ([#13](https://github.com/gfargo/ink-enhanced-select-input/issues/13)) ([#25](https://github.com/gfargo/ink-enhanced-select-input/issues/25)) ([32b5e52](https://github.com/gfargo/ink-enhanced-select-input/commit/32b5e52c24fe0f01e5f7d9df24123191f6237d95))
-* add searchable mode for inline item filtering ([#14](https://github.com/gfargo/ink-enhanced-select-input/issues/14)) ([#26](https://github.com/gfargo/ink-enhanced-select-input/issues/26)) ([0c81254](https://github.com/gfargo/ink-enhanced-select-input/commit/0c812548cdbaf275b4161b0a7aece2ad1d04b65f))
+- add item group support with section headers ([#13](https://github.com/gfargo/ink-enhanced-select-input/issues/13)) ([#25](https://github.com/gfargo/ink-enhanced-select-input/issues/25)) ([32b5e52](https://github.com/gfargo/ink-enhanced-select-input/commit/32b5e52c24fe0f01e5f7d9df24123191f6237d95))
+- add searchable mode for inline item filtering ([#14](https://github.com/gfargo/ink-enhanced-select-input/issues/14)) ([#26](https://github.com/gfargo/ink-enhanced-select-input/issues/26)) ([0c81254](https://github.com/gfargo/ink-enhanced-select-input/commit/0c812548cdbaf275b4161b0a7aece2ad1d04b65f))
 
 ## [0.6.0](https://github.com/gfargo/ink-enhanced-select-input/compare/0.5.0...v0.6.0) (2026-05-05)
 
