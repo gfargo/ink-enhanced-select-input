@@ -3,6 +3,7 @@ export {
   useEnhancedSelectInput,
   DefaultIndicatorComponent,
   DefaultItemComponent,
+  DefaultGroupHeaderComponent,
   resolveInitialIndex,
   findNextValidIndex,
   findFirstValidIndex,
@@ -16,4 +17,5 @@ export type {
   UseEnhancedSelectInputResult,
   IndicatorProperties,
   ItemProperties,
+  GroupHeaderProperties,
 } from './enhanced-select-input/index.js'

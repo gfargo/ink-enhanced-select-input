@@ -104,7 +104,10 @@ function MultiDemo() {
         console.log(`${item.label} is now ${checked ? 'checked' : 'unchecked'}`)
       }
       onConfirm={(selected) =>
-        console.log('Confirmed:', selected.map((i) => i.value))
+        console.log(
+          'Confirmed:',
+          selected.map((i) => i.value)
+        )
       }
     />
   )
@@ -123,6 +126,46 @@ render(<MultiDemo />)
     { label: 'Cancel', value: 'cancel', hotkey: 'c' },
   ]}
   onSelect={(item) => console.log(item.value)}
+/>
+```
+
+### Grouped Items
+
+Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    { label: 'Option A', value: 'a', group: 'Recent' },
+    { label: 'Option B', value: 'b', group: 'Recent' },
+    { label: 'Option C', value: 'c', group: 'All' },
+    { label: 'Option D', value: 'd', group: 'All' },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+Renders:
+
+```
+── Recent ──
+> Option A
+  Option B
+── All ──
+  Option C
+  Option D
+```
+
+You can provide a custom header renderer via `groupHeaderComponent`:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  groupHeaderComponent={({ label }) => (
+    <Text bold color="cyan">
+      {label}
+    </Text>
+  )}
 />
 ```
 
@@ -170,7 +213,10 @@ function MyCustomSelect({ items, onSelect }) {
     <Box flexDirection="column">
       {itemsAbove > 0 && <Text dimColor>↑ {itemsAbove} more</Text>}
       {visibleItems.map((item, i) => (
-        <Text key={item.key ?? String(item.value)} color={i === selectedIndex ? 'cyan' : undefined}>
+        <Text
+          key={item.key ?? String(item.value)}
+          color={i === selectedIndex ? 'cyan' : undefined}
+        >
           {item.label}
         </Text>
       ))}
@@ -180,38 +226,40 @@ function MyCustomSelect({ items, onSelect }) {
 }
 ```
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`.
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`.
 
 ## Props
 
-| Prop                   | Type                              | Default                     | Description                              |
-| ---------------------- | --------------------------------- | --------------------------- | ---------------------------------------- |
-| `items`                | `Array<Item<V>>`                  | _required_                  | List of selectable items                 |
-| `isFocused`            | `boolean`                         | `true`                      | Whether the component responds to input  |
-| `initialIndex`         | `number`                          | `0`                         | Index of the initially highlighted item  |
-| `limit`                | `number`                          | —                           | Max number of visible items              |
-| `indicatorComponent`   | `FC<IndicatorProps>`              | `DefaultIndicatorComponent` | Custom selection indicator               |
-| `itemComponent`        | `FC<ItemProps>`                   | `DefaultItemComponent`      | Custom item renderer                     |
-| `onSelect`             | `(item: Item<V>) => void`         | —                           | Called on selection (Enter or hotkey) — single-select only |
-| `onHighlight`          | `(item: Item<V>) => void`         | —                           | Called when the highlighted item changes |
-| `onCancel`             | `() => void`                      | —                           | Called when Escape is pressed            |
-| `orientation`          | `'vertical' \| 'horizontal'`      | `'vertical'`                | Layout direction                         |
-| `showScrollIndicators` | `boolean`                         | `false`                     | Show ▲/▼ or ◀/▶ counts when `limit` clips the list |
-| `multiple`             | `boolean`                         | `false`                     | Enable multi-select mode (Space toggles, Enter confirms) |
-| `defaultSelectedKeys`  | `string[]`                        | —                           | Pre-checked item keys for multi-select   |
-| `onConfirm`            | `(items: Array<Item<V>>) => void` | —                           | Called on Enter in multi-select mode with all checked items |
-| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —             | Called each time an item is toggled in multi-select mode |
+| Prop                   | Type                                        | Default                       | Description                                                 |
+| ---------------------- | ------------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
+| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                    |
+| `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                     |
+| `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                     |
+| `limit`                | `number`                                    | —                             | Max number of visible items                                 |
+| `indicatorComponent`   | `FC<IndicatorProps>`                        | `DefaultIndicatorComponent`   | Custom selection indicator                                  |
+| `itemComponent`        | `FC<ItemProps>`                             | `DefaultItemComponent`        | Custom item renderer                                        |
+| `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only  |
+| `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                    |
+| `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                               |
+| `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                            |
+| `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list          |
+| `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)    |
+| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select                      |
+| `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items |
+| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode    |
+| `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                |
 
 ### Item Shape
 
 ```ts
 type Item<V> = {
-  key?: string        // Required when V is an object — see note below
+  key?: string // Required when V is an object — see note below
   label: string
   value: V
   hotkey?: string
   indicator?: React.ReactNode
   disabled?: boolean
+  group?: string // Items with the same group are rendered under a shared header
 }
 ```
 
@@ -223,10 +271,10 @@ type Item<V> = {
 
 ## Keyboard Navigation
 
-| Orientation | Previous  | Next      | First    | Last    | Select / Confirm | Toggle (multi) | Cancel   |
-| ----------- | --------- | --------- | -------- | ------- | ---------------- | -------------- | -------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Home`   | `End`   | `Enter`          | `Space`        | `Escape` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Home`   | `End`   | `Enter`          | `Space`        | `Escape` |
+| Orientation | Previous  | Next      | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
+| ----------- | --------- | --------- | ------ | ----- | ---------------- | -------------- | -------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
 
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 

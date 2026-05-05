@@ -3,11 +3,13 @@ import { Box, Text } from 'ink'
 import { render } from 'ink-testing-library'
 import React from 'react'
 import {
+  DefaultGroupHeaderComponent,
   DefaultIndicatorComponent,
   EnhancedSelectInput,
   useEnhancedSelectInput,
+  type Item,
+  type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
-import type { UseEnhancedSelectInputResult } from '../enhanced-select-input/index.js'
 
 // ANSI escape sequences for arrow keys
 const ARROW_UP = '\u001B[A'
@@ -21,7 +23,7 @@ const END = '\u001B[F'
 const SPACE = ' '
 
 // Small delay to let React/Ink process state updates
-const delay = async (ms = 50) =>
+const delay = async (ms = 100) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
@@ -818,7 +820,7 @@ test('enter on a disabled item does not trigger onSelect', async (t) => {
   )
 
   await delay()
-  // initialIndex=0 is disabled, so it skips to B (index 1)
+  // InitialIndex=0 is disabled, so it skips to B (index 1)
   // Navigate back to A's slot by going up (wraps to B since A disabled)
   // We can't actually land on A because navigation skips disabled items.
   // Verify that pressing Enter on the current selection (B) works normally.
@@ -859,7 +861,7 @@ test('vim nav key takes priority over matching hotkey', async (t) => {
   stdin.write('j')
   await delay()
   t.is(highlighted, 'B')
-  t.is(selected, '') // hotkey must not have fired
+  t.is(selected, '') // Hotkey must not have fired
 })
 
 // --- DefaultIndicatorComponent in isolation ---
@@ -1154,7 +1156,7 @@ test('showScrollIndicators shows below indicator when items are clipped', (t) =>
   ]
 
   const { lastFrame } = render(
-    <EnhancedSelectInput items={items} limit={2} showScrollIndicators />
+    <EnhancedSelectInput showScrollIndicators items={items} limit={2} />
   )
 
   const frame = lastFrame()!
@@ -1176,9 +1178,9 @@ test('showScrollIndicators shows both indicators when window is mid-list', async
 
   const { stdin, lastFrame } = render(
     <EnhancedSelectInput
+      showScrollIndicators
       items={items}
       limit={2}
-      showScrollIndicators
       initialIndex={2}
     />
   )
@@ -1206,9 +1208,7 @@ test('showScrollIndicators hidden by default', (t) => {
     { label: 'C', value: 'c' },
   ]
 
-  const { lastFrame } = render(
-    <EnhancedSelectInput items={items} limit={2} />
-  )
+  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={2} />)
 
   const frame = lastFrame()!
   t.false(frame.includes('▲'))
@@ -1222,7 +1222,7 @@ test('showScrollIndicators not shown when all items fit in window', (t) => {
   ]
 
   const { lastFrame } = render(
-    <EnhancedSelectInput items={items} limit={5} showScrollIndicators />
+    <EnhancedSelectInput showScrollIndicators items={items} limit={5} />
   )
 
   const frame = lastFrame()!
@@ -1234,18 +1234,18 @@ test('showScrollIndicators not shown when all items fit in window', (t) => {
 
 // HookHarness renders nothing but calls the hook and forwards the result.
 // Value type is unknown since tests only assert on index/count fields.
-type HookHarnessProps = {
-  items: Array<import('../enhanced-select-input/index.js').Item<unknown>>
-  initialIndex?: number
-  limit?: number
-  isFocused?: boolean
-  orientation?: 'vertical' | 'horizontal'
-  onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
+type HookHarnessProperties = {
+  readonly items: Array<Item<unknown>>
+  readonly initialIndex?: number
+  readonly limit?: number
+  readonly isFocused?: boolean
+  readonly orientation?: 'vertical' | 'horizontal'
+  readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
-function HookHarness(props: HookHarnessProps) {
-  const { onResult, ...hookProps } = props
-  const result = useEnhancedSelectInput(hookProps)
+function HookHarness(properties: HookHarnessProperties) {
+  const { onResult, ...hookProperties } = properties
+  const result = useEnhancedSelectInput(hookProperties)
   onResult(result)
   return null
 }
@@ -1475,8 +1475,8 @@ test('selection preserved when items update but current slot is still valid', as
 test('warns in development when object-valued items have no key field', async (t) => {
   const warnings: string[] = []
   const originalWarn = console.warn
-  console.warn = (...args: unknown[]) => {
-    warnings.push(String(args[0]))
+  console.warn = (...arguments_: unknown[]) => {
+    warnings.push(String(arguments_[0]))
   }
 
   try {
@@ -1500,8 +1500,8 @@ test('warns in development when object-valued items have no key field', async (t
 test('no duplicate key warning when all items have explicit keys', async (t) => {
   const warnings: string[] = []
   const originalWarn = console.warn
-  console.warn = (...args: unknown[]) => {
-    warnings.push(String(args[0]))
+  console.warn = (...arguments_: unknown[]) => {
+    warnings.push(String(arguments_[0]))
   }
 
   try {
@@ -1529,7 +1529,7 @@ test('multi-select renders checkbox indicators instead of arrow cursor', (t) => 
     { label: 'B', value: 'b' },
     { label: 'C', value: 'c' },
   ]
-  const { lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+  const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
   const frame = lastFrame()!
   t.true(frame.includes('[ ]'))
   t.false(frame.includes('>'))
@@ -1540,7 +1540,9 @@ test('multi-select space toggles checked state on', async (t) => {
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
   ]
-  const { stdin, lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput multiple items={items} />
+  )
 
   await delay()
   t.false(lastFrame()!.includes('[x]'))
@@ -1553,7 +1555,7 @@ test('multi-select space toggles checked state on', async (t) => {
 test('multi-select space toggles checked state off', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   const { stdin, lastFrame } = render(
-    <EnhancedSelectInput items={items} multiple defaultSelectedKeys={['a']} />
+    <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
   )
 
   await delay()
@@ -1571,11 +1573,15 @@ test('multi-select defaultSelectedKeys pre-checks items', (t) => {
     { label: 'C', value: 'c' },
   ]
   const { lastFrame } = render(
-    <EnhancedSelectInput items={items} multiple defaultSelectedKeys={['a', 'c']} />
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'c']}
+    />
   )
   const frame = lastFrame()!
-  t.is((frame.match(/\[x\]/g) ?? []).length, 2)
-  t.is((frame.match(/\[ \]/g) ?? []).length, 1)
+  t.is((frame.match(/\[x]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
 })
 
 test('multi-select enter calls onConfirm with checked items', async (t) => {
@@ -1588,8 +1594,8 @@ test('multi-select enter calls onConfirm with checked items', async (t) => {
   let confirmed: string[] = []
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       onConfirm={(selected) => {
         confirmed = selected.map((item) => String(item.value))
       }}
@@ -1597,13 +1603,13 @@ test('multi-select enter calls onConfirm with checked items', async (t) => {
   )
 
   await delay()
-  stdin.write(SPACE) // check A
+  stdin.write(SPACE) // Check A
   await delay()
   stdin.write(ARROW_DOWN) // → B
   await delay()
   stdin.write(ARROW_DOWN) // → C
   await delay()
-  stdin.write(SPACE) // check C
+  stdin.write(SPACE) // Check C
   await delay()
   stdin.write(ENTER)
   await delay()
@@ -1619,11 +1625,11 @@ test('multi-select enter with nothing checked calls onConfirm with empty array',
     { label: 'B', value: 'b' },
   ]
 
-  let confirmed: unknown[] | null = null
+  let confirmed: unknown[] | undefined
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       onConfirm={(selected) => {
         confirmed = selected
       }}
@@ -1634,7 +1640,7 @@ test('multi-select enter with nothing checked calls onConfirm with empty array',
   stdin.write(ENTER)
   await delay()
 
-  t.not(confirmed, null)
+  t.not(confirmed, undefined)
   t.is(confirmed!.length, 0)
 })
 
@@ -1644,8 +1650,8 @@ test('multi-select onToggle fires with item and checked state', async (t) => {
   const log: Array<{ label: string; checked: boolean }> = []
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       onToggle={(item, checked) => {
         log.push({ label: item.label, checked })
       }}
@@ -1675,8 +1681,8 @@ test('multi-select space only toggles enabled items', async (t) => {
   const toggled: string[] = []
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       onToggle={(item) => {
         toggled.push(item.label)
       }}
@@ -1684,11 +1690,11 @@ test('multi-select space only toggles enabled items', async (t) => {
   )
 
   await delay()
-  stdin.write(SPACE) // toggle A
+  stdin.write(SPACE) // Toggle A
   await delay()
-  stdin.write(ARROW_DOWN) // skip B → land on C
+  stdin.write(ARROW_DOWN) // Skip B → land on C
   await delay()
-  stdin.write(SPACE) // toggle C
+  stdin.write(SPACE) // Toggle C
   await delay()
 
   t.is(toggled.length, 2)
@@ -1706,8 +1712,8 @@ test('multi-select hotkeys do not fire in multi-select mode', async (t) => {
   let selected = ''
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       onSelect={(item) => {
         selected = item.label
       }}
@@ -1726,7 +1732,7 @@ test('multi-select hotkey hints not shown in render', (t) => {
     { label: 'B', value: 'b', hotkey: 'y' },
   ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+  const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
   const frame = lastFrame()!
   t.false(frame.includes('(x)'))
   t.false(frame.includes('(y)'))
@@ -1738,8 +1744,8 @@ test('multi-select isChecked passed to custom indicatorComponent', async (t) => 
   let receivedIsChecked: boolean | undefined
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       indicatorComponent={({ isChecked }) => {
         receivedIsChecked = isChecked
         return null
@@ -1761,8 +1767,8 @@ test('multi-select isChecked passed to custom itemComponent', async (t) => {
   let receivedIsChecked: boolean | undefined
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       itemComponent={({ isChecked }) => {
         receivedIsChecked = isChecked
         return null
@@ -1782,13 +1788,974 @@ test('DefaultIndicatorComponent renders checkboxes in multi-select mode', (t) =>
   const item = { label: 'X', value: 'x' }
 
   const { lastFrame: checkedFrame } = render(
-    <DefaultIndicatorComponent isSelected item={item} isChecked />
+    <DefaultIndicatorComponent isSelected isChecked item={item} />
   )
   const { lastFrame: uncheckedFrame } = render(
-    <DefaultIndicatorComponent isSelected={false} item={item} isChecked={false} />
+    <DefaultIndicatorComponent
+      isSelected={false}
+      item={item}
+      isChecked={false}
+    />
   )
 
   t.true(checkedFrame()!.includes('[x]'))
   t.true(uncheckedFrame()!.includes('[ ]'))
   t.false(checkedFrame()!.includes('>'))
+})
+
+// --- Item Groups ---
+
+test('group headers are rendered before grouped items', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Recent' },
+    { label: 'B', value: 'b', group: 'Recent' },
+    { label: 'C', value: 'c', group: 'All' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── Recent ──'))
+  t.true(frame.includes('── All ──'))
+  t.true(frame.includes('A'))
+  t.true(frame.includes('B'))
+  t.true(frame.includes('C'))
+})
+
+test('group header appears only once per group in visible window', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Fruits' },
+    { label: 'B', value: 'b', group: 'Fruits' },
+    { label: 'C', value: 'c', group: 'Fruits' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  const matches = frame.split('── Fruits ──')
+  // Split produces N+1 parts for N occurrences, so 2 parts = 1 occurrence
+  t.is(matches.length, 2)
+})
+
+test('group headers are non-navigable (navigation skips them)', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'First' },
+    { label: 'B', value: 'b', group: 'Second' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  // Should navigate to B, not get stuck on a header
+  t.is(highlighted, 'B')
+})
+
+test('items without group do not render a header', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.false(frame.includes('──'))
+})
+
+test('mixed grouped and ungrouped items render correctly', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', group: 'Special' },
+    { label: 'C', value: 'c', group: 'Special' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('A'))
+  t.true(frame.includes('── Special ──'))
+  t.true(frame.includes('B'))
+  t.true(frame.includes('C'))
+  // No header for ungrouped item A
+  const lines = frame.split('\n')
+  t.false(lines[0]!.includes('──'))
+})
+
+test('custom groupHeaderComponent is used when provided', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Custom' },
+    { label: 'B', value: 'b', group: 'Custom' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      groupHeaderComponent={({ label }) => <Text>[{label}]</Text>}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('[Custom]'))
+  t.false(frame.includes('──'))
+})
+
+test('group headers render correctly with limit/pagination', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'First' },
+    { label: 'B', value: 'b', group: 'First' },
+    { label: 'C', value: 'c', group: 'Second' },
+    { label: 'D', value: 'd', group: 'Second' },
+  ]
+
+  let highlighted = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  // Initial window shows A and B (both in "First" group)
+  const frame1 = lastFrame()!
+  t.true(frame1.includes('── First ──'))
+  t.true(frame1.includes('A'))
+  t.true(frame1.includes('B'))
+
+  // Navigate to C — window scrolls to show C and D
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'C')
+
+  const frame2 = lastFrame()!
+  t.true(frame2.includes('── Second ──'))
+  t.true(frame2.includes('C'))
+  t.true(frame2.includes('D'))
+})
+// --- Additional Group Tests ---
+
+test('group headers render in horizontal orientation', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Left' },
+    { label: 'B', value: 'b', group: 'Right' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} orientation="horizontal" />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── Left ──'))
+  t.true(frame.includes('── Right ──'))
+})
+
+test('group headers work with multi-select mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Group1' },
+    { label: 'B', value: 'b', group: 'Group1' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput multiple items={items} />
+  )
+
+  await delay()
+  const frame1 = lastFrame()!
+  t.true(frame1.includes('── Group1 ──'))
+  t.true(frame1.includes('[ ]'))
+
+  stdin.write(SPACE)
+  await delay()
+  const frame2 = lastFrame()!
+  t.true(frame2.includes('[x]'))
+  t.true(frame2.includes('── Group1 ──'))
+})
+
+test('group headers render for groups containing disabled items', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Tools', disabled: true },
+    { label: 'B', value: 'b', group: 'Tools' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── Tools ──'))
+  t.true(frame.includes('A'))
+  t.true(frame.includes('B'))
+})
+
+test('non-contiguous items with same group get separate headers per window', (t) => {
+  // When items with the same group appear in different positions,
+  // the header renders before the first occurrence in the visible window
+  const items = [
+    { label: 'A', value: 'a', group: 'Alpha' },
+    { label: 'B', value: 'b', group: 'Beta' },
+    { label: 'C', value: 'c', group: 'Alpha' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  // "Alpha" header should only appear once (before first occurrence)
+  const alphaMatches = frame.split('── Alpha ──')
+  t.is(alphaMatches.length, 2) // 1 occurrence
+  t.true(frame.includes('── Beta ──'))
+})
+
+test('group headers with showScrollIndicators', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'First' },
+    { label: 'B', value: 'b', group: 'First' },
+    { label: 'C', value: 'c', group: 'Second' },
+    { label: 'D', value: 'd', group: 'Second' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput showScrollIndicators items={items} limit={2} />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── First ──'))
+  t.true(frame.includes('▼'))
+  t.true(frame.includes('2 more'))
+})
+
+// --- DefaultGroupHeaderComponent isolation ---
+
+test('DefaultGroupHeaderComponent renders label with decorators', (t) => {
+  const { lastFrame } = render(<DefaultGroupHeaderComponent label="My Group" />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── My Group ──'))
+})
+
+// --- Edge Cases: Single Item ---
+
+test('single item list: navigation wraps to itself', async (t) => {
+  const items = [{ label: 'Only', value: 'only' }]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Only')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Only')
+
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'Only')
+})
+
+// --- Edge Cases: limit ---
+
+test('limit larger than items count shows all items', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={10} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('A'))
+  t.true(frame.includes('B'))
+  t.is(frame.split('\n').length, 2)
+})
+
+test('limit=1 shows single item at a time', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+  let frame = lastFrame()!
+  t.is(frame.split('\n').length, 1)
+  t.true(frame.includes('A'))
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'B')
+  frame = lastFrame()!
+  t.true(frame.includes('B'))
+  t.false(frame.includes('A'))
+})
+
+// --- Escape in multi-select mode ---
+
+test('Escape calls onCancel in multi-select mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Toggle A
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.true(cancelled)
+})
+
+// --- Home/End in horizontal orientation ---
+
+test('Home key works in horizontal orientation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+test('End key works in horizontal orientation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+// --- Multi-select with item.key field ---
+
+test('multi-select defaultSelectedKeys works with explicit item.key', (t) => {
+  const items = [
+    { key: 'k1', label: 'A', value: { id: 1 } },
+    { key: 'k2', label: 'B', value: { id: 2 } },
+    { key: 'k3', label: 'C', value: { id: 3 } },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['k1', 'k3']}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+})
+
+// --- Hook: isFocused=false ---
+
+test('hook ignores all input when isFocused=false', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={items}
+      isFocused={false}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectedIndex, 0)
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(result?.selectedIndex, 0)
+
+  stdin.write('j')
+  await delay()
+  t.is(result?.selectedIndex, 0)
+})
+
+// --- Navigation on empty items does nothing ---
+
+test('keyboard input on empty items does not crash', async (t) => {
+  const { stdin, lastFrame } = render(<EnhancedSelectInput items={[]} />)
+
+  await delay()
+  // Should not throw
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_UP)
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  stdin.write(HOME)
+  await delay()
+  stdin.write(END)
+  await delay()
+
+  const frame = lastFrame()
+  t.true(frame !== undefined)
+})
+
+// --- Hotkey updates highlight position ---
+
+test('hotkey updates selectedIndex to the hotkey item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'x' },
+    { label: 'B', value: 'b', hotkey: 'y' },
+    { label: 'C', value: 'c', hotkey: 'z' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write('z')
+  await delay()
+  t.is(highlighted, 'C')
+
+  // Subsequent arrow navigation should continue from C
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+// --- Hotkey in horizontal mode with h/l conflict ---
+
+test('h/l hotkeys are ignored in horizontal orientation (nav takes priority)', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'h' },
+    { label: 'B', value: 'b', hotkey: 'l' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let selected = ''
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onSelect={(item) => {
+        selected = item.label
+      }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  // 'l' should navigate right, not trigger hotkey
+  stdin.write('l')
+  await delay()
+  t.is(highlighted, 'B')
+  t.is(selected, '')
+
+  // 'h' should navigate left, not trigger hotkey
+  stdin.write('h')
+  await delay()
+  t.is(highlighted, 'A')
+  t.is(selected, '')
+})
+
+// --- onSelect not provided does not crash ---
+
+test('enter without onSelect does not crash', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { stdin, lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('A'))
+})
+
+// --- onHighlight not provided does not crash ---
+
+test('navigation without onHighlight does not crash', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { stdin, lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('B'))
+})
+
+// --- Multi-select: navigation still works ---
+
+test('multi-select navigation with arrow keys works', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+// --- Multi-select: Home/End work ---
+
+test('multi-select Home/End navigation works', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'C')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+// --- Indicator component receives the item ---
+
+test('indicatorComponent receives the current item', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const receivedItems: string[] = []
+  render(
+    <EnhancedSelectInput
+      items={items}
+      indicatorComponent={({ item }) => {
+        receivedItems.push(item.label)
+        return null
+      }}
+    />
+  )
+
+  t.true(receivedItems.includes('A'))
+  t.true(receivedItems.includes('B'))
+})
+
+// --- Per-item indicator only shows when selected ---
+
+test('per-item indicator only shows for selected item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', indicator: '★' },
+    { label: 'B', value: 'b', indicator: '●' },
+  ]
+
+  const { stdin, lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  let frame = lastFrame()!
+  t.true(frame.includes('★'))
+  // B's indicator should not show (space placeholder instead)
+  t.false(frame.includes('●'))
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  frame = lastFrame()!
+  t.true(frame.includes('●'))
+  // A is no longer selected, its indicator should be hidden
+  t.false(frame.includes('★'))
+})
+
+// --- Scroll indicators in horizontal mode ---
+
+test('showScrollIndicators uses ◀/▶ in horizontal mode', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      showScrollIndicators
+      items={items}
+      limit={2}
+      orientation="horizontal"
+      initialIndex={2}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('◀'))
+  t.true(frame.includes('2 more'))
+  // No items below since we're at the end
+  t.false(frame.includes('▲'))
+  t.false(frame.includes('▼'))
+})
+
+// --- Rapid navigation ---
+
+test('rapid sequential navigation lands on correct item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+    { label: 'E', value: 'e' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'E')
+})
+
+// --- onHighlight fires on initial render ---
+
+test('onHighlight fires on initial mount', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+test('onHighlight fires with correct item when initialIndex is set', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+// --- Generic value type ---
+
+test('works with complex object values when key is provided', async (t) => {
+  type MyValue = { id: number; name: string }
+  const items: Array<{ key: string; label: string; value: MyValue }> = [
+    { key: 'item-1', label: 'First', value: { id: 1, name: 'one' } },
+    { key: 'item-2', label: 'Second', value: { id: 2, name: 'two' } },
+  ]
+
+  let selected: MyValue | undefined
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.value
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.not(selected, undefined)
+  t.is(selected?.id, 2)
+  t.is(selected?.name, 'two')
+})
+
+// --- Multi-select: toggle then navigate then confirm ---
+
+test('multi-select: toggle multiple items across navigation then confirm', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Check A
+  await delay()
+  stdin.write(ARROW_DOWN) // → B
+  await delay()
+  stdin.write(ARROW_DOWN) // → C
+  await delay()
+  stdin.write(SPACE) // Check C
+  await delay()
+  stdin.write(ARROW_DOWN) // → D
+  await delay()
+  stdin.write(SPACE) // Check D
+  await delay()
+  stdin.write(ARROW_UP) // → C
+  await delay()
+  stdin.write(SPACE) // Uncheck C
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('a'))
+  t.true(confirmed.includes('d'))
+  t.false(confirmed.includes('c'))
+})
+
+// --- Items update: items grow ---
+
+test('selection stays valid when items grow', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  // Add more items — selection should stay on B
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+        { label: 'D', value: 'd' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+// --- Items update: items replaced entirely ---
+
+test('selection resets when items are completely replaced', async (t) => {
+  let highlighted = ''
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+
+  // Replace with completely different items (only 1 item)
+  rerender(
+    <EnhancedSelectInput
+      items={[{ label: 'X', value: 'x' }]}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'X')
 })
