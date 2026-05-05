@@ -2,6 +2,11 @@ import { Box, Text, useInput } from 'ink'
 import React, { type FC, useEffect, useState } from 'react'
 
 export type Item<V> = {
+  /**
+   * Unique key for React rendering. Required when V is a non-primitive type
+   * (e.g. object) — without it, String(value) produces "[object Object]" for
+   * every item, causing duplicate React key warnings and rendering bugs.
+   */
   key?: string
   label: string
   value: V
@@ -19,6 +24,8 @@ export type Properties<V> = {
   readonly itemComponent?: FC<ItemProperties>
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
+  /** Called when Escape is pressed while the component is focused. */
+  readonly onCancel?: () => void
   readonly orientation?: 'vertical' | 'horizontal'
 }
 
@@ -75,6 +82,22 @@ function findNextValidIndex<V>(
   return currentIndex
 }
 
+function findFirstValidIndex<V>(items: Array<Item<V>>): number {
+  for (let i = 0; i < items.length; i++) {
+    if (!items[i]?.disabled) return i
+  }
+
+  return 0
+}
+
+function findLastValidIndex<V>(items: Array<Item<V>>): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (!items[i]?.disabled) return i
+  }
+
+  return items.length - 1
+}
+
 export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
   return (
     <Box marginRight={1}>
@@ -109,6 +132,7 @@ export function EnhancedSelectInput<V>({
   limit,
   onSelect,
   onHighlight,
+  onCancel,
   orientation = 'vertical',
 }: Properties<V>) {
   const safeInitialIndex = resolveInitialIndex(items, initialIndex)
@@ -122,6 +146,9 @@ export function EnhancedSelectInput<V>({
     : items
   const hasItems = items.length > 0
 
+  // Only re-fire when the highlighted index changes, not when the items
+  // array reference changes (which would cause spurious calls on every
+  // parent re-render that passes a new array with identical content).
   useEffect(() => {
     if (hasItems) {
       const highlightedItem = items[selectedIndex]
@@ -129,16 +156,42 @@ export function EnhancedSelectInput<V>({
         onHighlight?.(highlightedItem)
       }
     }
-  }, [items, selectedIndex, onHighlight, hasItems])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex, onHighlight, hasItems])
+
+  const updateSelection = (nextIndex: number) => {
+    setSelectedIndex(nextIndex)
+    if (limit) {
+      setRotateIndex(Math.floor(nextIndex / limit) * limit)
+    }
+  }
 
   useInput(
     (input, key) => {
       if (!hasItems) return
 
-      let nextIndex = selectedIndex
       const navKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
       const isNavKey = navKeys.has(input)
+
+      // Home / End — jump to first or last enabled item
+      if (key.home) {
+        updateSelection(findFirstValidIndex(items))
+        return
+      }
+
+      if (key.end) {
+        updateSelection(findLastValidIndex(items))
+        return
+      }
+
+      // Escape — cancel / dismiss
+      if (key.escape) {
+        onCancel?.()
+        return
+      }
+
+      let nextIndex = selectedIndex
 
       if (orientation === 'vertical') {
         if (key.upArrow || input === 'k') {
@@ -159,10 +212,7 @@ export function EnhancedSelectInput<V>({
       }
 
       if (nextIndex !== selectedIndex) {
-        setSelectedIndex(nextIndex)
-        if (limit) {
-          setRotateIndex(Math.floor(nextIndex / limit) * limit)
-        }
+        updateSelection(nextIndex)
       }
 
       if (key.return) {
@@ -180,11 +230,7 @@ export function EnhancedSelectInput<V>({
         )
         if (hotkeyItem) {
           const hotkeyIndex = items.indexOf(hotkeyItem)
-          setSelectedIndex(hotkeyIndex)
-          if (limit) {
-            setRotateIndex(Math.floor(hotkeyIndex / limit) * limit)
-          }
-
+          updateSelection(hotkeyIndex)
           onSelect?.(hotkeyItem)
         }
       }
