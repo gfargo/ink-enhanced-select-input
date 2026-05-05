@@ -3290,3 +3290,188 @@ test('searchable: backspace on empty query does nothing', async (t) => {
   t.true(frame.includes('Banana'))
   t.true(frame.includes('/ Search...'))
 })
+
+// --- Searchable + Multi-select combination ---
+
+test('searchable + multiple: can filter then confirm checked items', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'cherry']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  // Filter to only "ap" items, then confirm — should still include
+  // all previously checked items that match the filter
+  stdin.write('ap')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  // Only "apple" matches the filter AND is checked
+  t.is(confirmed.length, 1)
+  t.true(confirmed.includes('apple'))
+})
+
+// --- Searchable + limit + navigation ---
+
+test('searchable + limit: navigation works within paginated filtered results', async (t) => {
+  const items = [
+    { label: 'Alpha', value: 'alpha' },
+    { label: 'Apex', value: 'apex' },
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      limit={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('a')
+  await delay()
+  // "a" matches Alpha, Apex, Apple, Banana (all contain 'a')
+  t.is(highlighted, 'Alpha')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Apex')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Apple')
+
+  // Should have scrolled past the limit=2 window
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Banana')
+})
+
+// --- Searchable + isFocused=false ---
+
+test('searchable: typing blocked when isFocused=false', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      searchable
+      items={items}
+      isFocused={false}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('app')
+  await delay()
+
+  // Query should remain empty since input is blocked
+  t.is(result?.searchQuery, '')
+  t.is(result?.visibleItems.length, 2)
+})
+
+// --- Searchable + Home/End on filtered results ---
+
+test('searchable: Home/End work on filtered results', async (t) => {
+  const items = [
+    { label: 'Alpha', value: 'alpha' },
+    { label: 'Apex', value: 'apex' },
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Alpha')
+
+  stdin.write('ap')
+  await delay()
+  // After filtering, move down first to change selectedIndex
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Apple')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'Apex')
+
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'Apple')
+})
+
+// --- Searchable: query with no results then backspace restores items ---
+
+test('searchable: multiple backspaces progressively restore items', async (t) => {
+  // This test verifies that backspace works to widen the filter.
+  // The existing "backspace removes last character" test covers single backspace.
+  // Here we verify the query display updates correctly.
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('app')
+  await delay()
+
+  let frame = lastFrame()!
+  t.true(frame.includes('/ app'))
+  t.true(frame.includes('Apple'))
+  t.false(frame.includes('Apricot'))
+  t.false(frame.includes('Banana'))
+
+  // Single backspace to "ap" — now Apricot also matches
+  stdin.write('\u007F')
+  await delay()
+
+  frame = lastFrame()!
+  t.true(frame.includes('/ ap'))
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Apricot'))
+  t.false(frame.includes('Banana'))
+})

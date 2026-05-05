@@ -287,8 +287,8 @@ export function useEnhancedSelectInput<V>({
   useInput(
     // eslint-disable-next-line complexity
     (input, key) => {
-      // In searchable mode, handle Backspace to remove last character
-      if (searchable && key.backspace) {
+      // In searchable mode, handle Backspace/Delete to remove last character
+      if (searchable && (key.backspace || key.delete)) {
         setSearchQuery((previous) => previous.slice(0, -1))
         setSelectedIndex(0)
         if (limit) setRotateIndex(0)
