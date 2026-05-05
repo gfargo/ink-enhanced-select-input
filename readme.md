@@ -169,6 +169,46 @@ You can provide a custom header renderer via `groupHeaderComponent`:
 />
 ```
 
+### Searchable Mode
+
+Enable inline filtering with the `searchable` prop. Printable characters build a search query that filters items by label (case-insensitive substring match). A search input line renders above the item list.
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  searchable
+  searchPlaceholder="Filter options..."
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+Renders:
+
+```
+/ Filter options...
+> Option A
+  Option B
+  Option C
+```
+
+When typing:
+
+```
+/ app
+> Apple
+  Pineapple
+```
+
+**Key behavior in searchable mode:**
+
+- Printable characters are captured as search input
+- `Backspace` removes the last character from the query
+- `Escape` clears the query; if already empty, calls `onCancel`
+- Arrow keys navigate the filtered results
+- Vim keys (`h/j/k/l`) are treated as search characters, not navigation
+- Hotkeys are disabled (characters go to the search query)
+- "No matches" is shown when the query matches nothing
+
 ### Custom Components
 
 ```tsx
@@ -226,7 +266,7 @@ function MyCustomSelect({ items, onSelect }) {
 }
 ```
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`.
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys, searchQuery }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`. `searchQuery` is the current filter string — empty when `searchable` is false.
 
 ## Props
 
@@ -248,6 +288,8 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 | `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items |
 | `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode    |
 | `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                |
+| `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                            |
+| `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty           |
 
 ### Item Shape
 

@@ -1240,6 +1240,8 @@ type HookHarnessProperties = {
   readonly limit?: number
   readonly isFocused?: boolean
   readonly orientation?: 'vertical' | 'horizontal'
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly searchable?: boolean
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -2758,4 +2760,533 @@ test('selection resets when items are completely replaced', async (t) => {
 
   await delay()
   t.is(highlighted, 'X')
+})
+
+// --- Searchable Mode (#14) ---
+
+test('searchable: renders search input with placeholder', (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput searchable items={items} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('/ Search...'))
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Banana'))
+})
+
+test('searchable: renders custom placeholder', (t) => {
+  const items = [{ label: 'Apple', value: 'apple' }]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      searchPlaceholder="Type to filter"
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('/ Type to filter'))
+})
+
+test('searchable: typing filters items by label', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Avocado', value: 'avocado' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('a')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('/ a'))
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Avocado'))
+  t.true(frame.includes('Banana')) // "Banana" contains 'a'
+})
+
+test('searchable: filtering is case-insensitive', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('APP')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Apple'))
+  t.false(frame.includes('Banana'))
+})
+
+test('searchable: multi-character query narrows results', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Apricot'))
+  t.false(frame.includes('Banana'))
+
+  stdin.write('p')
+  await delay()
+
+  const frame2 = lastFrame()!
+  // "app" matches Apple but not Apricot
+  t.true(frame2.includes('Apple'))
+  t.false(frame2.includes('Apricot'))
+})
+
+test('searchable: backspace removes last character from query', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('app')
+  await delay()
+
+  let frame = lastFrame()!
+  t.true(frame.includes('Apple'))
+  t.false(frame.includes('Banana'))
+
+  // Backspace to "ap"
+  stdin.write('\u007F') // DEL/Backspace
+  await delay()
+
+  frame = lastFrame()!
+  t.true(frame.includes('/ ap'))
+  t.true(frame.includes('Apple'))
+  t.false(frame.includes('Banana'))
+})
+
+test('searchable: escape clears the search query', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('app')
+  await delay()
+
+  let frame = lastFrame()!
+  t.false(frame.includes('Banana'))
+
+  stdin.write(ESCAPE)
+  await delay()
+
+  frame = lastFrame()!
+  // Query cleared — all items visible again
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Banana'))
+  t.true(frame.includes('/ Search...'))
+})
+
+test('searchable: escape calls onCancel when query is already empty', async (t) => {
+  const items = [{ label: 'Apple', value: 'apple' }]
+
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  // No query typed, escape should call onCancel
+  stdin.write(ESCAPE)
+  await delay()
+  t.true(cancelled)
+})
+
+test('searchable: escape clears query first, then onCancel on second press', async (t) => {
+  const items = [{ label: 'Apple', value: 'apple' }]
+
+  let cancelled = false
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('a')
+  await delay()
+
+  // First escape clears query
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+  t.true(lastFrame()!.includes('/ Search...'))
+
+  // Second escape calls onCancel
+  stdin.write(ESCAPE)
+  await delay()
+  t.true(cancelled)
+})
+
+test('searchable: arrow navigation works on filtered results', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+  // After filtering, first match should be highlighted
+  t.is(highlighted, 'Apple')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Apricot')
+
+  stdin.write(ARROW_UP)
+  await delay()
+  t.is(highlighted, 'Apple')
+})
+
+test('searchable: enter selects from filtered results', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ban')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, 'Banana')
+})
+
+test('searchable: vim keys (j/k) are treated as search input, not navigation', async (t) => {
+  const items = [
+    { label: 'jelly', value: 'jelly' },
+    { label: 'jam', value: 'jam' },
+    { label: 'juice', value: 'juice' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('j')
+  await delay()
+
+  const frame = lastFrame()!
+  // 'j' should be in the search query, not navigate
+  t.true(frame.includes('/ j'))
+  // All items contain 'j' so all should be visible
+  t.true(frame.includes('jelly'))
+  t.true(frame.includes('jam'))
+  t.true(frame.includes('juice'))
+})
+
+test('searchable: hotkeys are disabled', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple', hotkey: 'a' },
+    { label: 'Banana', value: 'banana', hotkey: 'b' },
+  ]
+
+  let selected = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('a')
+  await delay()
+
+  // 'a' should filter, not trigger hotkey
+  t.is(selected, '')
+  const frame = lastFrame()!
+  t.true(frame.includes('/ a'))
+})
+
+test('searchable: shows "No matches" when query matches nothing', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('xyz')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('No matches'))
+  t.true(frame.includes('/ xyz'))
+  t.false(frame.includes('Apple'))
+  t.false(frame.includes('Banana'))
+})
+
+test('searchable: selection resets to first item when query changes', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Apricot')
+
+  // Typing resets selection to first match
+  stdin.write('b')
+  await delay()
+  t.is(highlighted, 'Banana')
+})
+
+test('searchable: works with disabled items', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple', disabled: true },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+  // Apple is disabled, so Apricot should be highlighted
+  t.is(highlighted, 'Apricot')
+})
+
+test('searchable: space is treated as search character, not toggle', async (t) => {
+  const items = [
+    { label: 'Ice Cream', value: 'ice-cream' },
+    { label: 'Iced Tea', value: 'iced-tea' },
+    { label: 'Apple', value: 'apple' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      searchable
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('i')
+  await delay()
+  stdin.write('c')
+  await delay()
+  stdin.write('e')
+  await delay()
+  stdin.write(SPACE)
+  await delay()
+
+  // Verify space was captured in the query (not treated as toggle)
+  t.is(result?.searchQuery, 'ice ')
+  // "ice " matches only "Ice Cream" (not "Iced Tea" since "iced tea" doesn't contain "ice ")
+  t.is(result?.visibleItems.length, 1)
+  t.is(result?.visibleItems[0]?.label, 'Ice Cream')
+})
+
+test('searchable: hook exposes searchQuery in result', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      searchable
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.searchQuery, '')
+
+  stdin.write('app')
+  await delay()
+  t.is(result?.searchQuery, 'app')
+})
+
+test('searchable: non-searchable mode does not show search input', (t) => {
+  const items = [{ label: 'Apple', value: 'apple' }]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.false(frame.includes('/'))
+  t.false(frame.includes('Search'))
+})
+
+test('searchable: works with limit/pagination', async (t) => {
+  const items = [
+    { label: 'Alpha', value: 'alpha' },
+    { label: 'Bravo', value: 'bravo' },
+    { label: 'Charlie', value: 'charlie' },
+    { label: 'Delta', value: 'delta' },
+    { label: 'Able', value: 'able' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} limit={2} />
+  )
+
+  await delay()
+  stdin.write('a')
+  await delay()
+
+  const frame = lastFrame()!
+  // "a" matches Alpha, Bravo (has 'a'), Charlie (has 'a'), Delta (has 'a'), Able
+  // With limit=2, only first 2 should be visible
+  t.true(frame.includes('/ a'))
+})
+
+test('searchable: groups still render with filtered items', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple', group: 'Fruits' },
+    { label: 'Apricot', value: 'apricot', group: 'Fruits' },
+    { label: 'Broccoli', value: 'broccoli', group: 'Vegetables' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── Fruits ──'))
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Apricot'))
+  t.false(frame.includes('Broccoli'))
+  t.false(frame.includes('── Vegetables ──'))
+})
+
+test('searchable: backspace on empty query does nothing', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput searchable items={items} />
+  )
+
+  await delay()
+  // Backspace with no query
+  stdin.write('\u007F')
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Apple'))
+  t.true(frame.includes('Banana'))
+  t.true(frame.includes('/ Search...'))
 })
