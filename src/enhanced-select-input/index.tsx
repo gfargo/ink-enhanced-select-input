@@ -156,7 +156,27 @@ export function useEnhancedSelectInput<V>({
   // If the item at that position is still enabled we keep it; otherwise we
   // resolve the nearest valid index from the same position, so the selection
   // stays as close as possible to where the user left off.
+  // Also warn in development when duplicate React keys are detected —
+  // this happens when V is an object and item.key is not set, causing
+  // String(value) to produce "[object Object]" for every item.
   useEffect(() => {
+    if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
+      const keys = items.map((item) => item.key ?? String(item.value))
+      const seen = new Set<string>()
+      const duplicates = new Set<string>()
+      for (const k of keys) {
+        if (seen.has(k)) duplicates.add(k)
+        else seen.add(k)
+      }
+
+      if (duplicates.size > 0) {
+        console.warn(
+          `[ink-enhanced-select-input] Duplicate item keys detected: ${[...duplicates].join(', ')}. ` +
+            'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
+        )
+      }
+    }
+
     if (items.length === 0) return
     const currentItem = items[selectedIndex]
     if (!currentItem || currentItem.disabled) {
