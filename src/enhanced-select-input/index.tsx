@@ -152,6 +152,21 @@ export function useEnhancedSelectInput<V>({
   const itemsAbove = rotateIndex
   const itemsBelow = limit ? Math.max(0, items.length - rotateIndex - limit) : 0
 
+  // When the items array changes, re-validate the current selectedIndex.
+  // If the item at that position is still enabled we keep it; otherwise we
+  // resolve the nearest valid index from the same position, so the selection
+  // stays as close as possible to where the user left off.
+  useEffect(() => {
+    if (items.length === 0) return
+    const currentItem = items[selectedIndex]
+    if (!currentItem || currentItem.disabled) {
+      const newIndex = resolveInitialIndex(items, selectedIndex)
+      setSelectedIndex(newIndex)
+      if (limit) setRotateIndex(Math.floor(newIndex / limit) * limit)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every
   // parent re-render that passes a new array with identical content).

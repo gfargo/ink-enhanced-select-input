@@ -1344,3 +1344,127 @@ test('hook returns empty state for empty items', async (t) => {
   t.is(result?.hasItems, false)
   t.is(result?.visibleItems.length, 0)
 })
+
+// --- #15: items prop sync after mount ---
+
+test('selection clamps when items shrink below current index', async (t) => {
+  const initialItems = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={initialItems}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+
+  // Shrink to 2 items — index 2 no longer exists
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={2}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('selection moves off a now-disabled item when items update', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  // Mark B as disabled — selection should move to nearest enabled item
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b', disabled: true },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.not(highlighted, 'B')
+})
+
+test('selection preserved when items update but current slot is still valid', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  // Replace with fresh reference, same content — selection must stay on B
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+})
