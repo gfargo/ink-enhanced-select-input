@@ -15,18 +15,23 @@ export type Item<V> = {
   disabled?: boolean
 }
 
-export type Properties<V> = {
+/** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
+export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
   readonly limit?: number
-  readonly indicatorComponent?: FC<IndicatorProperties>
-  readonly itemComponent?: FC<ItemProperties>
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
   /** Called when Escape is pressed while the component is focused. */
   readonly onCancel?: () => void
   readonly orientation?: 'vertical' | 'horizontal'
+}
+
+/** Full component props — hook props plus rendering customisation. */
+export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
+  readonly indicatorComponent?: FC<IndicatorProperties>
+  readonly itemComponent?: FC<ItemProperties>
   /**
    * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
    * when the limit window doesn't cover the full list. Only meaningful when
@@ -53,7 +58,7 @@ export type ItemProperties = {
 const VERTICAL_NAV_KEYS = new Set(['j', 'k'])
 const HORIZONTAL_NAV_KEYS = new Set(['h', 'l'])
 
-function resolveInitialIndex<V>(
+export function resolveInitialIndex<V>(
   items: Array<Item<V>>,
   initialIndex: number
 ): number {
@@ -69,7 +74,7 @@ function resolveInitialIndex<V>(
   return clamped
 }
 
-function findNextValidIndex<V>(
+export function findNextValidIndex<V>(
   items: Array<Item<V>>,
   currentIndex: number,
   step: number
@@ -88,7 +93,7 @@ function findNextValidIndex<V>(
   return currentIndex
 }
 
-function findFirstValidIndex<V>(items: Array<Item<V>>): number {
+export function findFirstValidIndex<V>(items: Array<Item<V>>): number {
   for (let i = 0; i < items.length; i++) {
     if (!items[i]?.disabled) return i
   }
@@ -96,7 +101,7 @@ function findFirstValidIndex<V>(items: Array<Item<V>>): number {
   return 0
 }
 
-function findLastValidIndex<V>(items: Array<Item<V>>): number {
+export function findLastValidIndex<V>(items: Array<Item<V>>): number {
   for (let i = items.length - 1; i >= 0; i--) {
     if (!items[i]?.disabled) return i
   }
@@ -104,55 +109,46 @@ function findLastValidIndex<V>(items: Array<Item<V>>): number {
   return items.length - 1
 }
 
-export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
-  return (
-    <Box marginRight={1}>
-      <Text color={isSelected ? 'green' : undefined}>
-        {isSelected ? '>' : ' '}
-      </Text>
-    </Box>
-  )
+export type UseEnhancedSelectInputResult<V> = {
+  /** Index of the currently highlighted item within the full items array. */
+  selectedIndex: number
+  /** Start of the current pagination window (0 when limit is not set). */
+  rotateIndex: number
+  /** The slice of items visible in the current window. */
+  visibleItems: Array<Item<V>>
+  /** True when items is non-empty. */
+  hasItems: boolean
+  /** Number of items hidden above the current window. */
+  itemsAbove: number
+  /** Number of items hidden below the current window. */
+  itemsBelow: number
 }
 
-export function DefaultItemComponent({
-  isSelected,
-  label,
-  isDisabled,
-}: ItemProperties) {
-  return (
-    <Text
-      color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
-      dimColor={isDisabled}
-    >
-      {label}
-    </Text>
-  )
-}
-
-export function EnhancedSelectInput<V>({
+/**
+ * Headless hook containing all selection state and keyboard handling for
+ * EnhancedSelectInput. Use this when you need a fully custom renderer but
+ * still want the built-in navigation, pagination, hotkeys, and callbacks.
+ */
+export function useEnhancedSelectInput<V>({
   items,
   isFocused = true,
   initialIndex = 0,
-  indicatorComponent = DefaultIndicatorComponent,
-  itemComponent = DefaultItemComponent,
   limit,
   onSelect,
   onHighlight,
   onCancel,
   orientation = 'vertical',
-  showScrollIndicators = false,
-}: Properties<V>) {
+}: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   const safeInitialIndex = resolveInitialIndex(items, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
     limit ? Math.floor(safeInitialIndex / limit) * limit : 0
   )
 
+  const hasItems = items.length > 0
   const visibleItems = limit
     ? items.slice(rotateIndex, rotateIndex + limit)
     : items
-  const hasItems = items.length > 0
-
   const itemsAbove = rotateIndex
   const itemsBelow = limit ? Math.max(0, items.length - rotateIndex - limit) : 0
 
@@ -184,7 +180,6 @@ export function EnhancedSelectInput<V>({
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
       const isNavKey = navKeys.has(input)
 
-      // Home / End — jump to first or last enabled item
       if (key.home) {
         updateSelection(findFirstValidIndex(items))
         return
@@ -195,7 +190,6 @@ export function EnhancedSelectInput<V>({
         return
       }
 
-      // Escape — cancel / dismiss
       if (key.escape) {
         onCancel?.()
         return
@@ -248,19 +242,59 @@ export function EnhancedSelectInput<V>({
     { isActive: isFocused }
   )
 
+  return { selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow }
+}
+
+export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
+  return (
+    <Box marginRight={1}>
+      <Text color={isSelected ? 'green' : undefined}>
+        {isSelected ? '>' : ' '}
+      </Text>
+    </Box>
+  )
+}
+
+export function DefaultItemComponent({
+  isSelected,
+  label,
+  isDisabled,
+}: ItemProperties) {
+  return (
+    <Text
+      color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
+      dimColor={isDisabled}
+    >
+      {label}
+    </Text>
+  )
+}
+
+export function EnhancedSelectInput<V>({
+  indicatorComponent = DefaultIndicatorComponent,
+  itemComponent = DefaultItemComponent,
+  showScrollIndicators = false,
+  // All remaining props are forwarded to the hook
+  ...hookProps
+}: Properties<V>) {
+  const { selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow } =
+    useEnhancedSelectInput(hookProps)
+
   if (!hasItems) {
     return <Box />
   }
 
   const IndicatorComponent = indicatorComponent
   const ItemComponent = itemComponent
-  const isVertical = orientation === 'vertical'
+  const isVertical = hookProps.orientation !== 'horizontal'
 
   return (
     <Box flexDirection={isVertical ? 'column' : 'row'}>
       {showScrollIndicators && itemsAbove > 0 && (
         <Box marginRight={isVertical ? 0 : 1}>
-          <Text dimColor>{isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}</Text>
+          <Text dimColor>
+            {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
+          </Text>
         </Box>
       )}
       <Box
@@ -296,7 +330,9 @@ export function EnhancedSelectInput<V>({
       </Box>
       {showScrollIndicators && itemsBelow > 0 && (
         <Box marginLeft={isVertical ? 0 : 1}>
-          <Text dimColor>{isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}</Text>
+          <Text dimColor>
+            {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
+          </Text>
         </Box>
       )}
     </Box>

@@ -119,6 +119,33 @@ function MyItem({ isSelected, isDisabled, label }) {
 />
 ```
 
+### Headless Hook
+
+If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly:
+
+```tsx
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input'
+
+function MyCustomSelect({ items, onSelect }) {
+  const { selectedIndex, visibleItems, itemsAbove, itemsBelow } =
+    useEnhancedSelectInput({ items, onSelect })
+
+  return (
+    <Box flexDirection="column">
+      {itemsAbove > 0 && <Text dimColor>↑ {itemsAbove} more</Text>}
+      {visibleItems.map((item, i) => (
+        <Text key={item.key ?? String(item.value)} color={i === selectedIndex ? 'cyan' : undefined}>
+          {item.label}
+        </Text>
+      ))}
+      {itemsBelow > 0 && <Text dimColor>↓ {itemsBelow} more</Text>}
+    </Box>
+  )
+}
+```
+
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, and `showScrollIndicators`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow }`.
+
 ## Props
 
 | Prop                 | Type                         | Default                     | Description                              |
