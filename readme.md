@@ -157,6 +157,12 @@ Hotkeys (when assigned) select the item immediately.
 
 Disabled items are automatically skipped during navigation.
 
+> **Hotkey constraints:** Navigation keys take priority over hotkeys. In vertical
+> orientation the characters `j` and `k` are reserved for navigation — an item
+> hotkey set to either of these values will never fire. Similarly, `h` and `l`
+> are reserved in horizontal orientation. Choose hotkeys outside these sets to
+> avoid conflicts.
+
 ## Development
 
 ```bash

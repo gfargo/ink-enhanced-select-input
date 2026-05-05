@@ -32,7 +32,6 @@ export function Storybook() {
         <>
           <Text dimColor>Select a variant:</Text>
           <EnhancedSelectInput
-            // OnHighlight={(item) => console.log(item)}
             orientation={orientation}
             items={[
               {
@@ -68,7 +67,6 @@ export function Storybook() {
       {!currentView && orientation && (
         <Box flexDirection="column">
           <EnhancedSelectInput
-            // OnHighlight={(item) => console.log(item)}
             orientation={orientation}
             items={[
               {
@@ -119,7 +117,6 @@ export function Storybook() {
         <Box flexDirection="column">
           <Text dimColor>Item Specific Custom Indicators View:</Text>
           <EnhancedSelectInput
-            // OnHighlight={(item) => console.log(item)}
             orientation={orientation}
             items={[
               {
@@ -166,7 +163,6 @@ export function Storybook() {
         <Box flexDirection="column">
           <Text dimColor>Custom Item and Indicator Component View:</Text>
           <EnhancedSelectInput
-            // OnHighlight={(item) => console.log(item)}
             itemComponent={({ isSelected, isDisabled, label }) => (
               <Box>
                 <Text
@@ -226,7 +222,6 @@ export function Storybook() {
         <Box flexDirection="column">
           <Text dimColor>Hotkeys View:</Text>
           <EnhancedSelectInput
-            // OnHighlight={(item) => console.log(item)}
             orientation={orientation}
             items={[
               {

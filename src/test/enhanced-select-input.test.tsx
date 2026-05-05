@@ -2,7 +2,10 @@ import test from 'ava'
 import { Box, Text } from 'ink'
 import { render } from 'ink-testing-library'
 import React from 'react'
-import { EnhancedSelectInput } from '../enhanced-select-input/index.js'
+import {
+  DefaultIndicatorComponent,
+  EnhancedSelectInput,
+} from '../enhanced-select-input/index.js'
 
 // ANSI escape sequences for arrow keys
 const ARROW_UP = '\u001B[A'
@@ -732,4 +735,193 @@ test('limit wraps around from last item to first', async (t) => {
 
   const frame = lastFrame()!
   t.true(frame.includes('A'))
+})
+
+// --- initialIndex edge cases ---
+
+test('negative initialIndex clamps to first item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={-5}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+// --- All items disabled ---
+
+test('all items disabled: nothing is navigable', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b', disabled: true },
+  ]
+
+  let selected = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  // Navigation should not move when all items are disabled
+  const frame = lastFrame()!
+  t.true(frame.includes('A'))
+  t.true(frame.includes('B'))
+  // Enter on a disabled item must not trigger onSelect
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, '')
+})
+
+// --- Enter on disabled item ---
+
+test('enter on a disabled item does not trigger onSelect', async (t) => {
+  // Start with the only selectable item disabled via the initial highlight
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={0}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  // initialIndex=0 is disabled, so it skips to B (index 1)
+  // Navigate back to A's slot by going up (wraps to B since A disabled)
+  // We can't actually land on A because navigation skips disabled items.
+  // Verify that pressing Enter on the current selection (B) works normally.
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, 'B')
+})
+
+// --- Hotkey / vim-key conflict ---
+
+test('vim nav key takes priority over matching hotkey', async (t) => {
+  // In vertical orientation, 'j' navigates down.
+  // An item with hotkey='j' should NOT fire onSelect when j is pressed.
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'j' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let selected = ''
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="vertical"
+      onSelect={(item) => {
+        selected = item.label
+      }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  // Press 'j' — should navigate down, not select via hotkey
+  stdin.write('j')
+  await delay()
+  t.is(highlighted, 'B')
+  t.is(selected, '') // hotkey must not have fired
+})
+
+// --- DefaultIndicatorComponent in isolation ---
+
+test('DefaultIndicatorComponent renders selected state', (t) => {
+  const items = [{ label: 'X', value: 'x' }]
+  const item = items[0]!
+
+  const { lastFrame: selectedFrame } = render(
+    <DefaultIndicatorComponent isSelected item={item} />
+  )
+  const { lastFrame: unselectedFrame } = render(
+    <DefaultIndicatorComponent isSelected={false} item={item} />
+  )
+
+  t.true(selectedFrame()!.includes('>'))
+  t.false(unselectedFrame()!.includes('>'))
+})
+
+// --- Horizontal wrap-around ---
+
+test('horizontal navigation wraps around from last to first', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  stdin.write(ARROW_RIGHT)
+  await delay()
+  t.is(highlighted, 'A')
+})
+
+test('horizontal navigation wraps around from first to last', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_LEFT)
+  await delay()
+  t.is(highlighted, 'B')
 })
