@@ -18,6 +18,7 @@ const ENTER = '\r'
 const ESCAPE = '\u001B'
 const HOME = '\u001B[H'
 const END = '\u001B[F'
+const SPACE = ' '
 
 // Small delay to let React/Ink process state updates
 const delay = async (ms = 50) =>
@@ -1518,4 +1519,276 @@ test('no duplicate key warning when all items have explicit keys', async (t) => 
   } finally {
     console.warn = originalWarn
   }
+})
+
+// --- Multi-select mode (#12) ---
+
+test('multi-select renders checkbox indicators instead of arrow cursor', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+  const { lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+  const frame = lastFrame()!
+  t.true(frame.includes('[ ]'))
+  t.false(frame.includes('>'))
+})
+
+test('multi-select space toggles checked state on', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  const { stdin, lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+
+  await delay()
+  t.false(lastFrame()!.includes('[x]'))
+
+  stdin.write(SPACE)
+  await delay()
+  t.true(lastFrame()!.includes('[x]'))
+})
+
+test('multi-select space toggles checked state off', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput items={items} multiple defaultSelectedKeys={['a']} />
+  )
+
+  await delay()
+  t.true(lastFrame()!.includes('[x]'))
+
+  stdin.write(SPACE)
+  await delay()
+  t.false(lastFrame()!.includes('[x]'))
+})
+
+test('multi-select defaultSelectedKeys pre-checks items', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} multiple defaultSelectedKeys={['a', 'c']} />
+  )
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x\]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ \]/g) ?? []).length, 1)
+})
+
+test('multi-select enter calls onConfirm with checked items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // check A
+  await delay()
+  stdin.write(ARROW_DOWN) // → B
+  await delay()
+  stdin.write(ARROW_DOWN) // → C
+  await delay()
+  stdin.write(SPACE) // check C
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('a'))
+  t.true(confirmed.includes('c'))
+})
+
+test('multi-select enter with nothing checked calls onConfirm with empty array', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let confirmed: unknown[] | null = null
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      onConfirm={(selected) => {
+        confirmed = selected
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.not(confirmed, null)
+  t.is(confirmed!.length, 0)
+})
+
+test('multi-select onToggle fires with item and checked state', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+
+  const log: Array<{ label: string; checked: boolean }> = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      onToggle={(item, checked) => {
+        log.push({ label: item.label, checked })
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE)
+  await delay()
+  t.is(log.length, 1)
+  t.is(log[0]?.label, 'A')
+  t.is(log[0]?.checked, true)
+
+  stdin.write(SPACE)
+  await delay()
+  t.is(log.length, 2)
+  t.is(log[1]?.checked, false)
+})
+
+test('multi-select space only toggles enabled items', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  const toggled: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      onToggle={(item) => {
+        toggled.push(item.label)
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // toggle A
+  await delay()
+  stdin.write(ARROW_DOWN) // skip B → land on C
+  await delay()
+  stdin.write(SPACE) // toggle C
+  await delay()
+
+  t.is(toggled.length, 2)
+  t.true(toggled.includes('A'))
+  t.true(toggled.includes('C'))
+  t.false(toggled.includes('B'))
+})
+
+test('multi-select hotkeys do not fire in multi-select mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'x' },
+    { label: 'B', value: 'b', hotkey: 'y' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('x')
+  await delay()
+  t.is(selected, '')
+})
+
+test('multi-select hotkey hints not shown in render', (t) => {
+  const items = [
+    { label: 'A', value: 'a', hotkey: 'x' },
+    { label: 'B', value: 'b', hotkey: 'y' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} multiple />)
+  const frame = lastFrame()!
+  t.false(frame.includes('(x)'))
+  t.false(frame.includes('(y)'))
+})
+
+test('multi-select isChecked passed to custom indicatorComponent', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+
+  let receivedIsChecked: boolean | undefined
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      indicatorComponent={({ isChecked }) => {
+        receivedIsChecked = isChecked
+        return null
+      }}
+    />
+  )
+
+  await delay()
+  t.is(receivedIsChecked, false)
+
+  stdin.write(SPACE)
+  await delay()
+  t.is(receivedIsChecked, true)
+})
+
+test('multi-select isChecked passed to custom itemComponent', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+
+  let receivedIsChecked: boolean | undefined
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      itemComponent={({ isChecked }) => {
+        receivedIsChecked = isChecked
+        return null
+      }}
+    />
+  )
+
+  await delay()
+  t.is(receivedIsChecked, false)
+
+  stdin.write(SPACE)
+  await delay()
+  t.is(receivedIsChecked, true)
+})
+
+test('DefaultIndicatorComponent renders checkboxes in multi-select mode', (t) => {
+  const item = { label: 'X', value: 'x' }
+
+  const { lastFrame: checkedFrame } = render(
+    <DefaultIndicatorComponent isSelected item={item} isChecked />
+  )
+  const { lastFrame: uncheckedFrame } = render(
+    <DefaultIndicatorComponent isSelected={false} item={item} isChecked={false} />
+  )
+
+  t.true(checkedFrame()!.includes('[x]'))
+  t.true(uncheckedFrame()!.includes('[ ]'))
+  t.false(checkedFrame()!.includes('>'))
 })

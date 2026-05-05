@@ -26,6 +26,23 @@ export type UseEnhancedSelectInputProperties<V> = {
   /** Called when Escape is pressed while the component is focused. */
   readonly onCancel?: () => void
   readonly orientation?: 'vertical' | 'horizontal'
+  /** Enable multi-select mode. Space toggles, Enter confirms. */
+  readonly multiple?: boolean
+  /**
+   * Pre-selected item keys in multi-select mode.
+   * Each entry should match an item's `key` field (or `String(value)` fallback).
+   */
+  readonly defaultSelectedKeys?: string[]
+  /**
+   * Called when the user confirms a multi-select (Enter).
+   * Only used when `multiple` is true.
+   */
+  readonly onConfirm?: (items: Array<Item<V>>) => void
+  /**
+   * Called each time an item is toggled in multi-select mode (Space).
+   * Receives the toggled item and whether it is now checked.
+   */
+  readonly onToggle?: (item: Item<V>, checked: boolean) => void
 }
 
 /** Full component props — hook props plus rendering customisation. */
@@ -42,6 +59,8 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
 
 export type IndicatorProperties = {
   readonly isSelected: boolean
+  /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
+  readonly isChecked?: boolean
   // eslint-disable-next-line  react/no-unused-prop-types
   readonly item: Item<unknown>
 }
@@ -50,6 +69,8 @@ export type ItemProperties = {
   readonly isSelected: boolean
   readonly label: string
   readonly isDisabled: boolean
+  /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
+  readonly isChecked?: boolean
 }
 
 // Vim navigation keys that take precedence over hotkeys.
@@ -109,6 +130,10 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
   return items.length - 1
 }
 
+function itemKey<V>(item: Item<V>): string {
+  return item.key ?? String(item.value)
+}
+
 export type UseEnhancedSelectInputResult<V> = {
   /** Index of the currently highlighted item within the full items array. */
   selectedIndex: number
@@ -122,6 +147,8 @@ export type UseEnhancedSelectInputResult<V> = {
   itemsAbove: number
   /** Number of items hidden below the current window. */
   itemsBelow: number
+  /** Keys of checked items. Only populated in multi-select mode. */
+  checkedKeys: Set<string>
 }
 
 /**
@@ -138,11 +165,18 @@ export function useEnhancedSelectInput<V>({
   onHighlight,
   onCancel,
   orientation = 'vertical',
+  multiple = false,
+  defaultSelectedKeys,
+  onConfirm,
+  onToggle,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   const safeInitialIndex = resolveInitialIndex(items, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
     limit ? Math.floor(safeInitialIndex / limit) * limit : 0
+  )
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
+    () => new Set(defaultSelectedKeys ?? [])
   )
 
   const hasItems = items.length > 0
@@ -161,7 +195,7 @@ export function useEnhancedSelectInput<V>({
   // String(value) to produce "[object Object]" for every item.
   useEffect(() => {
     if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
-      const keys = items.map((item) => item.key ?? String(item.value))
+      const keys = items.map((item) => itemKey(item))
       const seen = new Set<string>()
       const duplicates = new Set<string>()
       for (const k of keys) {
@@ -230,6 +264,24 @@ export function useEnhancedSelectInput<V>({
         return
       }
 
+      // Space: toggle in multi-select mode
+      if (multiple && input === ' ') {
+        const item = items[selectedIndex]
+        if (item && !item.disabled) {
+          const k = itemKey(item)
+          setCheckedKeys((prev) => {
+            const next = new Set(prev)
+            const nowChecked = !next.has(k)
+            if (nowChecked) next.add(k)
+            else next.delete(k)
+            onToggle?.(item, nowChecked)
+            return next
+          })
+        }
+
+        return
+      }
+
       let nextIndex = selectedIndex
 
       if (orientation === 'vertical') {
@@ -255,15 +307,21 @@ export function useEnhancedSelectInput<V>({
       }
 
       if (key.return) {
-        const selectedItem = items[selectedIndex]
-        if (selectedItem && !selectedItem.disabled) {
-          onSelect?.(selectedItem)
+        if (multiple) {
+          // In multi-select mode Enter confirms the full selection
+          const confirmed = items.filter((item) => checkedKeys.has(itemKey(item)))
+          onConfirm?.(confirmed)
+        } else {
+          const selectedItem = items[selectedIndex]
+          if (selectedItem && !selectedItem.disabled) {
+            onSelect?.(selectedItem)
+          }
         }
       }
 
       // Hotkeys: nav keys for the active orientation take priority.
-      // See README "Keyboard Navigation" for reserved key constraints.
-      if (!isNavKey) {
+      // Hotkeys are not active in multi-select mode to avoid ambiguity.
+      if (!multiple && !isNavKey) {
         const hotkeyItem = items.find(
           (item) => item.hotkey === input && !item.disabled
         )
@@ -277,10 +335,33 @@ export function useEnhancedSelectInput<V>({
     { isActive: isFocused }
   )
 
-  return { selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow }
+  return {
+    selectedIndex,
+    rotateIndex,
+    visibleItems,
+    hasItems,
+    itemsAbove,
+    itemsBelow,
+    checkedKeys,
+  }
 }
 
-export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
+export function DefaultIndicatorComponent({
+  isSelected,
+  isChecked,
+}: IndicatorProperties) {
+  if (isChecked !== undefined) {
+    // Multi-select mode: show checkbox + cursor
+    return (
+      <Box marginRight={1}>
+        <Text color={isSelected ? 'green' : undefined}>
+          {isChecked ? '[x]' : '[ ]'}
+        </Text>
+      </Box>
+    )
+  }
+
+  // Single-select mode: classic arrow cursor
   return (
     <Box marginRight={1}>
       <Text color={isSelected ? 'green' : undefined}>
@@ -312,8 +393,15 @@ export function EnhancedSelectInput<V>({
   // All remaining props are forwarded to the hook
   ...hookProps
 }: Properties<V>) {
-  const { selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow } =
-    useEnhancedSelectInput(hookProps)
+  const {
+    selectedIndex,
+    rotateIndex,
+    visibleItems,
+    hasItems,
+    itemsAbove,
+    itemsBelow,
+    checkedKeys,
+  } = useEnhancedSelectInput(hookProps)
 
   if (!hasItems) {
     return <Box />
@@ -322,6 +410,7 @@ export function EnhancedSelectInput<V>({
   const IndicatorComponent = indicatorComponent
   const ItemComponent = itemComponent
   const isVertical = hookProps.orientation !== 'horizontal'
+  const isMultiple = hookProps.multiple === true
 
   return (
     <Box flexDirection={isVertical ? 'column' : 'row'}>
@@ -338,22 +427,30 @@ export function EnhancedSelectInput<V>({
       >
         {visibleItems.map((item, index) => {
           const isSelected = index + rotateIndex === selectedIndex
+          const isChecked = isMultiple
+            ? checkedKeys.has(item.key ?? String(item.value))
+            : undefined
 
           return (
             <Box key={item.key ?? String(item.value)}>
-              {item.indicator ? (
+              {item.indicator && !isMultiple ? (
                 <Box marginRight={1}>
                   <Text>{isSelected ? item.indicator : ' '}</Text>
                 </Box>
               ) : (
-                <IndicatorComponent isSelected={isSelected} item={item} />
+                <IndicatorComponent
+                  isSelected={isSelected}
+                  isChecked={isChecked}
+                  item={item}
+                />
               )}
               <ItemComponent
                 isSelected={isSelected}
                 label={item.label}
                 isDisabled={Boolean(item.disabled)}
+                isChecked={isChecked}
               />
-              {item.hotkey && (
+              {item.hotkey && !isMultiple && (
                 <Text dimColor color="gray">
                   {' '}
                   ({item.hotkey})
