@@ -133,6 +133,7 @@ function MyItem({ isSelected, isDisabled, label }) {
 | `onHighlight`        | `(item: Item<V>) => void`    | —                           | Called when the highlighted item changes |
 | `onCancel`           | `() => void`                 | —                           | Called when Escape is pressed            |
 | `orientation`        | `'vertical' \| 'horizontal'` | `'vertical'`                | Layout direction                         |
+| `showScrollIndicators` | `boolean`                  | `false`                     | Show ▲/▼ or ◀/▶ counts when `limit` clips the list |
 
 ### Item Shape
 

@@ -1139,3 +1139,90 @@ test('Home/End update rotateIndex when limit is active', async (t) => {
   const frame2 = lastFrame()!
   t.true(frame2.includes('A'))
 })
+
+// --- showScrollIndicators ---
+
+test('showScrollIndicators shows below indicator when items are clipped', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} limit={2} showScrollIndicators />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('▼'))
+  t.true(frame.includes('2 more'))
+  t.false(frame.includes('▲'))
+})
+
+test('showScrollIndicators shows both indicators when window is mid-list', async (t) => {
+  // 6 items, limit=2, start at index 2 → window [C,D], 2 above, 2 below
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+    { label: 'E', value: 'e' },
+    { label: 'F', value: 'f' },
+  ]
+
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={2}
+      showScrollIndicators
+      initialIndex={2}
+    />
+  )
+
+  await delay()
+  const frame = lastFrame()!
+  t.true(frame.includes('▲'))
+  t.true(frame.includes('▼'))
+  t.true(frame.includes('2 more'))
+
+  // Navigate to last window (E/F) — no more below
+  stdin.write(ARROW_DOWN)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  const frame2 = lastFrame()!
+  t.true(frame2.includes('▲'))
+  t.false(frame2.includes('▼'))
+})
+
+test('showScrollIndicators hidden by default', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} limit={2} />
+  )
+
+  const frame = lastFrame()!
+  t.false(frame.includes('▲'))
+  t.false(frame.includes('▼'))
+})
+
+test('showScrollIndicators not shown when all items fit in window', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} limit={5} showScrollIndicators />
+  )
+
+  const frame = lastFrame()!
+  t.false(frame.includes('▲'))
+  t.false(frame.includes('▼'))
+})
