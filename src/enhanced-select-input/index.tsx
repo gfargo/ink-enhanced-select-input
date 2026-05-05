@@ -10,7 +10,7 @@ export type Item<V> = {
   disabled?: boolean
 }
 
-type Properties<V> = {
+export type Properties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
@@ -22,16 +22,57 @@ type Properties<V> = {
   readonly orientation?: 'vertical' | 'horizontal'
 }
 
-type IndicatorProperties = {
+export type IndicatorProperties = {
   readonly isSelected: boolean
   // eslint-disable-next-line  react/no-unused-prop-types
   readonly item: Item<unknown>
 }
 
-type ItemProperties = {
+export type ItemProperties = {
   readonly isSelected: boolean
   readonly label: string
   readonly isDisabled: boolean
+}
+
+// Vim navigation keys that take precedence over hotkeys.
+// An item hotkey that matches one of these values will never fire in the
+// corresponding orientation — document this constraint at the call site.
+const VERTICAL_NAV_KEYS = new Set(['j', 'k'])
+const HORIZONTAL_NAV_KEYS = new Set(['h', 'l'])
+
+function resolveInitialIndex<V>(
+  items: Array<Item<V>>,
+  initialIndex: number
+): number {
+  if (items.length === 0) return 0
+  const clamped = Math.max(0, Math.min(initialIndex, items.length - 1))
+  if (!items[clamped]?.disabled) return clamped
+  // Search forward for the nearest enabled item, wrapping around
+  for (let i = 1; i < items.length; i++) {
+    const nextIndex = (clamped + i) % items.length
+    if (!items[nextIndex]?.disabled) return nextIndex
+  }
+
+  return clamped
+}
+
+function findNextValidIndex<V>(
+  items: Array<Item<V>>,
+  currentIndex: number,
+  step: number
+): number {
+  const itemCount = items.length
+  let nextIndex = currentIndex
+
+  for (let i = 0; i < itemCount; i++) {
+    nextIndex = (nextIndex + step + itemCount) % itemCount
+    if (!items[nextIndex]?.disabled) {
+      return nextIndex
+    }
+  }
+
+  // All items are disabled — stay put
+  return currentIndex
 }
 
 export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
@@ -44,7 +85,7 @@ export function DefaultIndicatorComponent({ isSelected }: IndicatorProperties) {
   )
 }
 
-function DefaultItemComponent({
+export function DefaultItemComponent({
   isSelected,
   label,
   isDisabled,
@@ -70,19 +111,7 @@ export function EnhancedSelectInput<V>({
   onHighlight,
   orientation = 'vertical',
 }: Properties<V>) {
-  // Ensure initialIndex is within bounds and not on a disabled item
-  const safeInitialIndex = (() => {
-    if (items.length === 0) return 0
-    const clamped = Math.min(initialIndex, items.length - 1)
-    if (!items[clamped]?.disabled) return clamped
-    // Search forward for the nearest enabled item, wrapping around
-    for (let i = 1; i < items.length; i++) {
-      const nextIndex = (clamped + i) % items.length
-      if (!items[nextIndex]?.disabled) return nextIndex
-    }
-
-    return clamped
-  })()
+  const safeInitialIndex = resolveInitialIndex(items, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
     limit ? Math.floor(safeInitialIndex / limit) * limit : 0
@@ -102,48 +131,30 @@ export function EnhancedSelectInput<V>({
     }
   }, [items, selectedIndex, onHighlight, hasItems])
 
-  // Helper function to find next valid index
-  const findNextValidIndex = (currentIndex: number, step: number): number => {
-    if (!hasItems) return currentIndex
-
-    let nextIndex = currentIndex
-    const itemCount = items.length
-
-    // Keep trying indices until we find a non-disabled item or complete a full loop
-    for (let i = 0; i < itemCount; i++) {
-      nextIndex = (nextIndex + step + itemCount) % itemCount
-      if (!items[nextIndex]?.disabled) {
-        return nextIndex
-      }
-    }
-
-    // If all items are disabled, return the current index
-    return currentIndex
-  }
-
   useInput(
     (input, key) => {
-      if (!isFocused || !hasItems) {
-        return
-      }
+      if (!hasItems) return
 
       let nextIndex = selectedIndex
+      const navKeys =
+        orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
+      const isNavKey = navKeys.has(input)
 
       if (orientation === 'vertical') {
         if (key.upArrow || input === 'k') {
-          nextIndex = findNextValidIndex(selectedIndex, -1)
+          nextIndex = findNextValidIndex(items, selectedIndex, -1)
         }
 
         if (key.downArrow || input === 'j') {
-          nextIndex = findNextValidIndex(selectedIndex, 1)
+          nextIndex = findNextValidIndex(items, selectedIndex, 1)
         }
       } else {
         if (key.leftArrow || input === 'h') {
-          nextIndex = findNextValidIndex(selectedIndex, -1)
+          nextIndex = findNextValidIndex(items, selectedIndex, -1)
         }
 
         if (key.rightArrow || input === 'l') {
-          nextIndex = findNextValidIndex(selectedIndex, 1)
+          nextIndex = findNextValidIndex(items, selectedIndex, 1)
         }
       }
 
@@ -161,24 +172,26 @@ export function EnhancedSelectInput<V>({
         }
       }
 
-      // Handle hotkey selection
-      const hotkeyItem = items.find(
-        (item) => item.hotkey === input && !item.disabled
-      )
-      if (hotkeyItem) {
-        const hotkeyIndex = items.indexOf(hotkeyItem)
-        setSelectedIndex(hotkeyIndex)
-        if (limit) {
-          setRotateIndex(Math.floor(hotkeyIndex / limit) * limit)
-        }
+      // Hotkeys: nav keys for the active orientation take priority.
+      // See README "Keyboard Navigation" for reserved key constraints.
+      if (!isNavKey) {
+        const hotkeyItem = items.find(
+          (item) => item.hotkey === input && !item.disabled
+        )
+        if (hotkeyItem) {
+          const hotkeyIndex = items.indexOf(hotkeyItem)
+          setSelectedIndex(hotkeyIndex)
+          if (limit) {
+            setRotateIndex(Math.floor(hotkeyIndex / limit) * limit)
+          }
 
-        onSelect?.(hotkeyItem)
+          onSelect?.(hotkeyItem)
+        }
       }
     },
     { isActive: isFocused }
   )
 
-  // If no items, render empty box
   if (!hasItems) {
     return <Box />
   }
@@ -187,38 +200,36 @@ export function EnhancedSelectInput<V>({
   const ItemComponent = itemComponent
 
   return (
-    <Box flexDirection="column">
-      <Box
-        flexDirection={orientation === 'vertical' ? 'column' : 'row'}
-        gap={orientation === 'vertical' ? 0 : 2}
-      >
-        {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+    <Box
+      flexDirection={orientation === 'vertical' ? 'column' : 'row'}
+      gap={orientation === 'vertical' ? 0 : 2}
+    >
+      {visibleItems.map((item, index) => {
+        const isSelected = index + rotateIndex === selectedIndex
 
-          return (
-            <Box key={item.key ?? String(item.value)}>
-              {item.indicator ? (
-                <Box marginRight={1}>
-                  <Text>{isSelected ? item.indicator : ' '}</Text>
-                </Box>
-              ) : (
-                <IndicatorComponent isSelected={isSelected} item={item} />
-              )}
-              <ItemComponent
-                isSelected={isSelected}
-                label={item.label}
-                isDisabled={Boolean(item.disabled)}
-              />
-              {item.hotkey && (
-                <Text dimColor color="gray">
-                  {' '}
-                  ({item.hotkey})
-                </Text>
-              )}
-            </Box>
-          )
-        })}
-      </Box>
+        return (
+          <Box key={item.key ?? String(item.value)}>
+            {item.indicator ? (
+              <Box marginRight={1}>
+                <Text>{isSelected ? item.indicator : ' '}</Text>
+              </Box>
+            ) : (
+              <IndicatorComponent isSelected={isSelected} item={item} />
+            )}
+            <ItemComponent
+              isSelected={isSelected}
+              label={item.label}
+              isDisabled={Boolean(item.disabled)}
+            />
+            {item.hotkey && (
+              <Text dimColor color="gray">
+                {' '}
+                ({item.hotkey})
+              </Text>
+            )}
+          </Box>
+        )
+      })}
     </Box>
   )
 }
