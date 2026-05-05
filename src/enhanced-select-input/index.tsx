@@ -13,6 +13,11 @@ export type Item<V> = {
   hotkey?: string
   indicator?: React.ReactNode
   disabled?: boolean
+  /**
+   * Group name for this item. Items sharing the same group value are visually
+   * grouped under a header row. Headers are non-navigable.
+   */
+  group?: string
 }
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
@@ -49,11 +54,13 @@ export type UseEnhancedSelectInputProperties<V> = {
 export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly indicatorComponent?: FC<IndicatorProperties>
   readonly itemComponent?: FC<ItemProperties>
+  readonly groupHeaderComponent?: FC<GroupHeaderProperties>
   /**
    * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
    * when the limit window doesn't cover the full list. Only meaningful when
    * `limit` is set. Defaults to false.
    */
+  // eslint-disable-next-line react/boolean-prop-naming
   readonly showScrollIndicators?: boolean
 }
 
@@ -61,7 +68,7 @@ export type IndicatorProperties = {
   readonly isSelected: boolean
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   readonly isChecked?: boolean
-  // eslint-disable-next-line  react/no-unused-prop-types
+  // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
 }
 
@@ -70,7 +77,12 @@ export type ItemProperties = {
   readonly label: string
   readonly isDisabled: boolean
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
+  // eslint-disable-next-line react/no-unused-prop-types
   readonly isChecked?: boolean
+}
+
+export type GroupHeaderProperties = {
+  readonly label: string
 }
 
 // Vim navigation keys that take precedence over hotkeys.
@@ -115,8 +127,8 @@ export function findNextValidIndex<V>(
 }
 
 export function findFirstValidIndex<V>(items: Array<Item<V>>): number {
-  for (let i = 0; i < items.length; i++) {
-    if (!items[i]?.disabled) return i
+  for (const [i, item] of items.entries()) {
+    if (!item?.disabled) return i
   }
 
   return 0
@@ -194,6 +206,7 @@ export function useEnhancedSelectInput<V>({
   // this happens when V is an object and item.key is not set, causing
   // String(value) to produce "[object Object]" for every item.
   useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
       const keys = items.map((item) => itemKey(item))
       const seen = new Set<string>()
@@ -205,7 +218,9 @@ export function useEnhancedSelectInput<V>({
 
       if (duplicates.size > 0) {
         console.warn(
-          `[ink-enhanced-select-input] Duplicate item keys detected: ${[...duplicates].join(', ')}. ` +
+          `[ink-enhanced-select-input] Duplicate item keys detected: ${[
+            ...duplicates,
+          ].join(', ')}. ` +
             'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
         )
       }
@@ -242,11 +257,14 @@ export function useEnhancedSelectInput<V>({
   }
 
   useInput(
+    // eslint-disable-next-line complexity
     (input, key) => {
       if (!hasItems) return
 
+      // eslint-disable-next-line unicorn/prevent-abbreviations
       const navKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
+      // eslint-disable-next-line unicorn/prevent-abbreviations
       const isNavKey = navKeys.has(input)
 
       if (key.home) {
@@ -269,8 +287,8 @@ export function useEnhancedSelectInput<V>({
         const item = items[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
-          setCheckedKeys((prev) => {
-            const next = new Set(prev)
+          setCheckedKeys((previous) => {
+            const next = new Set(previous)
             const nowChecked = !next.has(k)
             if (nowChecked) next.add(k)
             else next.delete(k)
@@ -309,7 +327,9 @@ export function useEnhancedSelectInput<V>({
       if (key.return) {
         if (multiple) {
           // In multi-select mode Enter confirms the full selection
-          const confirmed = items.filter((item) => checkedKeys.has(itemKey(item)))
+          const confirmed = items.filter((item) =>
+            checkedKeys.has(itemKey(item))
+          )
           onConfirm?.(confirmed)
         } else {
           const selectedItem = items[selectedIndex]
@@ -386,12 +406,21 @@ export function DefaultItemComponent({
   )
 }
 
+export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
+  return (
+    <Box>
+      <Text dimColor>{`── ${label} ──`}</Text>
+    </Box>
+  )
+}
+
 export function EnhancedSelectInput<V>({
   indicatorComponent = DefaultIndicatorComponent,
   itemComponent = DefaultItemComponent,
+  groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
   // All remaining props are forwarded to the hook
-  ...hookProps
+  ...hookProperties
 }: Properties<V>) {
   const {
     selectedIndex,
@@ -401,7 +430,7 @@ export function EnhancedSelectInput<V>({
     itemsAbove,
     itemsBelow,
     checkedKeys,
-  } = useEnhancedSelectInput(hookProps)
+  } = useEnhancedSelectInput(hookProperties)
 
   if (!hasItems) {
     return <Box />
@@ -409,8 +438,12 @@ export function EnhancedSelectInput<V>({
 
   const IndicatorComponent = indicatorComponent
   const ItemComponent = itemComponent
-  const isVertical = hookProps.orientation !== 'horizontal'
-  const isMultiple = hookProps.multiple === true
+  const GroupHeaderComponent = groupHeaderComponent
+  const isVertical = hookProperties.orientation !== 'horizontal'
+  const isMultiple = hookProperties.multiple === true
+
+  // Track which groups have already rendered a header in this window.
+  const renderedGroups = new Set<string>()
 
   return (
     <Box flexDirection={isVertical ? 'column' : 'row'}>
@@ -431,32 +464,47 @@ export function EnhancedSelectInput<V>({
             ? checkedKeys.has(item.key ?? String(item.value))
             : undefined
 
-          return (
-            <Box key={item.key ?? String(item.value)}>
-              {item.indicator && !isMultiple ? (
-                <Box marginRight={1}>
-                  <Text>{isSelected ? item.indicator : ' '}</Text>
-                </Box>
-              ) : (
-                <IndicatorComponent
-                  isSelected={isSelected}
-                  isChecked={isChecked}
-                  item={item}
-                />
-              )}
-              <ItemComponent
-                isSelected={isSelected}
-                label={item.label}
-                isDisabled={Boolean(item.disabled)}
-                isChecked={isChecked}
+          // Determine if we need to render a group header before this item.
+          let groupHeader: React.ReactNode = null
+          if (item.group && !renderedGroups.has(item.group)) {
+            renderedGroups.add(item.group)
+            groupHeader = (
+              <GroupHeaderComponent
+                key={`group-header-${item.group}`}
+                label={item.group}
               />
-              {item.hotkey && !isMultiple && (
-                <Text dimColor color="gray">
-                  {' '}
-                  ({item.hotkey})
-                </Text>
-              )}
-            </Box>
+            )
+          }
+
+          return (
+            <React.Fragment key={item.key ?? String(item.value)}>
+              {groupHeader}
+              <Box>
+                {item.indicator && !isMultiple ? (
+                  <Box marginRight={1}>
+                    <Text>{isSelected ? item.indicator : ' '}</Text>
+                  </Box>
+                ) : (
+                  <IndicatorComponent
+                    isSelected={isSelected}
+                    isChecked={isChecked}
+                    item={item}
+                  />
+                )}
+                <ItemComponent
+                  isSelected={isSelected}
+                  label={item.label}
+                  isDisabled={Boolean(item.disabled)}
+                  isChecked={isChecked}
+                />
+                {item.hotkey && !isMultiple && (
+                  <Text dimColor color="gray">
+                    {' '}
+                    ({item.hotkey})
+                  </Text>
+                )}
+              </Box>
+            </React.Fragment>
           )
         })}
       </Box>
