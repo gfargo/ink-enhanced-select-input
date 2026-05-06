@@ -110,6 +110,9 @@ dist
 # Docusaurus cache and generated files
 .docusaurus
 
+# Docs folder
+docs
+
 # Serverless directories
 .serverless/
 
