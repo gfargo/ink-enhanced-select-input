@@ -30,7 +30,9 @@
     "test:fix": "yarn lint:fix && ava --update-snapshots"
   },
   "files": [
-    "dist"
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/enhanced-select-input"
   ],
   "dependencies": {
     "ink": "^6.0.0",
