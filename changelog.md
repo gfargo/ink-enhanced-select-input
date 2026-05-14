@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.0.0...v1.1.0) (2026-05-14)
+
+### 🌟 New Features
+
+* add keyMap prop for selective key group disabling ([46f7b8a](https://github.com/gfargo/ink-enhanced-select-input/commit/46f7b8a6c689c831a331f170badfcf4dd38e8935))
+
 ## [1.0.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v0.6.0...v1.0.0) (2026-05-05)
 
 ### 🌟 New Features
