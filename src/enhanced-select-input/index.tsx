@@ -20,6 +20,43 @@ export type Item<V> = {
   group?: string
 }
 
+/**
+ * Fine-grained control over which key groups the component reacts to.
+ *
+ * Because Ink does not support event propagation stopping, every `useInput`
+ * handler in the app receives every keypress simultaneously. If your
+ * application already binds one of these keys globally, set the corresponding
+ * flag to `false` so the component ignores it without interfering with your
+ * own handler.
+ *
+ * All groups default to `true` (enabled). Only the keys you explicitly set to
+ * `false` are disabled — the rest keep their default behaviour.
+ *
+ * @example
+ * // Disable vim keys — j/k/h/l are used by the parent app
+ * <EnhancedSelectInput keyMap={{ vimKeys: false }} ... />
+ *
+ * // Disable Escape — the parent handles cancel itself
+ * <EnhancedSelectInput keyMap={{ cancel: false }} ... />
+ *
+ * // Disable both vim keys and Home/End
+ * <EnhancedSelectInput keyMap={{ vimKeys: false, homeEnd: false }} ... />
+ */
+export type KeyMap = {
+  /** Arrow key navigation (↑ ↓ ← →). Default: true. */
+  readonly arrows?: boolean
+  /** Vim-style navigation keys (j/k in vertical, h/l in horizontal). Default: true. */
+  readonly vimKeys?: boolean
+  /** Home / End jump-to-boundary keys. Default: true. */
+  readonly homeEnd?: boolean
+  /** Escape → onCancel. Default: true. */
+  readonly cancel?: boolean
+  /** Enter → onSelect / onConfirm. Default: true. */
+  readonly select?: boolean
+  /** Space toggle in multi-select mode. Default: true. */
+  readonly toggle?: boolean
+}
+
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
 export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
@@ -54,6 +91,12 @@ export type UseEnhancedSelectInputProperties<V> = {
    * navigation keys are disabled in this mode.
    */
   readonly searchable?: boolean
+  /**
+   * Selectively disable built-in key groups to avoid conflicts with
+   * keybindings registered elsewhere in your application.
+   * See {@link KeyMap} for available groups and defaults.
+   */
+  readonly keyMap?: KeyMap
 }
 
 /** Full component props — hook props plus rendering customisation. */
@@ -192,7 +235,17 @@ export function useEnhancedSelectInput<V>({
   onConfirm,
   onToggle,
   searchable = false,
+  keyMap,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
+  // Resolve full key map — any flag not supplied defaults to enabled (true).
+  const km = {
+    arrows: keyMap?.arrows ?? true,
+    vimKeys: keyMap?.vimKeys ?? true,
+    homeEnd: keyMap?.homeEnd ?? true,
+    cancel: keyMap?.cancel ?? true,
+    select: keyMap?.select ?? true,
+    toggle: keyMap?.toggle ?? true,
+  }
   const [searchQuery, setSearchQuery] = useState('')
 
   // Filter items based on search query
@@ -306,30 +359,30 @@ export function useEnhancedSelectInput<V>({
 
       if (!hasItems && !searchable) return
 
-      // eslint-disable-next-line unicorn/prevent-abbreviations
       const navKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
-      // eslint-disable-next-line unicorn/prevent-abbreviations
-      const isNavKey = !searchable && navKeys.has(input)
+      // A vim key is only "active" when vimKeys are enabled and we're not in
+      // searchable mode (where every character is search input).
+      const isActiveVimKey = km.vimKeys && !searchable && navKeys.has(input)
 
-      if (key.home) {
+      if (km.homeEnd && key.home) {
         updateSelection(findFirstValidIndex(filteredItems))
         return
       }
 
-      if (key.end) {
+      if (km.homeEnd && key.end) {
         updateSelection(findLastValidIndex(filteredItems))
         return
       }
 
-      if (key.escape) {
+      if (km.cancel && key.escape) {
         onCancel?.()
         return
       }
 
       // Space: toggle in multi-select mode (but not in searchable mode
       // where space is a valid search character)
-      if (multiple && !searchable && input === ' ') {
+      if (km.toggle && multiple && !searchable && input === ' ') {
         const item = filteredItems[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
@@ -349,19 +402,31 @@ export function useEnhancedSelectInput<V>({
       let nextIndex = selectedIndex
 
       if (orientation === 'vertical') {
-        if (key.upArrow || (!searchable && input === 'k')) {
+        if (
+          (km.arrows && key.upArrow) ||
+          (km.vimKeys && !searchable && input === 'k')
+        ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
-        if (key.downArrow || (!searchable && input === 'j')) {
+        if (
+          (km.arrows && key.downArrow) ||
+          (km.vimKeys && !searchable && input === 'j')
+        ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
       } else {
-        if (key.leftArrow || (!searchable && input === 'h')) {
+        if (
+          (km.arrows && key.leftArrow) ||
+          (km.vimKeys && !searchable && input === 'h')
+        ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
-        if (key.rightArrow || (!searchable && input === 'l')) {
+        if (
+          (km.arrows && key.rightArrow) ||
+          (km.vimKeys && !searchable && input === 'l')
+        ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
       }
@@ -370,7 +435,7 @@ export function useEnhancedSelectInput<V>({
         updateSelection(nextIndex)
       }
 
-      if (key.return) {
+      if (km.select && key.return) {
         if (multiple) {
           // In multi-select mode Enter confirms the full selection
           const confirmed = filteredItems.filter((item) =>
@@ -396,9 +461,9 @@ export function useEnhancedSelectInput<V>({
         return
       }
 
-      // Hotkeys: nav keys for the active orientation take priority.
+      // Hotkeys: active vim nav keys take priority over item hotkeys.
       // Hotkeys are not active in multi-select or searchable mode.
-      if (!multiple && !searchable && !isNavKey) {
+      if (km.select && !multiple && !searchable && !isActiveVimKey) {
         const hotkeyItem = filteredItems.find(
           (item) => item.hotkey === input && !item.disabled
         )

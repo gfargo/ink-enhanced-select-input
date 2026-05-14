@@ -3475,3 +3475,180 @@ test('searchable: multiple backspaces progressively restore items', async (t) =>
   t.true(frame.includes('Apricot'))
   t.false(frame.includes('Banana'))
 })
+
+// --- keyMap: selective key group disabling ---
+
+test('keyMap.arrows=false disables arrow key navigation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ arrows: false }}
+      onHighlight={(item) => { highlighted = item.label }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'A')
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'A') // must not move
+})
+
+test('keyMap.arrows=false still allows vim key navigation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ arrows: false }}
+      onHighlight={(item) => { highlighted = item.label }}
+    />
+  )
+  await delay()
+  stdin.write('j')
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('keyMap.vimKeys=false disables j/k navigation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ vimKeys: false }}
+      onHighlight={(item) => { highlighted = item.label }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'A')
+  stdin.write('j')
+  await delay()
+  t.is(highlighted, 'A') // j must not navigate
+})
+
+test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ vimKeys: false }}
+      onHighlight={(item) => { highlighted = item.label }}
+    />
+  )
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'B')
+})
+
+test('keyMap.homeEnd=false disables Home/End keys', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      initialIndex={1}
+      keyMap={{ homeEnd: false }}
+      onHighlight={(item) => { highlighted = item.label }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'B')
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'B') // must not jump to A
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'B') // must not jump to C
+})
+
+test('keyMap.cancel=false disables Escape → onCancel', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ cancel: false }}
+      onCancel={() => { cancelled = true }}
+    />
+  )
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+})
+
+test('keyMap.select=false disables Enter → onSelect', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      keyMap={{ select: false }}
+      onSelect={(item) => { selected = item.label }}
+    />
+  )
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, '')
+})
+
+test('keyMap.toggle=false disables Space in multi-select mode', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+  let toggled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      multiple
+      keyMap={{ toggle: false }}
+      onToggle={() => { toggled = true }}
+    />
+  )
+  await delay()
+  stdin.write(SPACE)
+  await delay()
+  t.false(toggled)
+})
+
+test('keyMap defaults to all enabled when not provided', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let selected = ''
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => { highlighted = item.label }}
+      onSelect={(item) => { selected = item.label }}
+    />
+  )
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'B')
+  stdin.write(ENTER)
+  await delay()
+  t.is(selected, 'B')
+})

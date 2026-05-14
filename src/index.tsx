@@ -12,6 +12,7 @@ export {
 
 export type {
   Item,
+  KeyMap,
   Properties,
   UseEnhancedSelectInputProperties,
   UseEnhancedSelectInputResult,

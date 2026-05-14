@@ -213,6 +213,45 @@ When typing:
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
 
+### Avoiding Key Conflicts (`keyMap`)
+
+Because Ink does not support event propagation stopping, every `useInput` handler in your app receives every keypress simultaneously. If your application already binds one of the component's default keys globally, you can disable individual key groups with the `keyMap` prop — the component ignores those keys without interfering with your own handlers.
+
+```tsx
+// j/k are used by a parent vim-style navigator — disable them here
+<EnhancedSelectInput
+  items={items}
+  keyMap={{ vimKeys: false }}
+  onSelect={onSelect}
+/>
+
+// Parent handles Escape itself — don't fire onCancel
+<EnhancedSelectInput
+  items={items}
+  keyMap={{ cancel: false }}
+  onSelect={onSelect}
+/>
+
+// Arrows-only navigation — disable vim keys, Home/End, and Space toggle
+<EnhancedSelectInput
+  items={items}
+  multiple
+  keyMap={{ vimKeys: false, homeEnd: false, toggle: false }}
+  onConfirm={onConfirm}
+/>
+```
+
+| `keyMap` field | Keys it controls | Default |
+|---|---|---|
+| `arrows` | `↑` `↓` `←` `→` | `true` |
+| `vimKeys` | `j` `k` (vertical) · `h` `l` (horizontal) | `true` |
+| `homeEnd` | `Home` · `End` | `true` |
+| `cancel` | `Escape` → `onCancel` | `true` |
+| `select` | `Enter` → `onSelect` / `onConfirm` | `true` |
+| `toggle` | `Space` toggle in multi-select mode | `true` |
+
+Any field not supplied stays enabled. `isFocused={false}` remains the way to disable all input at once.
+
 ### Custom Components
 
 ```tsx
@@ -294,6 +333,7 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 | `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                            |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty           |
+| `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts  |
 
 ### Item Shape
 
