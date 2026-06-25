@@ -164,6 +164,8 @@ export function findNextValidIndex<V>(
   step: number
 ): number {
   const itemCount = items.length
+  if (itemCount === 0) return 0
+
   let nextIndex = currentIndex
 
   for (let i = 0; i < itemCount; i++) {
@@ -190,7 +192,7 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
     if (!items[i]?.disabled) return i
   }
 
-  return items.length - 1
+  return 0
 }
 
 function itemKey<V>(item: Item<V>): string {
