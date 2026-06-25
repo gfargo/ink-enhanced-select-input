@@ -3488,14 +3488,16 @@ test('keyMap.arrows=false disables arrow key navigation', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ arrows: false }}
-      onHighlight={(item) => { highlighted = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
     />
   )
   await delay()
   t.is(highlighted, 'A')
   stdin.write(ARROW_DOWN)
   await delay()
-  t.is(highlighted, 'A') // must not move
+  t.is(highlighted, 'A') // Must not move
 })
 
 test('keyMap.arrows=false still allows vim key navigation', async (t) => {
@@ -3508,7 +3510,9 @@ test('keyMap.arrows=false still allows vim key navigation', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ arrows: false }}
-      onHighlight={(item) => { highlighted = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
     />
   )
   await delay()
@@ -3527,14 +3531,16 @@ test('keyMap.vimKeys=false disables j/k navigation', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ vimKeys: false }}
-      onHighlight={(item) => { highlighted = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
     />
   )
   await delay()
   t.is(highlighted, 'A')
   stdin.write('j')
   await delay()
-  t.is(highlighted, 'A') // j must not navigate
+  t.is(highlighted, 'A') // J must not navigate
 })
 
 test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
@@ -3547,7 +3553,9 @@ test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ vimKeys: false }}
-      onHighlight={(item) => { highlighted = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
     />
   )
   await delay()
@@ -3568,17 +3576,19 @@ test('keyMap.homeEnd=false disables Home/End keys', async (t) => {
       items={items}
       initialIndex={1}
       keyMap={{ homeEnd: false }}
-      onHighlight={(item) => { highlighted = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
     />
   )
   await delay()
   t.is(highlighted, 'B')
   stdin.write(HOME)
   await delay()
-  t.is(highlighted, 'B') // must not jump to A
+  t.is(highlighted, 'B') // Must not jump to A
   stdin.write(END)
   await delay()
-  t.is(highlighted, 'B') // must not jump to C
+  t.is(highlighted, 'B') // Must not jump to C
 })
 
 test('keyMap.cancel=false disables Escape → onCancel', async (t) => {
@@ -3588,7 +3598,9 @@ test('keyMap.cancel=false disables Escape → onCancel', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ cancel: false }}
-      onCancel={() => { cancelled = true }}
+      onCancel={() => {
+        cancelled = true
+      }}
     />
   )
   await delay()
@@ -3604,7 +3616,9 @@ test('keyMap.select=false disables Enter → onSelect', async (t) => {
     <EnhancedSelectInput
       items={items}
       keyMap={{ select: false }}
-      onSelect={(item) => { selected = item.label }}
+      onSelect={(item) => {
+        selected = item.label
+      }}
     />
   )
   await delay()
@@ -3618,10 +3632,12 @@ test('keyMap.toggle=false disables Space in multi-select mode', async (t) => {
   let toggled = false
   const { stdin } = render(
     <EnhancedSelectInput
-      items={items}
       multiple
+      items={items}
       keyMap={{ toggle: false }}
-      onToggle={() => { toggled = true }}
+      onToggle={() => {
+        toggled = true
+      }}
     />
   )
   await delay()
@@ -3640,8 +3656,12 @@ test('keyMap defaults to all enabled when not provided', async (t) => {
   const { stdin } = render(
     <EnhancedSelectInput
       items={items}
-      onHighlight={(item) => { highlighted = item.label }}
-      onSelect={(item) => { selected = item.label }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+      onSelect={(item) => {
+        selected = item.label
+      }}
     />
   )
   await delay()

@@ -361,11 +361,12 @@ export function useEnhancedSelectInput<V>({
 
       if (!hasItems && !searchable) return
 
-      const navKeys =
+      const navigationKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
       // A vim key is only "active" when vimKeys are enabled and we're not in
       // searchable mode (where every character is search input).
-      const isActiveVimKey = km.vimKeys && !searchable && navKeys.has(input)
+      const isActiveVimKey =
+        km.vimKeys && !searchable && navigationKeys.has(input)
 
       if (km.homeEnd && key.home) {
         updateSelection(findFirstValidIndex(filteredItems))
