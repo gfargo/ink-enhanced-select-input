@@ -325,7 +325,7 @@ export function useEnhancedSelectInput<V>({
   useEffect(() => {
     if (hasItems) {
       const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem) {
+      if (highlightedItem && !highlightedItem.disabled) {
         onHighlight?.(highlightedItem)
       }
     }
