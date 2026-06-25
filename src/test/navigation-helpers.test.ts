@@ -92,8 +92,8 @@ test('findNextValidIndex: all disabled returns currentIndex (stay put)', (t) => 
 
 // ── findFirstValidIndex ────────────────────────────────────────────────────────
 
-test('findFirstValidIndex: empty list returns 0', (t) => {
-  t.is(findFirstValidIndex<string>([]), 0)
+test('findFirstValidIndex: empty list returns -1', (t) => {
+  t.is(findFirstValidIndex<string>([]), -1)
 })
 
 test('findFirstValidIndex: returns 0 when first item is enabled', (t) => {
@@ -106,15 +106,15 @@ test('findFirstValidIndex: skips disabled first item', (t) => {
   t.is(findFirstValidIndex(items), 1)
 })
 
-test('findFirstValidIndex: all disabled returns 0', (t) => {
+test('findFirstValidIndex: all disabled returns -1', (t) => {
   const items = [mkItem('a', true), mkItem('b', true)]
-  t.is(findFirstValidIndex(items), 0)
+  t.is(findFirstValidIndex(items), -1)
 })
 
 // ── findLastValidIndex ─────────────────────────────────────────────────────────
 
-test('findLastValidIndex: empty list returns 0', (t) => {
-  t.is(findLastValidIndex<string>([]), 0)
+test('findLastValidIndex: empty list returns -1', (t) => {
+  t.is(findLastValidIndex<string>([]), -1)
 })
 
 test('findLastValidIndex: returns last index when last item is enabled', (t) => {
@@ -127,9 +127,9 @@ test('findLastValidIndex: skips disabled last item', (t) => {
   t.is(findLastValidIndex(items), 1)
 })
 
-test('findLastValidIndex: all disabled returns 0 (matches findFirstValidIndex)', (t) => {
+test('findLastValidIndex: all disabled returns -1 (matches findFirstValidIndex)', (t) => {
   const items = [mkItem('a', true), mkItem('b', true)]
-  t.is(findLastValidIndex(items), 0)
+  t.is(findLastValidIndex(items), -1)
 })
 
 test('findLastValidIndex and findFirstValidIndex agree on empty list', (t) => {

@@ -799,6 +799,35 @@ test('all items disabled: nothing is navigable', async (t) => {
   t.is(selected, '')
 })
 
+test('all items disabled: Home/End do not move cursor or fire onHighlight', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b', disabled: true },
+  ]
+
+  let highlightCount = 0
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={() => {
+        highlightCount++
+      }}
+    />
+  )
+
+  await delay()
+  // Reset after initial mount highlight
+  highlightCount = 0
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlightCount, 0)
+
+  stdin.write(END)
+  await delay()
+  t.is(highlightCount, 0)
+})
+
 // --- Enter on disabled item ---
 
 test('enter on a disabled item does not trigger onSelect', async (t) => {

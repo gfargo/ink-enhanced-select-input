@@ -184,7 +184,7 @@ export function findFirstValidIndex<V>(items: Array<Item<V>>): number {
     if (!item?.disabled) return i
   }
 
-  return 0
+  return -1
 }
 
 export function findLastValidIndex<V>(items: Array<Item<V>>): number {
@@ -192,7 +192,7 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
     if (!items[i]?.disabled) return i
   }
 
-  return 0
+  return -1
 }
 
 function itemKey<V>(item: Item<V>): string {
@@ -369,12 +369,14 @@ export function useEnhancedSelectInput<V>({
         km.vimKeys && !searchable && navigationKeys.has(input)
 
       if (km.homeEnd && key.home) {
-        updateSelection(findFirstValidIndex(filteredItems))
+        const index = findFirstValidIndex(filteredItems)
+        if (index !== -1) updateSelection(index)
         return
       }
 
       if (km.homeEnd && key.end) {
-        updateSelection(findLastValidIndex(filteredItems))
+        const index = findLastValidIndex(filteredItems)
+        if (index !== -1) updateSelection(index)
         return
       }
 
