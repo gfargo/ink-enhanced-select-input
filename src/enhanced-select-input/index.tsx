@@ -164,6 +164,8 @@ export function findNextValidIndex<V>(
   step: number
 ): number {
   const itemCount = items.length
+  if (itemCount === 0) return 0
+
   let nextIndex = currentIndex
 
   for (let i = 0; i < itemCount; i++) {
@@ -190,7 +192,7 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
     if (!items[i]?.disabled) return i
   }
 
-  return items.length - 1
+  return 0
 }
 
 function itemKey<V>(item: Item<V>): string {
@@ -323,7 +325,7 @@ export function useEnhancedSelectInput<V>({
   useEffect(() => {
     if (hasItems) {
       const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem) {
+      if (highlightedItem && !highlightedItem.disabled) {
         onHighlight?.(highlightedItem)
       }
     }
@@ -359,11 +361,12 @@ export function useEnhancedSelectInput<V>({
 
       if (!hasItems && !searchable) return
 
-      const navKeys =
+      const navigationKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
       // A vim key is only "active" when vimKeys are enabled and we're not in
       // searchable mode (where every character is search input).
-      const isActiveVimKey = km.vimKeys && !searchable && navKeys.has(input)
+      const isActiveVimKey =
+        km.vimKeys && !searchable && navigationKeys.has(input)
 
       if (km.homeEnd && key.home) {
         updateSelection(findFirstValidIndex(filteredItems))
