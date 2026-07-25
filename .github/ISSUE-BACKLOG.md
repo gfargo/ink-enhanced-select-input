@@ -20,6 +20,24 @@ is quoted. Items marked **[static]** come from reading the source, `package.json
 Severity: **P0** data loss / destructive · **P1** wrong behaviour users hit · **P2** rough edge ·
 **P3** polish.
 
+### Filing these
+
+`.github/scripts/create-issues.py` files these to GitHub via the `gh` CLI, using this document as the
+source of truth — each `### <ID> — <Title>` section becomes one issue, with labels and severity taken
+from its metadata line. Requires `gh auth login` and Python 3.9+.
+
+```bash
+./.github/scripts/create-issues.py --dry-run        # preview everything, no API calls
+./.github/scripts/create-issues.py --show B1        # exact title/labels/body for one ID
+./.github/scripts/create-issues.py --only B1,B2,B3,T1   # just the P0s
+./.github/scripts/create-issues.py --section R      # one section
+./.github/scripts/create-issues.py                  # all 59
+```
+
+Missing labels (`chore`, `documentation`, `refactor`, `performance`, `severity:P0`–`P3`) are created
+automatically. Editing this file and re-running is safe — but `gh` has no dedupe, so use `--only` to
+avoid filing the same issue twice.
+
 > **Note:** three existing tests need attention — see [Test debt](#test-debt) at the end. Two of them
 > actively assert buggy behaviour and must be rewritten alongside their fix rather than treated as
 > regressions.
