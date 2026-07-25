@@ -574,9 +574,6 @@ export function EnhancedSelectInput<V>({
   const isVertical = hookProperties.orientation !== 'horizontal'
   const isMultiple = hookProperties.multiple === true
 
-  // Track which groups have already rendered a header in this window.
-  const renderedGroups = new Set<string>()
-
   const searchInput = searchable ? (
     <Box>
       <Text dimColor>
@@ -618,12 +615,15 @@ export function EnhancedSelectInput<V>({
             : undefined
 
           // Determine if we need to render a group header before this item.
+          // Compare against the immediately preceding visible item (adjacency check),
+          // so non-contiguous items sharing a group name each get their own header.
+          const previousVisibleItem =
+            index > 0 ? visibleItems[index - 1] : undefined
           let groupHeader: React.ReactNode = null
-          if (item.group && !renderedGroups.has(item.group)) {
-            renderedGroups.add(item.group)
+          if (item.group && item.group !== previousVisibleItem?.group) {
             groupHeader = (
               <GroupHeaderComponent
-                key={`group-header-${item.group}`}
+                key={`group-header-${index}-${item.group}`}
                 label={item.group}
               />
             )
