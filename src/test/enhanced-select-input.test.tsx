@@ -2033,9 +2033,11 @@ test('group headers render for groups containing disabled items', (t) => {
   t.true(frame.includes('B'))
 })
 
-test('non-contiguous items with same group get separate headers per window', (t) => {
-  // When items with the same group appear in different positions,
-  // the header renders before the first occurrence in the visible window
+test('non-contiguous items with same group each render under their own header', (t) => {
+  // Non-contiguous items sharing a group name must each be preceded by their
+  // own group header.  The old Set-based approach only emitted the header on
+  // the first occurrence, causing later occurrences to render inside a foreign
+  // section.
   const items = [
     { label: 'A', value: 'a', group: 'Alpha' },
     { label: 'B', value: 'b', group: 'Beta' },
@@ -2045,10 +2047,19 @@ test('non-contiguous items with same group get separate headers per window', (t)
   const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
   const frame = lastFrame()!
-  // "Alpha" header should only appear once (before first occurrence)
+
+  // Alpha header must appear twice: once before A and once before C.
   const alphaMatches = frame.split('── Alpha ──')
-  t.is(alphaMatches.length, 2) // 1 occurrence
+  t.is(alphaMatches.length, 3) // 2 occurrences → 3 parts when split
   t.true(frame.includes('── Beta ──'))
+
+  // C's Alpha header must come after the Beta header, proving C is NOT
+  // rendered inside the Beta section.
+  const betaIndex = frame.indexOf('── Beta ──')
+  const secondAlphaIndex = frame.indexOf('── Alpha ──', betaIndex)
+  const cIndex = frame.indexOf('C')
+  t.true(secondAlphaIndex > betaIndex)
+  t.true(cIndex > secondAlphaIndex)
 })
 
 test('group headers with showScrollIndicators', (t) => {
