@@ -2136,6 +2136,39 @@ test('hook: visibleItems plus headers stay within limit for grouped items', asyn
   )
 })
 
+test('shrinking limit at runtime keeps rendered row count bounded even when selection is unchanged', async (t) => {
+  // Reproduces a dynamic terminal-resize scenario: a consumer lowers `limit`
+  // without the selection moving. `rotateIndex` was a valid page start under
+  // the old limit but not necessarily under the new one — the window must
+  // still stay within the new bound.
+  const items = [
+    { label: 'A', value: 'a', group: 'G1' },
+    { label: 'B', value: 'b', group: 'G2' },
+    { label: 'C', value: 'c', group: 'G3' },
+    { label: 'D', value: 'd', group: 'G4' },
+    { label: 'E', value: 'e', group: 'G5' },
+    { label: 'F', value: 'f', group: 'G6' },
+  ]
+
+  const { rerender, lastFrame } = render(
+    <EnhancedSelectInput items={items} limit={6} initialIndex={3} />
+  )
+
+  await delay()
+  let frame = lastFrame()!
+  let contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+  t.true(contentLines.length <= 6)
+
+  // Shrink limit while the selected index (3) stays valid — nothing else
+  // about the props changes, so only the pageStarts recompute triggers.
+  rerender(<EnhancedSelectInput items={items} limit={3} initialIndex={3} />)
+
+  await delay()
+  frame = lastFrame()!
+  contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+  t.true(contentLines.length <= 3)
+})
+
 test('limit=1 with a grouped item still renders the item (header + item exceeds limit)', (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'Group' },

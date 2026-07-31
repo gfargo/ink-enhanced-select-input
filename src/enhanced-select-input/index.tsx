@@ -332,17 +332,27 @@ export function useEnhancedSelectInput<V>({
   )
 
   const hasItems = filteredItems.length > 0
-  const currentPageIndex = pageStarts.indexOf(rotateIndex)
+  // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes
+  // without the selection moving (e.g. a consumer shrinking `limit` to fit a
+  // resized terminal) — pageStarts recomputes but rotateIndex doesn't. Snap
+  // it down to the nearest valid page start on every render rather than
+  // requiring an exact match, so the visible window is always bounded by the
+  // current `limit` even mid-transition.
+  const effectiveRotateIndex = limit ? pageStartFor(pageStarts, rotateIndex) : 0
+  const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
       ? pageStarts[currentPageIndex + 1]
       : filteredItems.length
   const visibleItems = limit
-    ? filteredItems.slice(rotateIndex, nextPageStart)
+    ? filteredItems.slice(effectiveRotateIndex, nextPageStart)
     : filteredItems
-  const itemsAbove = rotateIndex
+  const itemsAbove = effectiveRotateIndex
   const itemsBelow = limit
-    ? Math.max(0, filteredItems.length - rotateIndex - visibleItems.length)
+    ? Math.max(
+        0,
+        filteredItems.length - effectiveRotateIndex - visibleItems.length
+      )
     : 0
 
   // When the items array changes, re-validate the current selectedIndex.
@@ -553,7 +563,7 @@ export function useEnhancedSelectInput<V>({
 
   return {
     selectedIndex,
-    rotateIndex,
+    rotateIndex: effectiveRotateIndex,
     visibleItems,
     hasItems,
     itemsAbove,
