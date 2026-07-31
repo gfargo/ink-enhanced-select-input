@@ -1950,11 +1950,13 @@ test('group headers render correctly with limit/pagination', async (t) => {
     { label: 'D', value: 'd', group: 'Second' },
   ]
 
+  // Limit counts rendered rows (items + headers), so a 2-item group needs
+  // limit=3 to fit its header alongside both items in one page.
   let highlighted = ''
   const { stdin, lastFrame } = render(
     <EnhancedSelectInput
       items={items}
-      limit={2}
+      limit={3}
       onHighlight={(item) => {
         highlighted = item.label
       }}
@@ -2070,6 +2072,8 @@ test('group headers with showScrollIndicators', (t) => {
     { label: 'D', value: 'd', group: 'Second' },
   ]
 
+  // Limit=2 only fits the header + one item (A) in the first page, since
+  // headers now count toward limit — so 3 items remain below.
   const { lastFrame } = render(
     <EnhancedSelectInput showScrollIndicators items={items} limit={2} />
   )
@@ -2077,7 +2081,73 @@ test('group headers with showScrollIndicators', (t) => {
   const frame = lastFrame()!
   t.true(frame.includes('── First ──'))
   t.true(frame.includes('▼'))
-  t.true(frame.includes('2 more'))
+  t.true(frame.includes('3 more'))
+})
+
+// --- B9: group headers must count against limit ---
+
+test('limit bounds rendered row count, not just item count, when every item has its own group', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'G1' },
+    { label: 'B', value: 'b', group: 'G2' },
+    { label: 'C', value: 'c', group: 'G3' },
+    { label: 'D', value: 'd', group: 'G4' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={3} />)
+
+  const frame = lastFrame()!
+  const contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+  t.true(contentLines.length <= 3)
+})
+
+test('hook: visibleItems plus headers stay within limit for grouped items', async (t) => {
+  const items: Array<Item<unknown>> = [
+    { label: 'A', value: 'a', group: 'G1' },
+    { label: 'B', value: 'b', group: 'G2' },
+    { label: 'C', value: 'c', group: 'G3' },
+    { label: 'D', value: 'd', group: 'G4' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      limit={3}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  const visibleItems = result?.visibleItems ?? []
+  const headerCount = visibleItems.filter((item, index) => {
+    const previous = index > 0 ? visibleItems[index - 1] : undefined
+    return item.group && item.group !== previous?.group
+  }).length
+
+  const rowCount = visibleItems.length + headerCount
+  t.true(rowCount <= 3)
+  t.is(
+    (result?.itemsAbove ?? 0) + visibleItems.length + (result?.itemsBelow ?? 0),
+    items.length
+  )
+})
+
+test('limit=1 with a grouped item still renders the item (header + item exceeds limit)', (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'Group' },
+    { label: 'B', value: 'b', group: 'Group' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={1} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('── Group ──'))
+  t.true(frame.includes('A'))
+  t.false(frame.includes('B'))
 })
 
 // --- DefaultGroupHeaderComponent isolation ---

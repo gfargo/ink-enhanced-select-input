@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink'
-import React, { type FC, useEffect, useState } from 'react'
+import React, { type FC, useEffect, useMemo, useState } from 'react'
 
 export type Item<V> = {
   /**
@@ -195,6 +195,62 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
   return -1
 }
 
+/**
+ * Splits `items` into pagination windows ("pages") whose rendered row count
+ * — items plus the group headers that would be injected before them — never
+ * exceeds `limit`. Mirrors the render layer's header logic exactly: a group
+ * header is charged to a page whenever the item starts a new group relative
+ * to the *previous item in that same page* (the first item of a page always
+ * gets its header, since there's no preceding visible item to compare to).
+ *
+ * Every page contains at least one item, even if that item's own header+item
+ * cost exceeds `limit` — a page can never be empty.
+ */
+export function computePageStarts<V>(
+  items: Array<Item<V>>,
+  limit: number
+): number[] {
+  if (items.length === 0) return []
+  if (!limit || limit <= 0) return [0]
+
+  const starts: number[] = [0]
+  let pageStart = 0
+  let running = 0
+  let placedInPage = 0
+
+  for (let i = 0; i < items.length; i++) {
+    const previousGroup = i === pageStart ? undefined : items[i - 1]?.group
+    const headerCost =
+      items[i]?.group && items[i]?.group !== previousGroup ? 1 : 0
+    const cost = headerCost + 1
+
+    if (placedInPage > 0 && running + cost > limit) {
+      pageStart = i
+      starts.push(pageStart)
+      const newHeaderCost = items[i]?.group ? 1 : 0
+      running = newHeaderCost + 1
+      placedInPage = 1
+      continue
+    }
+
+    running += cost
+    placedInPage += 1
+  }
+
+  return starts
+}
+
+/** Largest page-start index in `pageStarts` that is `<= index`. */
+function pageStartFor(pageStarts: number[], index: number): number {
+  let result = 0
+  for (const start of pageStarts) {
+    if (start <= index) result = start
+    else break
+  }
+
+  return result
+}
+
 function itemKey<V>(item: Item<V>): string {
   return item.key ?? String(item.value)
 }
@@ -258,22 +314,35 @@ export function useEnhancedSelectInput<V>({
         )
       : items
 
+  // Pagination windows ("pages") are computed against rendered row count —
+  // items plus the group headers injected before them — not raw item count,
+  // so `limit` bounds what actually appears on screen.
+  const pageStarts = useMemo(
+    () => (limit ? computePageStarts(filteredItems, limit) : []),
+    [filteredItems, limit]
+  )
+
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
   const [rotateIndex, setRotateIndex] = useState(
-    limit ? Math.floor(safeInitialIndex / limit) * limit : 0
+    limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
   )
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
     () => new Set(defaultSelectedKeys ?? [])
   )
 
   const hasItems = filteredItems.length > 0
+  const currentPageIndex = pageStarts.indexOf(rotateIndex)
+  const nextPageStart =
+    currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
+      ? pageStarts[currentPageIndex + 1]
+      : filteredItems.length
   const visibleItems = limit
-    ? filteredItems.slice(rotateIndex, rotateIndex + limit)
+    ? filteredItems.slice(rotateIndex, nextPageStart)
     : filteredItems
   const itemsAbove = rotateIndex
   const itemsBelow = limit
-    ? Math.max(0, filteredItems.length - rotateIndex - limit)
+    ? Math.max(0, filteredItems.length - rotateIndex - visibleItems.length)
     : 0
 
   // When the items array changes, re-validate the current selectedIndex.
@@ -314,7 +383,7 @@ export function useEnhancedSelectInput<V>({
     if (!currentItem || currentItem.disabled) {
       const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
       setSelectedIndex(newIndex)
-      if (limit) setRotateIndex(Math.floor(newIndex / limit) * limit)
+      if (limit) setRotateIndex(pageStartFor(pageStarts, newIndex))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
@@ -335,7 +404,7 @@ export function useEnhancedSelectInput<V>({
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
     if (limit) {
-      setRotateIndex(Math.floor(nextIndex / limit) * limit)
+      setRotateIndex(pageStartFor(pageStarts, nextIndex))
     }
   }
 
