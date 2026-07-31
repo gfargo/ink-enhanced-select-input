@@ -1,5 +1,6 @@
 import test from 'ava'
 import {
+  computePageStarts,
   findFirstValidIndex,
   findLastValidIndex,
   findNextValidIndex,
@@ -11,6 +12,12 @@ const mkItem = (label: string, disabled = false): Item<string> => ({
   label,
   value: label,
   disabled,
+})
+
+const mkGroupedItem = (label: string, group?: string): Item<string> => ({
+  label,
+  value: label,
+  group,
 })
 
 // ── resolveInitialIndex ────────────────────────────────────────────────────────
@@ -134,4 +141,55 @@ test('findLastValidIndex: all disabled returns -1 (matches findFirstValidIndex)'
 
 test('findLastValidIndex and findFirstValidIndex agree on empty list', (t) => {
   t.is(findLastValidIndex<string>([]), findFirstValidIndex<string>([]))
+})
+
+// ── computePageStarts ────────────────────────────────────────────────────────
+
+test('computePageStarts: empty list returns no pages', (t) => {
+  t.deepEqual(computePageStarts<string>([], 3), [])
+})
+
+test('computePageStarts: falsy limit returns a single page', (t) => {
+  const items = [mkItem('a'), mkItem('b')]
+  t.deepEqual(computePageStarts(items, 0), [0])
+})
+
+test('computePageStarts: ungrouped items paginate by raw item count', (t) => {
+  const items = [
+    mkItem('a'),
+    mkItem('b'),
+    mkItem('c'),
+    mkItem('d'),
+    mkItem('e'),
+  ]
+  t.deepEqual(computePageStarts(items, 3), [0, 3])
+})
+
+test('computePageStarts: budgets one row per header so groups do not overflow limit', (t) => {
+  // B9 repro: 4 single-item groups, limit=3 — each page can only fit one
+  // header+item pair (2 rows), so every item lands on its own page.
+  const items = [
+    mkGroupedItem('A', 'G1'),
+    mkGroupedItem('B', 'G2'),
+    mkGroupedItem('C', 'G3'),
+    mkGroupedItem('D', 'G4'),
+  ]
+  t.deepEqual(computePageStarts(items, 3), [0, 1, 2, 3])
+})
+
+test('computePageStarts: fits a full group (header + items) on one page when it fits the limit', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+    mkGroupedItem('D', 'Second'),
+  ]
+  // Header(1) + A(1) + B(1) = 3 rows fits limit=3; Second group starts a new page.
+  t.deepEqual(computePageStarts(items, 3), [0, 2])
+})
+
+test('computePageStarts: a page always has at least one item, even when header+item exceeds limit', (t) => {
+  const items = [mkGroupedItem('A', 'Group'), mkGroupedItem('B', 'Group')]
+  // Limit=1 can't fit header+item (2 rows), but each page still gets 1 item.
+  t.deepEqual(computePageStarts(items, 1), [0, 1])
 })
