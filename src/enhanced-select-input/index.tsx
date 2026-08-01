@@ -406,18 +406,24 @@ export function useEnhancedSelectInput<V>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
 
-  // Only re-fire when the highlighted index changes, not when the items
-  // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content).
+  const highlightedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const highlightedKey =
+    highlightedItem && !highlightedItem.disabled
+      ? itemKey(highlightedItem)
+      : undefined
+
+  // Re-fire whenever the highlighted item's *identity* changes, not just its
+  // index — filtering can swap in a different item at the same index (e.g.
+  // typing resets selectedIndex to 0, which was already 0), and that must
+  // still notify. Not when the items array reference changes (which would
+  // cause spurious calls on every parent re-render that passes a new array
+  // with identical content).
   useEffect(() => {
-    if (hasItems) {
-      const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem && !highlightedItem.disabled) {
-        onHighlight?.(highlightedItem)
-      }
+    if (highlightedItem && highlightedKey) {
+      onHighlight?.(highlightedItem)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, onHighlight, hasItems])
+  }, [highlightedKey, onHighlight])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)

@@ -2798,6 +2798,63 @@ test('onHighlight fires with correct item when initialIndex is set', async (t) =
   t.is(highlighted, 'B')
 })
 
+test('onHighlight fires with the new item when filtering swaps the item at the same index', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+  ]
+
+  const highlights: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlights.push(item.label)
+      }}
+    />
+  )
+
+  await delay()
+  t.deepEqual(highlights, ['Apple'])
+
+  // Filtering to "b" drops "Apple" and leaves "Banana" as the sole match at
+  // index 0 — the same index "Apple" already occupied — so onHighlight must
+  // still fire for the newly-highlighted item.
+  stdin.write('b')
+  await delay()
+
+  t.deepEqual(highlights, ['Apple', 'Banana'])
+})
+
+test('onHighlight does not fire again when the same item stays highlighted across a re-render', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  const highlights: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      onHighlight={(item) => {
+        highlights.push(item.label)
+      }}
+    />
+  )
+
+  await delay()
+  t.deepEqual(highlights, ['Apple'])
+
+  // Filtering to "a" still matches "Apple" first, so no new highlight call.
+  stdin.write('a')
+  await delay()
+
+  t.deepEqual(highlights, ['Apple'])
+})
+
 // --- Generic value type ---
 
 test('works with complex object values when key is provided', async (t) => {
