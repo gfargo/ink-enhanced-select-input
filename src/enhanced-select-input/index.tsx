@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink'
-import React, { type FC, useEffect, useMemo, useState } from 'react'
+import React, { type FC, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Item<V> = {
   /**
@@ -335,6 +335,10 @@ export function useEnhancedSelectInput<V>({
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
     () => new Set(defaultSelectedKeys ?? [])
   )
+  // Mirrors `checkedKeys` synchronously so the Enter branch below can read
+  // the committed set even when a Space toggle and Enter are written in the
+  // same tick (no intervening render to flush the `checkedKeys` state).
+  const checkedKeysReference = useRef(checkedKeys)
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex so there
@@ -471,14 +475,19 @@ export function useEnhancedSelectInput<V>({
         const item = filteredItems[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
-          setCheckedKeys((previous) => {
-            const next = new Set(previous)
-            const nowChecked = !next.has(k)
-            if (nowChecked) next.add(k)
-            else next.delete(k)
-            onToggle?.(item, nowChecked)
-            return next
-          })
+          // Compute the next set from the ref (not the `previous` argument
+          // React's updater would hand us) and assign it to the ref
+          // synchronously, right here — React may defer actually invoking a
+          // functional setState updater, so a same-tick Enter that reads
+          // checkedKeysReference.current must not depend on that updater having
+          // run yet.
+          const next = new Set(checkedKeysReference.current)
+          const nowChecked = !next.has(k)
+          if (nowChecked) next.add(k)
+          else next.delete(k)
+          checkedKeysReference.current = next
+          onToggle?.(item, nowChecked)
+          setCheckedKeys(next)
         }
 
         return
@@ -525,10 +534,13 @@ export function useEnhancedSelectInput<V>({
           // In multi-select mode Enter confirms the full selection. Default
           // to `items` (not `filteredItems`) so checks made before/between
           // search filters aren't silently dropped from the confirmed set.
+          // Read from the ref (not the `checkedKeys` state) since a Space
+          // toggle queued in the same tick has not been committed to state
+          // yet when this handler runs.
           const confirmSource =
             confirmScope === 'filtered' ? filteredItems : items
           const confirmed = confirmSource.filter((item) =>
-            checkedKeys.has(itemKey(item))
+            checkedKeysReference.current.has(itemKey(item))
           )
           onConfirm?.(confirmed)
         } else {
