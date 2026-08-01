@@ -3018,7 +3018,7 @@ test('searchable: escape clears query first, then onCancel on second press', asy
 
   // Second escape calls onCancel
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled)
   t.true(cancelled)
 })
 

@@ -39,7 +39,9 @@ jobs:
 
       - name: Install Ink 7
         if: matrix.ink == '7'
-        run: yarn add --dev ink@^7.1.1 react@^19.2.0
+        # --no-lockfile: override ink/react for this job only, without
+        # writing to (or drifting from) the committed yarn.lock.
+        run: yarn add --dev ink@^7.1.1 react@^19.2.0 --no-lockfile
 
       - name: Test
         run: yarn test
