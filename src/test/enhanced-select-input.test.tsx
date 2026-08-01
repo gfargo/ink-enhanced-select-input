@@ -1023,6 +1023,41 @@ test('Escape does not call onCancel when isFocused=false', async (t) => {
   t.false(cancelled)
 })
 
+test('Escape calls onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await waitFor(() => cancelled)
+  t.true(cancelled)
+})
+
+test('keyMap.cancel=false disables Escape → onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      keyMap={{ cancel: false }}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+})
+
 test('Escape is a no-op when onCancel is not provided', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
 
@@ -3171,11 +3206,15 @@ test('searchable: escape clears query first, then onCancel on second press', asy
 
   await delay()
   stdin.write('a')
-  await delay()
+  // Wait for the typed query to actually land before pressing Escape —
+  // under load a fixed delay() isn't always long enough, and an Escape
+  // sent while the query is still empty is indistinguishable from the
+  // "clear query" case only by accident (see comment on `waitFor` above).
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   // First escape clears query
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled || lastFrame()!.includes('/ Search...'))
   t.false(cancelled)
   t.true(lastFrame()!.includes('/ Search...'))
 
@@ -3226,7 +3265,7 @@ test('searchable: enter selects from filtered results', async (t) => {
   ]
 
   let selected = ''
-  const { stdin } = render(
+  const { stdin, lastFrame } = render(
     <EnhancedSelectInput
       searchable
       items={items}
@@ -3238,7 +3277,11 @@ test('searchable: enter selects from filtered results', async (t) => {
 
   await delay()
   stdin.write('ban')
-  await delay()
+  // Wait for the filter to actually land before pressing Enter — under
+  // load a fixed delay() isn't always long enough for the query state
+  // update to commit, which would leave Apple highlighted instead of the
+  // filtered-to Banana.
+  await waitFor(() => lastFrame()!.includes('/ ban'))
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'Banana')
@@ -3531,14 +3574,81 @@ test('searchable + multiple: can filter then confirm checked items', async (t) =
   )
 
   await delay()
-  // Filter to only "ap" items, then confirm — should still include
-  // all previously checked items that match the filter
+  // Filter to only "ap" items, then confirm — checked items hidden by the
+  // active filter (cherry) must still be included, not silently dropped.
   stdin.write('ap')
   await delay()
   stdin.write(ENTER)
   await delay()
 
-  // Only "apple" matches the filter AND is checked
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('cherry'))
+})
+
+test('searchable + multiple: checking items across two different queries confirms both', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'banana']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  // Filter to a query that hides "apple" entirely, then confirm — apple
+  // was checked before this query and must survive into onConfirm.
+  stdin.write('ban')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('banana'))
+})
+
+test('searchable + multiple: confirmScope "filtered" restores scoped confirm behaviour', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'cherry']}
+      confirmScope="filtered"
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  // Only "apple" matches the filter AND is checked; cherry is excluded
+  // because confirmScope is explicitly opted into filtered-only confirm.
   t.is(confirmed.length, 1)
   t.true(confirmed.includes('apple'))
 })
