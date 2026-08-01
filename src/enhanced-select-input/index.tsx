@@ -81,6 +81,13 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly onConfirm?: (items: Array<Item<V>>) => void
   /**
+   * Which set of items `onConfirm` draws from in multi-select mode.
+   * 'all' (default) confirms every checked item even if hidden by the
+   * active search filter; 'filtered' confirms only checked items that
+   * currently match the search query. Only used when `multiple` is true.
+   */
+  readonly confirmScope?: 'all' | 'filtered'
+  /**
    * Called each time an item is toggled in multi-select mode (Space).
    * Receives the toggled item and whether it is now checked.
    */
@@ -291,6 +298,7 @@ export function useEnhancedSelectInput<V>({
   multiple = false,
   defaultSelectedKeys,
   onConfirm,
+  confirmScope = 'all',
   onToggle,
   searchable = false,
   keyMap,
@@ -521,8 +529,12 @@ export function useEnhancedSelectInput<V>({
 
       if (km.select && key.return) {
         if (multiple) {
-          // In multi-select mode Enter confirms the full selection
-          const confirmed = filteredItems.filter((item) =>
+          // In multi-select mode Enter confirms the full selection. Default
+          // to `items` (not `filteredItems`) so checks made before/between
+          // search filters aren't silently dropped from the confirmed set.
+          const confirmSource =
+            confirmScope === 'filtered' ? filteredItems : items
+          const confirmed = confirmSource.filter((item) =>
             checkedKeys.has(itemKey(item))
           )
           onConfirm?.(confirmed)
