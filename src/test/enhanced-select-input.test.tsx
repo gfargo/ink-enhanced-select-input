@@ -1688,6 +1688,66 @@ test('multi-select enter with nothing checked calls onConfirm with empty array',
   t.is(confirmed!.length, 0)
 })
 
+test('multi-select space then enter in the same tick confirms the toggled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Check A
+  stdin.write(ENTER) // Same tick, no await between the two writes
+  await delay()
+
+  t.is(confirmed.length, 1)
+  t.true(confirmed.includes('a'))
+})
+
+test('multi-select several toggles then enter in one tick confirms the final checked set', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Check A
+  await delay()
+  stdin.write(ARROW_DOWN) // → B
+  await delay()
+  stdin.write(ARROW_DOWN) // → C
+  await delay()
+  stdin.write(SPACE) // Check C
+  stdin.write(ENTER) // Same tick, no await between the two writes
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('a'))
+  t.true(confirmed.includes('c'))
+})
+
 test('multi-select onToggle fires with item and checked state', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
 
