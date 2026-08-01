@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, type Key } from 'ink'
 import React, { type FC, useEffect, useMemo, useState } from 'react'
 
 export type Item<V> = {
@@ -255,6 +255,208 @@ function itemKey<V>(item: Item<V>): string {
   return item.key ?? String(item.value)
 }
 
+/** Fully-resolved key map — every group explicitly enabled or disabled. */
+type ResolvedKeyMap = Required<KeyMap>
+
+/** Everything the intent resolver needs to read, without touching React state. */
+type InputIntentContext<V> = {
+  km: ResolvedKeyMap
+  searchable: boolean
+  searchQuery: string
+  hasItems: boolean
+  multiple: boolean
+  orientation: 'vertical' | 'horizontal'
+  selectedIndex: number
+  filteredItems: Array<Item<V>>
+}
+
+/**
+ * The single normalized intent a keypress maps to. Every modifier/mode guard
+ * (keyMap flags, searchable, multiple, active-vim-key) is evaluated exactly
+ * once, inside {@link resolveInputIntent}, to produce one of these — the
+ * `useInput` handler then dispatches on `type` alone with no further
+ * guarding.
+ */
+type Intent<V> =
+  | { type: 'none' }
+  | { type: 'search-backspace' }
+  | { type: 'search-clear' }
+  | { type: 'jump'; index: number }
+  | { type: 'cancel' }
+  | { type: 'toggle' }
+  | { type: 'navigate'; index: number }
+  | { type: 'submit' }
+  | { type: 'search-append'; char: string }
+  | { type: 'hotkey'; item: Item<V>; index: number }
+
+/** Backspace/Delete and Escape-while-querying, scoped to searchable mode. */
+function resolveSearchEditIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { searchable, searchQuery } = context
+  if (searchable && (key.backspace || key.delete)) {
+    return { type: 'search-backspace' }
+  }
+
+  if (searchable && key.escape && searchQuery) {
+    return { type: 'search-clear' }
+  }
+
+  return undefined
+}
+
+/** Home/End jump-to-boundary, gated on `km.homeEnd`. */
+function resolveJumpIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, filteredItems } = context
+  if (km.homeEnd && key.home) {
+    const index = findFirstValidIndex(filteredItems)
+    return index === -1 ? { type: 'none' } : { type: 'jump', index }
+  }
+
+  if (km.homeEnd && key.end) {
+    const index = findLastValidIndex(filteredItems)
+    return index === -1 ? { type: 'none' } : { type: 'jump', index }
+  }
+
+  return undefined
+}
+
+/** -1 (backward) / +1 (forward) for the arrow or vim key pressed, orientation-aware. */
+function resolveNavigateStep<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): -1 | 1 | undefined {
+  const { km, orientation, searchable } = context
+  const [backwardArrow, forwardArrow, backwardVimKey, forwardVimKey] =
+    orientation === 'vertical'
+      ? [key.upArrow, key.downArrow, 'k', 'j']
+      : [key.leftArrow, key.rightArrow, 'h', 'l']
+
+  if (
+    (km.arrows && backwardArrow) ||
+    (km.vimKeys && !searchable && input === backwardVimKey)
+  ) {
+    return -1
+  }
+
+  if (
+    (km.arrows && forwardArrow) ||
+    (km.vimKeys && !searchable && input === forwardVimKey)
+  ) {
+    return 1
+  }
+
+  return undefined
+}
+
+/** Arrow/vim-key navigation. Terminal: a nav key never also matches submit/search/hotkey. */
+function resolveNavigateIntent<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const step = resolveNavigateStep(input, key, context)
+  if (step === undefined) return undefined
+  return {
+    type: 'navigate',
+    index: findNextValidIndex(
+      context.filteredItems,
+      context.selectedIndex,
+      step
+    ),
+  }
+}
+
+/**
+ * Item hotkeys. Not active in multi-select or searchable mode, and active
+ * vim nav keys (which take priority over a same-character hotkey) are
+ * resolved here too.
+ */
+function resolveHotkeyIntent<V>(
+  input: string,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, multiple, searchable, orientation, filteredItems } = context
+  const navigationKeys =
+    orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
+  const isActiveVimKey = km.vimKeys && !searchable && navigationKeys.has(input)
+
+  if (!km.select || multiple || searchable || isActiveVimKey) {
+    return undefined
+  }
+
+  const hotkeyItem = filteredItems.find(
+    (item) => item.hotkey === input && !item.disabled
+  )
+  if (!hotkeyItem) return undefined
+
+  return {
+    type: 'hotkey',
+    item: hotkeyItem,
+    index: filteredItems.indexOf(hotkeyItem),
+  }
+}
+
+/**
+ * Normalizes a raw `(input, key)` keypress plus the current selection state
+ * into a single {@link Intent}. Pure — reads only `context`, never touches
+ * React state — so branch order (which is load-bearing) can be reasoned
+ * about and tested in isolation from the stateful `useInput` dispatch.
+ *
+ * Branch order mirrors the historical `useInput` handler exactly: first
+ * match wins.
+ */
+export function resolveInputIntent<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> {
+  const { km, searchable, hasItems, multiple } = context
+
+  const searchEdit = resolveSearchEditIntent(key, context)
+  if (searchEdit) return searchEdit
+
+  if (!hasItems && !searchable) {
+    return { type: 'none' }
+  }
+
+  const jump = resolveJumpIntent(key, context)
+  if (jump) return jump
+
+  if (km.cancel && key.escape) {
+    return { type: 'cancel' }
+  }
+
+  // Space: toggle in multi-select mode (but not in searchable mode where
+  // space is a valid search character)
+  if (km.toggle && multiple && !searchable && input === ' ') {
+    return { type: 'toggle' }
+  }
+
+  const navigate = resolveNavigateIntent(input, key, context)
+  if (navigate) return navigate
+
+  if (km.select && key.return) {
+    return { type: 'submit' }
+  }
+
+  // In searchable mode, capture printable characters as search input.
+  // This must come after navigation key handling.
+  if (searchable && input && !key.ctrl && !key.meta) {
+    return { type: 'search-append', char: input }
+  }
+
+  const hotkey = resolveHotkeyIntent(input, context)
+  if (hotkey) return hotkey
+
+  return { type: 'none' }
+}
+
 export type UseEnhancedSelectInputResult<V> = {
   /** Index of the currently highlighted item within the filtered items array. */
   selectedIndex: number
@@ -419,142 +621,100 @@ export function useEnhancedSelectInput<V>({
   }
 
   useInput(
-    // eslint-disable-next-line complexity
     (input, key) => {
-      // In searchable mode, handle Backspace/Delete to remove last character
-      if (searchable && (key.backspace || key.delete)) {
-        setSearchQuery((previous) => previous.slice(0, -1))
-        setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
-        return
-      }
+      const intent = resolveInputIntent(input, key, {
+        km,
+        searchable,
+        searchQuery,
+        hasItems,
+        multiple,
+        orientation,
+        selectedIndex,
+        filteredItems,
+      })
 
-      // In searchable mode, Escape clears the query first; if already
-      // empty, it falls through to onCancel.
-      if (searchable && key.escape && searchQuery) {
-        setSearchQuery('')
-        setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
-        return
-      }
-
-      if (!hasItems && !searchable) return
-
-      const navigationKeys =
-        orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
-      // A vim key is only "active" when vimKeys are enabled and we're not in
-      // searchable mode (where every character is search input).
-      const isActiveVimKey =
-        km.vimKeys && !searchable && navigationKeys.has(input)
-
-      if (km.homeEnd && key.home) {
-        const index = findFirstValidIndex(filteredItems)
-        if (index !== -1) updateSelection(index)
-        return
-      }
-
-      if (km.homeEnd && key.end) {
-        const index = findLastValidIndex(filteredItems)
-        if (index !== -1) updateSelection(index)
-        return
-      }
-
-      if (km.cancel && key.escape) {
-        onCancel?.()
-        return
-      }
-
-      // Space: toggle in multi-select mode (but not in searchable mode
-      // where space is a valid search character)
-      if (km.toggle && multiple && !searchable && input === ' ') {
-        const item = filteredItems[selectedIndex]
-        if (item && !item.disabled) {
-          const k = itemKey(item)
-          setCheckedKeys((previous) => {
-            const next = new Set(previous)
-            const nowChecked = !next.has(k)
-            if (nowChecked) next.add(k)
-            else next.delete(k)
-            onToggle?.(item, nowChecked)
-            return next
-          })
+      switch (intent.type) {
+        case 'search-backspace': {
+          setSearchQuery((previous) => previous.slice(0, -1))
+          setSelectedIndex(0)
+          if (limit) setRotateIndex(0)
+          break
         }
 
-        return
-      }
-
-      let nextIndex = selectedIndex
-
-      if (orientation === 'vertical') {
-        if (
-          (km.arrows && key.upArrow) ||
-          (km.vimKeys && !searchable && input === 'k')
-        ) {
-          nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
+        case 'search-clear': {
+          setSearchQuery('')
+          setSelectedIndex(0)
+          if (limit) setRotateIndex(0)
+          break
         }
 
-        if (
-          (km.arrows && key.downArrow) ||
-          (km.vimKeys && !searchable && input === 'j')
-        ) {
-          nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
-        }
-      } else {
-        if (
-          (km.arrows && key.leftArrow) ||
-          (km.vimKeys && !searchable && input === 'h')
-        ) {
-          nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
+        case 'jump': {
+          updateSelection(intent.index)
+          break
         }
 
-        if (
-          (km.arrows && key.rightArrow) ||
-          (km.vimKeys && !searchable && input === 'l')
-        ) {
-          nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
+        case 'cancel': {
+          onCancel?.()
+          break
         }
-      }
 
-      if (nextIndex !== selectedIndex) {
-        updateSelection(nextIndex)
-      }
-
-      if (km.select && key.return) {
-        if (multiple) {
-          // In multi-select mode Enter confirms the full selection
-          const confirmed = filteredItems.filter((item) =>
-            checkedKeys.has(itemKey(item))
-          )
-          onConfirm?.(confirmed)
-        } else {
-          const selectedItem = filteredItems[selectedIndex]
-          if (selectedItem && !selectedItem.disabled) {
-            onSelect?.(selectedItem)
+        case 'toggle': {
+          const item = filteredItems[selectedIndex]
+          if (item && !item.disabled) {
+            const k = itemKey(item)
+            setCheckedKeys((previous) => {
+              const next = new Set(previous)
+              const nowChecked = !next.has(k)
+              if (nowChecked) next.add(k)
+              else next.delete(k)
+              onToggle?.(item, nowChecked)
+              return next
+            })
           }
+
+          break
         }
 
-        return
-      }
+        case 'navigate': {
+          if (intent.index !== selectedIndex) {
+            updateSelection(intent.index)
+          }
 
-      // In searchable mode, capture printable characters as search input.
-      // This must come after navigation key handling.
-      if (searchable && input && !key.ctrl && !key.meta) {
-        setSearchQuery((previous) => previous + input)
-        setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
-        return
-      }
+          break
+        }
 
-      // Hotkeys: active vim nav keys take priority over item hotkeys.
-      // Hotkeys are not active in multi-select or searchable mode.
-      if (km.select && !multiple && !searchable && !isActiveVimKey) {
-        const hotkeyItem = filteredItems.find(
-          (item) => item.hotkey === input && !item.disabled
-        )
-        if (hotkeyItem) {
-          const hotkeyIndex = filteredItems.indexOf(hotkeyItem)
-          updateSelection(hotkeyIndex)
-          onSelect?.(hotkeyItem)
+        case 'submit': {
+          if (multiple) {
+            // In multi-select mode Enter confirms the full selection
+            const confirmed = filteredItems.filter((item) =>
+              checkedKeys.has(itemKey(item))
+            )
+            onConfirm?.(confirmed)
+          } else {
+            const selectedItem = filteredItems[selectedIndex]
+            if (selectedItem && !selectedItem.disabled) {
+              onSelect?.(selectedItem)
+            }
+          }
+
+          break
+        }
+
+        case 'search-append': {
+          setSearchQuery((previous) => previous + intent.char)
+          setSelectedIndex(0)
+          if (limit) setRotateIndex(0)
+          break
+        }
+
+        case 'hotkey': {
+          updateSelection(intent.index)
+          onSelect?.(intent.item)
+          break
+        }
+
+        case 'none': {
+          break
         }
       }
     },
