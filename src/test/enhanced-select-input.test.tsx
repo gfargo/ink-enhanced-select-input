@@ -3471,14 +3471,81 @@ test('searchable + multiple: can filter then confirm checked items', async (t) =
   )
 
   await delay()
-  // Filter to only "ap" items, then confirm — should still include
-  // all previously checked items that match the filter
+  // Filter to only "ap" items, then confirm — checked items hidden by the
+  // active filter (cherry) must still be included, not silently dropped.
   stdin.write('ap')
   await delay()
   stdin.write(ENTER)
   await delay()
 
-  // Only "apple" matches the filter AND is checked
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('cherry'))
+})
+
+test('searchable + multiple: checking items across two different queries confirms both', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'banana']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  // Filter to a query that hides "apple" entirely, then confirm — apple
+  // was checked before this query and must survive into onConfirm.
+  stdin.write('ban')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('banana'))
+})
+
+test('searchable + multiple: confirmScope "filtered" restores scoped confirm behaviour', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'cherry']}
+      confirmScope="filtered"
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  // Only "apple" matches the filter AND is checked; cherry is excluded
+  // because confirmScope is explicitly opted into filtered-only confirm.
   t.is(confirmed.length, 1)
   t.true(confirmed.includes('apple'))
 })
