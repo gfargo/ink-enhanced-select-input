@@ -290,7 +290,7 @@ If you need a fully custom renderer while keeping the built-in navigation, hotke
 import { useEnhancedSelectInput } from 'ink-enhanced-select-input'
 
 function MyCustomSelect({ items, onSelect }) {
-  const { selectedIndex, visibleItems, itemsAbove, itemsBelow } =
+  const { selectedIndex, rotateIndex, visibleItems, itemsAbove, itemsBelow } =
     useEnhancedSelectInput({ items, onSelect })
 
   return (
@@ -299,7 +299,7 @@ function MyCustomSelect({ items, onSelect }) {
       {visibleItems.map((item, i) => (
         <Text
           key={item.key ?? String(item.value)}
-          color={i === selectedIndex ? 'cyan' : undefined}
+          color={i + rotateIndex === selectedIndex ? 'cyan' : undefined}
         >
           {item.label}
         </Text>
@@ -320,8 +320,8 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
 | `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
-| `indicatorComponent`   | `FC<IndicatorProps>`                        | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
-| `itemComponent`        | `FC<ItemProps>`                             | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
+| `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
+| `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |
 | `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                                                                                                                             |
 | `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                                                                                                                                        |
@@ -332,7 +332,7 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 | `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items, unaffected by the active search filter                                                                  |
 | `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query |
 | `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                             |
-| `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                         |
+| `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                         |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                     |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                    |
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
