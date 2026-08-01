@@ -448,10 +448,18 @@ export function useEnhancedSelectInput<V>({
 
       const navigationKeys =
         orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
+      // Ctrl/Alt chords (e.g. Ctrl+K, Alt+X) surface as a bare letter in
+      // `input` with `key.ctrl`/`key.meta` set. They must never be treated
+      // as vim navigation or item hotkeys — those are terminal chords with
+      // their own conventional meanings (Ctrl+C, Ctrl+W, etc.).
+      const isModifiedChord = key.ctrl || key.meta
       // A vim key is only "active" when vimKeys are enabled and we're not in
       // searchable mode (where every character is search input).
       const isActiveVimKey =
-        km.vimKeys && !searchable && navigationKeys.has(input)
+        km.vimKeys &&
+        !searchable &&
+        !isModifiedChord &&
+        navigationKeys.has(input)
 
       if (km.homeEnd && key.home) {
         const index = findFirstValidIndex(filteredItems)
@@ -489,28 +497,28 @@ export function useEnhancedSelectInput<V>({
       if (orientation === 'vertical') {
         if (
           (km.arrows && key.upArrow) ||
-          (km.vimKeys && !searchable && input === 'k')
+          (km.vimKeys && !searchable && !isModifiedChord && input === 'k')
         ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
         if (
           (km.arrows && key.downArrow) ||
-          (km.vimKeys && !searchable && input === 'j')
+          (km.vimKeys && !searchable && !isModifiedChord && input === 'j')
         ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
       } else {
         if (
           (km.arrows && key.leftArrow) ||
-          (km.vimKeys && !searchable && input === 'h')
+          (km.vimKeys && !searchable && !isModifiedChord && input === 'h')
         ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, -1)
         }
 
         if (
           (km.arrows && key.rightArrow) ||
-          (km.vimKeys && !searchable && input === 'l')
+          (km.vimKeys && !searchable && !isModifiedChord && input === 'l')
         ) {
           nextIndex = findNextValidIndex(filteredItems, selectedIndex, 1)
         }
@@ -550,8 +558,15 @@ export function useEnhancedSelectInput<V>({
       }
 
       // Hotkeys: active vim nav keys take priority over item hotkeys.
-      // Hotkeys are not active in multi-select or searchable mode.
-      if (km.select && !multiple && !searchable && !isActiveVimKey) {
+      // Hotkeys are not active in multi-select or searchable mode, and
+      // Ctrl/Alt chords never match a hotkey (they're terminal chords).
+      if (
+        km.select &&
+        !multiple &&
+        !searchable &&
+        !isActiveVimKey &&
+        !isModifiedChord
+      ) {
         const hotkeyItem = filteredItems.find(
           (item) => item.hotkey === input && !item.disabled
         )
