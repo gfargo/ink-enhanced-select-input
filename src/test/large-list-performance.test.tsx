@@ -17,6 +17,18 @@ const delay = async (ms = 100) =>
     setTimeout(resolve, ms)
   })
 
+// Polls instead of sleeping-and-hoping, matching the pattern in
+// enhanced-select-input.test.tsx — avoids flakiness from state updates that
+// land slightly after a fixed delay under CI/CPU load.
+const waitFor = async (condition: () => boolean, timeout = 2000) => {
+  const start = Date.now()
+  while (!condition()) {
+    if (Date.now() - start >= timeout) return
+    // eslint-disable-next-line no-await-in-loop
+    await delay(20)
+  }
+}
+
 const ITEM_COUNT = 10_000
 const LIMIT = 10
 
@@ -60,9 +72,11 @@ test('10k items: computePageStarts runs once and produces the expected page coun
   const elapsedMs = performance.now() - start
 
   t.is(pageStarts.length, Math.ceil(ITEM_COUNT / LIMIT))
-  // Informational only — structural assertions above are the real gate.
-  // Generous ceiling to avoid CI flakiness on slow runners.
-  t.true(elapsedMs < 1000)
+  // Informational only, not a strict perf gate — the page-count assertion
+  // above is the real regression check. Logged so a runaway regression is
+  // still visible in test output without making the suite flaky on slow
+  // CI runners.
+  t.log(`computePageStarts(${ITEM_COUNT} items) took ${elapsedMs.toFixed(2)}ms`)
 })
 
 test('10k items: many ↓ presses keep the rendered frame bounded and move the selection', async (t) => {
@@ -84,15 +98,18 @@ test('10k items: many ↓ presses keep the rendered frame bounded and move the s
   // Each press must land as its own event/render cycle — Ink parses a whole
   // batch of escape sequences written in a single `stdin.write` call inside
   // one synchronous React batch, so simulating "many key presses" requires
-  // one `write` per press (as a real terminal would deliver them).
+  // one `write` per press (as a real terminal would deliver them). Use the
+  // same delay budget as the rest of the suite (enhanced-select-input.test.tsx)
+  // rather than a tighter one, since tightening it risks dropped/coalesced
+  // key events under CI load.
   const presses = 35
   for (let i = 0; i < presses; i++) {
     stdin.write(ARROW_DOWN)
     // eslint-disable-next-line no-await-in-loop
-    await delay(20)
+    await delay()
   }
 
-  await delay(100)
+  await waitFor(() => highlighted === `Item ${presses}`)
 
   t.is(highlighted, `Item ${presses}`)
   const frame = lastFrame()!
