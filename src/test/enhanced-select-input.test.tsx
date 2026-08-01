@@ -23,7 +23,7 @@ const END = '\u001B[F'
 const SPACE = ' '
 
 // Small delay to let React/Ink process state updates
-const delay = async (ms = 100) =>
+const delay = async (ms = 250) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
