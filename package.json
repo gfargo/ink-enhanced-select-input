@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js"
     }
   },
   "type": "module",
@@ -33,6 +37,8 @@
   "files": [
     "dist/index.js",
     "dist/index.d.ts",
+    "dist/headless.js",
+    "dist/headless.d.ts",
     "dist/enhanced-select-input"
   ],
   "peerDependencies": {
