@@ -446,6 +446,14 @@ export function useEnhancedSelectInput<V>({
         return
       }
 
+      // Escape → onCancel is a global key: it must work even when the list
+      // has no items (e.g. an empty/loading state), so it's handled before
+      // the hasItems guard below.
+      if (km.cancel && key.escape) {
+        onCancel?.()
+        return
+      }
+
       if (!hasItems && !searchable) return
 
       const navigationKeys =
@@ -464,11 +472,6 @@ export function useEnhancedSelectInput<V>({
       if (km.homeEnd && key.end) {
         const index = findLastValidIndex(filteredItems)
         if (index !== -1) updateSelection(index)
-        return
-      }
-
-      if (km.cancel && key.escape) {
-        onCancel?.()
         return
       }
 

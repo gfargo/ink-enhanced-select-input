@@ -1023,6 +1023,41 @@ test('Escape does not call onCancel when isFocused=false', async (t) => {
   t.false(cancelled)
 })
 
+test('Escape calls onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await waitFor(() => cancelled)
+  t.true(cancelled)
+})
+
+test('keyMap.cancel=false disables Escape → onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      keyMap={{ cancel: false }}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+})
+
 test('Escape is a no-op when onCancel is not provided', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
 
