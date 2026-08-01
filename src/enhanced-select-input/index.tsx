@@ -11,6 +11,13 @@ export type Item<V> = {
   label: string
   value: V
   hotkey?: string
+  /**
+   * Custom indicator shown only for the highlighted item in single-select
+   * mode. Ignored when `multiple` is true — the built-in checkbox indicator
+   * takes precedence there (a dev warning is logged if both are supplied).
+   * To customize the indicator in multi-select mode, use
+   * `indicatorComponent` instead.
+   */
   indicator?: React.ReactNode
   disabled?: boolean
   /**
@@ -400,6 +407,22 @@ export function useEnhancedSelectInput<V>({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
+
+  // Warn in development when per-item `indicator` is combined with
+  // `multiple` — the checkbox indicator always wins in multi-select mode,
+  // so a supplied `item.indicator` is silently unused otherwise.
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!multiple) return
+    if (items.some((item) => Boolean(item.indicator))) {
+      console.warn(
+        '[ink-enhanced-select-input] item.indicator is ignored when multiple is true — ' +
+          'the built-in checkbox indicator takes precedence. Use indicatorComponent to ' +
+          'customize indicators in multi-select mode.'
+      )
+    }
+  }, [items, multiple])
 
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every

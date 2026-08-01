@@ -1600,6 +1600,77 @@ test('no duplicate key warning when all items have explicit keys', async (t) => 
   }
 })
 
+// --- #44: item.indicator + multiple warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when item.indicator is combined with multiple',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.indicator is ignored')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+test.serial('no item.indicator warning when multiple is false', async (t) => {
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...arguments_: unknown[]) => {
+    warnings.push(String(arguments_[0]))
+  }
+
+  try {
+    render(
+      <EnhancedSelectInput
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    t.false(warnings.some((w) => w.includes('item.indicator is ignored')))
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+// Serial: this test's render triggers the item.indicator dev warning as a
+// side effect, which would otherwise race the console.warn stubs above.
+test.serial(
+  'multi-select renders checkbox, not per-item indicator',
+  async (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('[ ]'))
+    t.false(frame.includes('★'))
+  }
+)
+
 // --- Multi-select mode (#12) ---
 
 test('multi-select renders checkbox indicators instead of arrow cursor', (t) => {

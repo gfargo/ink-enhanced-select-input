@@ -85,6 +85,8 @@ render(<Demo />)
 
 Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
 
+> **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
+
 ```tsx
 import React, { useState } from 'react'
 import { render, Text } from 'ink'
@@ -131,6 +133,8 @@ render(<MultiDemo />)
   onSelect={(item) => console.log(item.value)}
 />
 ```
+
+`item.indicator` only applies in single-select mode — see the [Multi-select](#multi-select) note above for the multi-select behaviour.
 
 ### Grouped Items
 
@@ -345,7 +349,7 @@ type Item<V> = {
   label: string
   value: V
   hotkey?: string
-  indicator?: React.ReactNode
+  indicator?: React.ReactNode // Single-select only — ignored (with a dev warning) when `multiple` is true
   disabled?: boolean
   group?: string // Items with the same group are rendered under a shared header
 }
