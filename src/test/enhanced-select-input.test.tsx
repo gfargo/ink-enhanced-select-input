@@ -3111,11 +3111,15 @@ test('searchable: escape clears query first, then onCancel on second press', asy
 
   await delay()
   stdin.write('a')
-  await delay()
+  // Wait for the typed query to actually land before pressing Escape —
+  // under load a fixed delay() isn't always long enough, and an Escape
+  // sent while the query is still empty is indistinguishable from the
+  // "clear query" case only by accident (see comment on `waitFor` above).
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   // First escape clears query
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled || lastFrame()!.includes('/ Search...'))
   t.false(cancelled)
   t.true(lastFrame()!.includes('/ Search...'))
 
@@ -3166,7 +3170,7 @@ test('searchable: enter selects from filtered results', async (t) => {
   ]
 
   let selected = ''
-  const { stdin } = render(
+  const { stdin, lastFrame } = render(
     <EnhancedSelectInput
       searchable
       items={items}
@@ -3178,7 +3182,11 @@ test('searchable: enter selects from filtered results', async (t) => {
 
   await delay()
   stdin.write('ban')
-  await delay()
+  // Wait for the filter to actually land before pressing Enter — under
+  // load a fixed delay() isn't always long enough for the query state
+  // update to commit, which would leave Apple highlighted instead of the
+  // filtered-to Banana.
+  await waitFor(() => lastFrame()!.includes('/ ban'))
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'Banana')
