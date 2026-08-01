@@ -335,9 +335,14 @@ export function useEnhancedSelectInput<V>({
   const [rotateIndex, setRotateIndex] = useState(
     limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
   )
-  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
-    () => new Set(defaultSelectedKeys ?? [])
-  )
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
+    const disabledKeys = new Set(
+      items.filter((item) => item.disabled).map((item) => itemKey(item))
+    )
+    return new Set(
+      (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
+    )
+  })
 
   const hasItems = filteredItems.length > 0
   // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes

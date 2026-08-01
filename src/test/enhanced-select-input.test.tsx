@@ -1663,6 +1663,80 @@ test('multi-select defaultSelectedKeys pre-checks items', (t) => {
   t.is((frame.match(/\[ ]/g) ?? []).length, 1)
 })
 
+test('multi-select defaultSelectedKeys ignores disabled items', (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'Locked', value: 'locked', disabled: true },
+  ]
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['locked']}
+    />
+  )
+  const frame = lastFrame()!
+  t.false(frame.includes('[x]'))
+  t.is((frame.match(/\[ ]/g) ?? []).length, 2)
+})
+
+test('multi-select onConfirm never includes a pre-checked disabled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'Locked', value: 'locked', disabled: true },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['locked']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 0)
+})
+
+test('multi-select defaultSelectedKeys pre-checks enabled items and drops disabled ones', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b', 'c']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('a'))
+  t.true(confirmed.includes('c'))
+})
+
 test('multi-select enter calls onConfirm with checked items', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
