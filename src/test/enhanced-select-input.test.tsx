@@ -3941,61 +3941,67 @@ test('keyMap defaults to all enabled when not provided', async (t) => {
 
 // --- typeahead ---
 
-test('typeahead: typing a single char jumps to first item with that prefix', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-    { label: 'Cherry', value: 'cherry' },
-  ]
+test.serial(
+  'typeahead: typing a single char jumps to first item with that prefix',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'Apple')
+    await delay()
+    t.is(highlighted, 'Apple')
 
-  stdin.write('c')
-  await delay()
-  t.is(highlighted, 'Cherry')
-})
+    stdin.write('c')
+    await delay()
+    t.is(highlighted, 'Cherry')
+  }
+)
 
-test('typeahead: typing two chars within timeout jumps to matching item', async (t) => {
-  const items = [
-    { label: 'Doe', value: 'doe' },
-    { label: 'Denver', value: 'denver' },
-    { label: 'Echo', value: 'echo' },
-  ]
+test.serial(
+  'typeahead: typing two chars within timeout jumps to matching item',
+  async (t) => {
+    const items = [
+      { label: 'Doe', value: 'doe' },
+      { label: 'Denver', value: 'denver' },
+      { label: 'Echo', value: 'echo' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('d')
-  await delay()
-  t.is(highlighted, 'Doe')
+    await delay()
+    stdin.write('d')
+    await delay()
+    t.is(highlighted, 'Doe')
 
-  stdin.write('e')
-  await delay()
-  t.is(highlighted, 'Denver')
-})
+    stdin.write('e')
+    await delay()
+    t.is(highlighted, 'Denver')
+  }
+)
 
-test('typeahead: match is case-insensitive', async (t) => {
+test.serial('typeahead: match is case-insensitive', async (t) => {
   const items = [
     { label: 'apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -4018,37 +4024,40 @@ test('typeahead: match is case-insensitive', async (t) => {
   t.is(highlighted, 'Banana')
 })
 
-test('typeahead: idle reset starts a fresh buffer after the timeout', async (t) => {
-  const items = [
-    { label: 'Delta', value: 'delta' },
-    { label: 'Denver', value: 'denver' },
-    { label: 'Echo', value: 'echo' },
-  ]
+test.serial(
+  'typeahead: idle reset starts a fresh buffer after the timeout',
+  async (t) => {
+    const items = [
+      { label: 'Delta', value: 'delta' },
+      { label: 'Denver', value: 'denver' },
+      { label: 'Echo', value: 'echo' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      typeaheadTimeout={50}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        typeaheadTimeout={50}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('d')
-  await delay()
-  t.is(highlighted, 'Delta')
+    await delay()
+    stdin.write('d')
+    await delay()
+    t.is(highlighted, 'Delta')
 
-  await delay(100)
-  stdin.write('e')
-  await delay()
-  t.is(highlighted, 'Echo')
-})
+    await delay(100)
+    stdin.write('e')
+    await delay()
+    t.is(highlighted, 'Echo')
+  }
+)
 
-test('typeahead: does not call onSelect', async (t) => {
+test.serial('typeahead: does not call onSelect', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -4071,31 +4080,34 @@ test('typeahead: does not call onSelect', async (t) => {
   t.is(selected, '')
 })
 
-test('typeahead: disabled items are skipped as match targets', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot', disabled: true },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'typeahead: disabled items are skipped as match targets',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot', disabled: true },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('a')
-  await delay()
-  t.is(highlighted, 'Apple')
-})
+    await delay()
+    stdin.write('a')
+    await delay()
+    t.is(highlighted, 'Apple')
+  }
+)
 
-test('typeahead: no match leaves selection unchanged', async (t) => {
+test.serial('typeahead: no match leaves selection unchanged', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -4120,103 +4132,115 @@ test('typeahead: no match leaves selection unchanged', async (t) => {
   t.is(highlighted, 'Apple')
 })
 
-test('typeahead: searchable=true ignores typeahead (printable chars filter instead)', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'typeahead: searchable=true ignores typeahead (printable chars filter instead)',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  const { lastFrame, stdin } = render(
-    <EnhancedSelectInput searchable typeahead items={items} />
-  )
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput searchable typeahead items={items} />
+    )
 
-  await delay()
-  stdin.write('b')
-  await delay()
+    await delay()
+    stdin.write('b')
+    await delay()
 
-  const frame = lastFrame()!
-  t.true(frame.includes('/ b'))
-  t.true(frame.includes('Banana'))
-  t.false(frame.includes('Apple'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('/ b'))
+    t.true(frame.includes('Banana'))
+    t.false(frame.includes('Apple'))
+  }
+)
 
-test('typeahead=false (default): typing a non-hotkey char does nothing', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'typeahead=false (default): typing a non-hotkey char does nothing',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'Apple')
+    await delay()
+    t.is(highlighted, 'Apple')
 
-  stdin.write('b')
-  await delay()
-  t.is(highlighted, 'Apple')
-})
+    stdin.write('b')
+    await delay()
+    t.is(highlighted, 'Apple')
+  }
+)
 
-test('typeahead: idle hotkey char fires the hotkey instead of just jumping', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Delta', value: 'delta', hotkey: 'd' },
-  ]
+test.serial(
+  'typeahead: idle hotkey char fires the hotkey instead of just jumping',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Delta', value: 'delta', hotkey: 'd' },
+    ]
 
-  let selected = ''
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      onSelect={(item) => {
-        selected = item.label
-      }}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let selected = ''
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('d')
-  await delay()
-  t.is(selected, 'Delta')
-  t.is(highlighted, 'Delta')
-})
+    await delay()
+    stdin.write('d')
+    await delay()
+    t.is(selected, 'Delta')
+    t.is(highlighted, 'Delta')
+  }
+)
 
-test('typeahead: works within a limit window, paginating to an off-page match', async (t) => {
-  const items = Array.from({ length: 10 }, (_, i) => ({
-    label: `Item${i}`,
-    value: `item-${i}`,
-  }))
+test.serial(
+  'typeahead: works within a limit window, paginating to an off-page match',
+  async (t) => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      label: `Item${i}`,
+      value: `item-${i}`,
+    }))
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      typeahead
-      items={items}
-      limit={3}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('Item9')
-  await delay()
-  t.is(highlighted, 'Item9')
-})
+    await delay()
+    stdin.write('Item9')
+    await delay()
+    t.is(highlighted, 'Item9')
+  }
+)
 
-test('typeahead: isFocused=false blocks typeahead', async (t) => {
+test.serial('typeahead: isFocused=false blocks typeahead', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
