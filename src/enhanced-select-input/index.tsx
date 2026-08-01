@@ -694,7 +694,7 @@ export function EnhancedSelectInput<V>({
         {visibleItems.map((item, index) => {
           const isSelected = index + rotateIndex === selectedIndex
           const isChecked = isMultiple
-            ? checkedKeys.has(item.key ?? String(item.value))
+            ? checkedKeys.has(itemKey(item))
             : undefined
 
           // Determine if we need to render a group header before this item.
@@ -713,7 +713,7 @@ export function EnhancedSelectInput<V>({
           }
 
           return (
-            <React.Fragment key={item.key ?? String(item.value)}>
+            <React.Fragment key={itemKey(item)}>
               {groupHeader}
               <Box>
                 {item.indicator && !isMultiple ? (
