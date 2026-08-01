@@ -28,6 +28,19 @@ const delay = async (ms = 100) =>
     setTimeout(resolve, ms)
   })
 
+// Ink 7 flushes a lone Escape byte asynchronously (it briefly buffers it in
+// case more bytes follow, e.g. an arrow-key sequence), so state updates
+// triggered by Escape can land after a fixed `delay()` under load. Poll
+// instead of sleeping-and-hoping for those cases.
+const waitFor = async (condition: () => boolean, timeout = 2000) => {
+  const start = Date.now()
+  while (!condition()) {
+    if (Date.now() - start >= timeout) return
+    // eslint-disable-next-line no-await-in-loop
+    await delay(20)
+  }
+}
+
 test('render with default options', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
@@ -983,7 +996,7 @@ test('Escape calls onCancel', async (t) => {
 
   await delay()
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled)
   t.true(cancelled)
 })
 
@@ -1456,7 +1469,7 @@ test('selection moves off a now-disabled item when items update', async (t) => {
     />
   )
 
-  await delay()
+  await waitFor(() => highlighted !== 'B')
   t.not(highlighted, 'B')
 })
 
@@ -2290,7 +2303,7 @@ test('Escape calls onCancel in multi-select mode', async (t) => {
   stdin.write(SPACE) // Toggle A
   await delay()
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled)
   t.true(cancelled)
 })
 
@@ -2901,7 +2914,7 @@ test('selection resets when items are completely replaced', async (t) => {
     />
   )
 
-  await delay()
+  await waitFor(() => highlighted === 'X')
   t.is(highlighted, 'X')
 })
 
@@ -3078,7 +3091,7 @@ test('searchable: escape calls onCancel when query is already empty', async (t) 
   await delay()
   // No query typed, escape should call onCancel
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled)
   t.true(cancelled)
 })
 
@@ -3108,7 +3121,7 @@ test('searchable: escape clears query first, then onCancel on second press', asy
 
   // Second escape calls onCancel
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled)
   t.true(cancelled)
 })
 

@@ -11,7 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20, 22]
+        include:
+          - node-version: 20
+            ink: '6'
+          - node-version: 22
+            ink: '6'
+          - node-version: 22
+            ink: '7'
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +34,14 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Lint
+        if: matrix.ink == '6'
         run: yarn lint
+
+      - name: Install Ink 7
+        if: matrix.ink == '7'
+        # --no-lockfile: override ink/react for this job only, without
+        # writing to (or drifting from) the committed yarn.lock.
+        run: yarn add --dev ink@^7.1.1 react@^19.2.0 --no-lockfile
 
       - name: Test
         run: yarn test
