@@ -1514,6 +1514,91 @@ test('selection preserved when items update but current slot is still valid', as
   t.is(highlighted, 'B')
 })
 
+test('onHighlight fires with the new item when its content changes at the same index', async (t) => {
+  let highlighted = ''
+  let callCount = 0
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+  const callsAfterMount = callCount
+
+  // Same length, same selectedIndex, but the item at index 1 now has
+  // different content (and thus a different derived key) — onHighlight
+  // must fire again with the new item rather than staying silent because
+  // selectedIndex didn't change.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B2', value: 'b2' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await waitFor(() => callCount > callsAfterMount)
+  t.is(highlighted, 'B2')
+})
+
+test('onHighlight does not re-fire when items update with identical content', async (t) => {
+  let callCount = 0
+  // Stable reference across rerenders (like a memoized parent callback) so
+  // this isolates the items-array-identity behaviour from onHighlight
+  // identity, which is independently a dep of the effect.
+  const onHighlight = () => {
+    callCount++
+  }
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  const callsAfterMount = callCount
+  t.true(callsAfterMount > 0)
+
+  // Fresh array reference, identical content and keys — must not trigger
+  // a spurious onHighlight call.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  t.is(callCount, callsAfterMount)
+})
+
 // --- #16: duplicate key warning ---
 
 test('warns in development when object-valued items have no key field', async (t) => {
