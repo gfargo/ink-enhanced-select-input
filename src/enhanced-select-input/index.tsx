@@ -324,21 +324,18 @@ export function useEnhancedSelectInput<V>({
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
-  const [rotateIndex, setRotateIndex] = useState(
-    limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
-  )
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
     () => new Set(defaultSelectedKeys ?? [])
   )
 
   const hasItems = filteredItems.length > 0
-  // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes
-  // without the selection moving (e.g. a consumer shrinking `limit` to fit a
-  // resized terminal) — pageStarts recomputes but rotateIndex doesn't. Snap
-  // it down to the nearest valid page start on every render rather than
-  // requiring an exact match, so the visible window is always bounded by the
-  // current `limit` even mid-transition.
-  const effectiveRotateIndex = limit ? pageStartFor(pageStarts, rotateIndex) : 0
+  // Derive the pagination window offset directly from selectedIndex so there
+  // is a single source of truth. pageStartFor finds the largest page-start
+  // that is <= selectedIndex, keeping the selection inside the visible window
+  // even when limit or pageStarts change at runtime (e.g. terminal resize).
+  const effectiveRotateIndex = limit
+    ? pageStartFor(pageStarts, selectedIndex)
+    : 0
   const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
@@ -385,7 +382,6 @@ export function useEnhancedSelectInput<V>({
 
     if (filteredItems.length === 0) {
       setSelectedIndex(0)
-      if (limit) setRotateIndex(0)
       return
     }
 
@@ -393,7 +389,6 @@ export function useEnhancedSelectInput<V>({
     if (!currentItem || currentItem.disabled) {
       const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
       setSelectedIndex(newIndex)
-      if (limit) setRotateIndex(pageStartFor(pageStarts, newIndex))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
@@ -413,9 +408,6 @@ export function useEnhancedSelectInput<V>({
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
-    if (limit) {
-      setRotateIndex(pageStartFor(pageStarts, nextIndex))
-    }
   }
 
   useInput(
@@ -425,7 +417,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && (key.backspace || key.delete)) {
         setSearchQuery((previous) => previous.slice(0, -1))
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -434,7 +425,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && key.escape && searchQuery) {
         setSearchQuery('')
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -541,7 +531,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && input && !key.ctrl && !key.meta) {
         setSearchQuery((previous) => previous + input)
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
