@@ -1599,6 +1599,86 @@ test('onHighlight does not re-fire when items update with identical content', as
   t.is(callCount, callsAfterMount)
 })
 
+test('revalidation effect moves selection off an item that becomes disabled', async (t) => {
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  // The highlighted item (B, index 1) becomes disabled — the revalidation
+  // effect must notice on the next filteredItems change and move the
+  // selection to the nearest enabled item (C) rather than leaving
+  // selectedIndex pointing at a now-disabled item.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b', disabled: true },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await waitFor(() => highlighted === 'C')
+  t.is(highlighted, 'C')
+})
+
+test('revalidation effect resets selection when the highlighted item is filtered out', async (t) => {
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Cherry', value: 'cherry' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Banana')
+
+  // Shrinking the item set out from under a fixed initialIndex/selectedIndex
+  // (no search involved) removes the previously highlighted item — the
+  // revalidation effect must fall back to the nearest valid index instead
+  // of reading past the end of the new array.
+  rerender(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await waitFor(() => highlighted === 'Apple')
+  t.is(highlighted, 'Apple')
+})
+
 // --- #16: duplicate key warning ---
 
 test('warns in development when object-valued items have no key field', async (t) => {
