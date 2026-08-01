@@ -812,6 +812,20 @@ test('all items disabled: nothing is navigable', async (t) => {
   t.is(selected, '')
 })
 
+test('all items disabled: no selection cursor is rendered', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b', disabled: true },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  // `resolveInitialIndex` lands on index 0 (the clamped fallback) since
+  // nothing is enabled — render must not paint that as selected.
+  t.false(lastFrame()!.includes('>'))
+})
+
 test('all items disabled: Home/End do not move cursor or fire onHighlight', async (t) => {
   const items = [
     { label: 'A', value: 'a', disabled: true },
