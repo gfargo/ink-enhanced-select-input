@@ -1549,6 +1549,74 @@ test('selection preserved when items update but current slot is still valid', as
   t.is(highlighted, 'B')
 })
 
+// --- #62: onHighlight refires on every parent re-render when the callback is inline ---
+
+test('inline onHighlight is not re-invoked on parent re-renders with no highlight change', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper({ tick }: { readonly tick: number }) {
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+          }}
+        />
+      </Box>
+    )
+  }
+
+  const { rerender } = render(<Wrapper tick={0} />)
+  await delay()
+  t.is(callCount, 1)
+
+  for (let tick = 1; tick <= 5; tick++) {
+    rerender(<Wrapper tick={tick} />)
+    // eslint-disable-next-line no-await-in-loop
+    await delay()
+  }
+
+  t.is(callCount, 1)
+})
+
+test('setState inside onHighlight does not cause an infinite render loop', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper() {
+    const [tick, setTick] = React.useState(0)
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+            setTick((previous) => previous + 1)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  render(<Wrapper />)
+  await delay(300)
+
+  t.is(callCount, 1)
+})
+
 // --- #16: duplicate key warning ---
 
 test('warns in development when object-valued items have no key field', async (t) => {
