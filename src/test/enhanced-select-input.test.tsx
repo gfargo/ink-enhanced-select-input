@@ -3327,11 +3327,12 @@ test('searchable: enter selects from filtered results', async (t) => {
 
   await delay()
   stdin.write('ban')
-  // Wait for the filter to actually land before pressing Enter — under
-  // load a fixed delay() isn't always long enough for the query state
-  // update to commit, which would leave Apple highlighted instead of the
-  // filtered-to Banana.
-  await waitFor(() => lastFrame()!.includes('/ ban'))
+  // Wait for the filtered-to item to actually be highlighted before
+  // pressing Enter. The query text lands in a render before the effect
+  // that resets `selectedIndex` for the new `filteredItems` commits, so
+  // under load, waiting only for `/ ban` to appear can still race Enter
+  // against a stale selectedIndex that's pointing at Apple.
+  await waitFor(() => lastFrame()!.includes('> Banana'))
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'Banana')
