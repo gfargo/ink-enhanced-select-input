@@ -236,6 +236,7 @@ Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and 
 - If the buffer is idle/empty and the typed character matches an enabled item's `hotkey`, the hotkey fires as usual; once a buffer is active, further characters append to it instead of firing hotkeys
 - A character with no matching item leaves the current selection unchanged
 - Ignored entirely when `searchable` is `true` — printable characters remain search input in that mode
+- In single-select mode, `Space` is treated as a buffer character (the multi-select toggle path doesn't apply), so a leading space only matches labels that begin with a space
 
 ### Avoiding Key Conflicts (`keyMap`)
 

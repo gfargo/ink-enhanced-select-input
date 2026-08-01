@@ -4265,3 +4265,65 @@ test.serial('typeahead: isFocused=false blocks typeahead', async (t) => {
   await delay()
   t.is(highlighted, 'Apple')
 })
+
+test.serial(
+  'typeahead: vim nav keys are excluded from the buffer, not treated as a jump prefix',
+  async (t) => {
+    // Items ordered so vim-down and a "j..." prefix jump land on different
+    // items: if `j` were captured into the type-ahead buffer instead of
+    // triggering vim navigation, the highlight would land on Jam.
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Jam', value: 'jam' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'Apple')
+
+    stdin.write('j')
+    await delay()
+    t.is(highlighted, 'Banana')
+  }
+)
+
+test.serial(
+  'typeahead: Ctrl-modified keys are ignored, not captured into the buffer',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'Apple')
+
+    // Ctrl+B (\u0002) surfaces as input 'b' with key.ctrl=true; the same
+    // guard also excludes key.meta, which follows the identical code path.
+    stdin.write('\u0002')
+    await delay()
+    t.is(highlighted, 'Apple')
+  }
+)
