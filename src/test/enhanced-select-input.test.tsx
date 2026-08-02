@@ -1369,6 +1369,9 @@ type HookHarnessProperties = {
   readonly orientation?: 'vertical' | 'horizontal'
   // eslint-disable-next-line react/boolean-prop-naming
   readonly searchable?: boolean
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly multiple?: boolean
+  readonly onToggle?: (item: Item<unknown>, checked: boolean) => void
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -1473,6 +1476,258 @@ test.serial('hook returns empty state for empty items', async (t) => {
   await delay()
   t.is(result?.hasItems, false)
   t.is(result?.visibleItems.length, 0)
+  t.is(result?.windowIndex, -1)
+  t.is(result?.selectedItem, undefined)
+})
+
+// --- F13: headless hook ergonomics ---
+
+test('hook returns windowIndex, selectedItem, and filteredItems', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      limit={2}
+      initialIndex={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectedIndex, 2)
+  t.is(result?.rotateIndex, 2)
+  t.is(result?.windowIndex, 0)
+  t.is(result?.selectedItem?.value, 'c')
+  t.is(result?.filteredItems.length, 4)
+})
+
+test('windowIndex tracks navigation within a page', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={items}
+      limit={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.windowIndex, 0)
+  t.is(result?.rotateIndex, 0)
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(result?.selectedIndex, 1)
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 1)
+})
+
+test('setSelectedIndex moves selection and clamps out-of-range values', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.setSelectedIndex(2)
+  await waitFor(() => result?.selectedIndex === 2)
+  t.is(result?.selectedIndex, 2)
+
+  result?.setSelectedIndex(100)
+  await waitFor(() => result?.selectedIndex === 2)
+  t.is(result?.selectedIndex, 2)
+
+  result?.setSelectedIndex(-5)
+  await waitFor(() => result?.selectedIndex === 0)
+  t.is(result?.selectedIndex, 0)
+})
+
+test('setSelectedIndex keeps the pagination window in sync when limit is set', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+    { label: 'E', value: 'e' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      limit={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 0)
+
+  // Jump to an index on a later page — the window should snap to the page
+  // containing it, not stay put with an out-of-range windowIndex.
+  result?.setSelectedIndex(3)
+  await waitFor(() => result?.selectedIndex === 3)
+  t.is(result?.rotateIndex, 2)
+  t.is(result?.windowIndex, 1)
+  t.deepEqual(
+    result?.visibleItems.map((item) => item.value),
+    ['c', 'd']
+  )
+  t.is(result?.visibleItems[result.windowIndex]?.value, 'd')
+
+  // Jump back to the first page.
+  result?.setSelectedIndex(0)
+  await waitFor(() => result?.selectedIndex === 0)
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 0)
+})
+
+test('setSearchQuery filters items and resets selection', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Avocado', value: 'avocado' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      searchable
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.setSelectedIndex(2)
+  await waitFor(() => result?.selectedIndex === 2)
+  t.is(result?.selectedIndex, 2)
+
+  result?.setSearchQuery('a')
+  await waitFor(() => result?.searchQuery === 'a')
+  t.is(result?.searchQuery, 'a')
+  t.is(result?.filteredItems.length, 3)
+  t.is(result?.selectedIndex, 0)
+})
+
+test('toggle flips checked state of the highlighted item and a given item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const toggled: Array<[string, boolean]> = []
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      onToggle={(item, checked) => {
+        toggled.push([String(item.value), checked])
+      }}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.toggle()
+  await waitFor(() => Boolean(result?.checkedKeys.has('a')))
+  t.true(result?.checkedKeys.has('a'))
+  t.deepEqual(toggled.at(-1), ['a', true])
+
+  result?.toggle(items[1])
+  await waitFor(() => Boolean(result?.checkedKeys.has('b')))
+  t.true(result?.checkedKeys.has('b'))
+  t.deepEqual(toggled.at(-1), ['b', true])
+})
+
+test('toggle is a no-op outside multiple mode', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.toggle()
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
+
+  result?.toggle(items[0])
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('toggle is a no-op on disabled items in multiple mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.toggle(items[0])
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
 })
 
 // --- #15: items prop sync after mount ---
@@ -1515,7 +1770,7 @@ test.serial(
       />
     )
 
-    await delay()
+    await waitFor(() => highlighted === 'B')
     t.is(highlighted, 'B')
   }
 )

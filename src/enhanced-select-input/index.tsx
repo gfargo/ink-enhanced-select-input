@@ -286,6 +286,31 @@ export type UseEnhancedSelectInputResult<V> = {
   checkedKeys: Set<string>
   /** Current search query. Empty string when searchable is false or no input yet. */
   searchQuery: string
+  /** The currently highlighted item, or undefined when there are no items. */
+  selectedItem: Item<V> | undefined
+  /** The filtered (pre-pagination) items array. */
+  filteredItems: Array<Item<V>>
+  /**
+   * Index of the highlighted item within `visibleItems` (window-relative).
+   * Always `selectedIndex - rotateIndex`. `-1` when there are no items.
+   */
+  windowIndex: number
+  /**
+   * Imperatively move the highlighted item to `index` (clamped into range,
+   * resolved to the nearest enabled item). Keeps the pagination window in sync.
+   */
+  setSelectedIndex: (index: number) => void
+  /**
+   * Imperatively set the search query, resetting the highlighted selection
+   * back to the top. No-op filtering effect unless `searchable` is true.
+   */
+  setSearchQuery: (query: string) => void
+  /**
+   * Toggle the checked state of `item` (defaults to the currently highlighted
+   * item). No-op outside `multiple` mode, when the item is missing, or when
+   * it is disabled. Fires `onToggle`.
+   */
+  toggle: (item?: Item<V>) => void
 }
 
 /**
@@ -319,7 +344,8 @@ export function useEnhancedSelectInput<V>({
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
   }
-  const [searchQuery, setSearchQuery] = useState('')
+  // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
+  const [searchQuery, setSearchQueryState] = useState('')
 
   // Keep the latest onHighlight in a ref so the highlight effect below can
   // depend only on the highlighted index, not on the callback reference —
@@ -351,7 +377,8 @@ export function useEnhancedSelectInput<V>({
   )
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
-  const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
+  // eslint-disable-next-line react/hook-use-state -- public API name (setSelectedIndex) is reserved for the wrapper below
+  const [selectedIndex, setSelectedIndexState] = useState(safeInitialIndex)
   // Latest-value ref so the revalidation effect can read the current
   // selectedIndex without listing it as a dependency (which would make the
   // effect re-run on every navigation keypress instead of only when the
@@ -394,6 +421,8 @@ export function useEnhancedSelectInput<V>({
         filteredItems.length - effectiveRotateIndex - visibleItems.length
       )
     : 0
+  const selectedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
@@ -429,7 +458,7 @@ export function useEnhancedSelectInput<V>({
   // when items/searchQuery actually change content — not on every render.
   useEffect(() => {
     if (filteredItems.length === 0) {
-      setSelectedIndex(0)
+      setSelectedIndexState(0)
       return
     }
 
@@ -439,7 +468,7 @@ export function useEnhancedSelectInput<V>({
         filteredItems,
         selectedIndexReference.current
       )
-      setSelectedIndex(newIndex)
+      setSelectedIndexState(newIndex)
     }
   }, [filteredItems, limit, pageStarts])
 
@@ -492,7 +521,36 @@ export function useEnhancedSelectInput<V>({
   }, [highlightedKey])
 
   const updateSelection = (nextIndex: number) => {
-    setSelectedIndex(nextIndex)
+    setSelectedIndexState(nextIndex)
+  }
+
+  // Toggle the checked state of `item` (defaults to the highlighted item) in
+  // multi-select mode. Shared by the Space keybinding and the public API so
+  // custom keybindings can reuse the exact same behaviour.
+  const toggle = (item: Item<V> | undefined = filteredItems[selectedIndex]) => {
+    if (!multiple || !item || item.disabled) return
+    const k = itemKey(item)
+    // Compute the next set from the ref (not React's functional-updater
+    // `previous` argument) and assign it back synchronously, right here —
+    // React may defer actually invoking a functional setState updater, so a
+    // same-tick Enter that reads checkedKeysReference.current must not
+    // depend on that updater having run yet.
+    const next = new Set(checkedKeysReference.current)
+    const nowChecked = !next.has(k)
+    if (nowChecked) next.add(k)
+    else next.delete(k)
+    checkedKeysReference.current = next
+    onToggle?.(item, nowChecked)
+    setCheckedKeys(next)
+  }
+
+  const setSelectedIndexPublic = (index: number) => {
+    updateSelection(resolveInitialIndex(filteredItems, index))
+  }
+
+  const setSearchQueryPublic = (query: string) => {
+    setSearchQueryState(query)
+    setSelectedIndexState(0)
   }
 
   useInput(
@@ -500,16 +558,16 @@ export function useEnhancedSelectInput<V>({
     (input, key) => {
       // In searchable mode, handle Backspace/Delete to remove last character
       if (searchable && (key.backspace || key.delete)) {
-        setSearchQuery((previous) => previous.slice(0, -1))
-        setSelectedIndex(0)
+        setSearchQueryState((previous) => previous.slice(0, -1))
+        setSelectedIndexState(0)
         return
       }
 
       // In searchable mode, Escape clears the query first; if already
       // empty, it falls through to onCancel.
       if (searchable && key.escape && searchQuery) {
-        setSearchQuery('')
-        setSelectedIndex(0)
+        setSearchQueryState('')
+        setSelectedIndexState(0)
         return
       }
 
@@ -545,24 +603,7 @@ export function useEnhancedSelectInput<V>({
       // Space: toggle in multi-select mode (but not in searchable mode
       // where space is a valid search character)
       if (km.toggle && multiple && !searchable && input === ' ') {
-        const item = filteredItems[selectedIndex]
-        if (item && !item.disabled) {
-          const k = itemKey(item)
-          // Compute the next set from the ref (not the `previous` argument
-          // React's updater would hand us) and assign it to the ref
-          // synchronously, right here — React may defer actually invoking a
-          // functional setState updater, so a same-tick Enter that reads
-          // checkedKeysReference.current must not depend on that updater having
-          // run yet.
-          const next = new Set(checkedKeysReference.current)
-          const nowChecked = !next.has(k)
-          if (nowChecked) next.add(k)
-          else next.delete(k)
-          checkedKeysReference.current = next
-          onToggle?.(item, nowChecked)
-          setCheckedKeys(next)
-        }
-
+        toggle()
         return
       }
 
@@ -617,9 +658,9 @@ export function useEnhancedSelectInput<V>({
           )
           onConfirm?.(confirmed)
         } else {
-          const selectedItem = filteredItems[selectedIndex]
-          if (selectedItem && !selectedItem.disabled) {
-            onSelect?.(selectedItem)
+          const itemToSelect = filteredItems[selectedIndex]
+          if (itemToSelect && !itemToSelect.disabled) {
+            onSelect?.(itemToSelect)
           }
         }
 
@@ -629,8 +670,8 @@ export function useEnhancedSelectInput<V>({
       // In searchable mode, capture printable characters as search input.
       // This must come after navigation key handling.
       if (searchable && input && !key.ctrl && !key.meta) {
-        setSearchQuery((previous) => previous + input)
-        setSelectedIndex(0)
+        setSearchQueryState((previous) => previous + input)
+        setSelectedIndexState(0)
         return
       }
 
@@ -659,6 +700,12 @@ export function useEnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
+    selectedItem,
+    filteredItems,
+    windowIndex,
+    setSelectedIndex: setSelectedIndexPublic,
+    setSearchQuery: setSearchQueryPublic,
+    toggle,
   }
 }
 

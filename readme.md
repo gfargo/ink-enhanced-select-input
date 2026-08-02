@@ -288,13 +288,13 @@ function MyItem({ isSelected, isDisabled, label }) {
 
 ### Headless Hook
 
-If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly:
+If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly — either from the main package or from the dedicated `ink-enhanced-select-input/headless` subpath (no component/render code included):
 
 ```tsx
-import { useEnhancedSelectInput } from 'ink-enhanced-select-input'
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
 
 function MyCustomSelect({ items, onSelect }) {
-  const { selectedIndex, rotateIndex, visibleItems, itemsAbove, itemsBelow } =
+  const { visibleItems, windowIndex, itemsAbove, itemsBelow } =
     useEnhancedSelectInput({ items, onSelect })
 
   return (
@@ -303,7 +303,7 @@ function MyCustomSelect({ items, onSelect }) {
       {visibleItems.map((item, i) => (
         <Text
           key={item.key ?? String(item.value)}
-          color={i + rotateIndex === selectedIndex ? 'cyan' : undefined}
+          color={i === windowIndex ? 'cyan' : undefined}
         >
           {item.label}
         </Text>
@@ -314,7 +314,25 @@ function MyCustomSelect({ items, onSelect }) {
 }
 ```
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys, searchQuery }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`. `searchQuery` is the current filter string — empty when `searchable` is false.
+`windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
+
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns:
+
+- `selectedIndex` — index of the highlighted item within `filteredItems`.
+- `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
+- `windowIndex` — index of the highlighted item within `visibleItems` (`selectedIndex - rotateIndex`; `-1` when there are no items).
+- `visibleItems` — the slice of items visible in the current window.
+- `filteredItems` — all items after search filtering, before pagination.
+- `selectedItem` — the currently highlighted item, or `undefined` when there are no items.
+- `hasItems` — `true` when `filteredItems` is non-empty.
+- `itemsAbove` / `itemsBelow` — counts of items hidden above/below the current window.
+- `checkedKeys` — a `Set<string>` of checked item keys, only populated when `multiple` is `true`.
+- `searchQuery` — the current filter string, empty when `searchable` is `false`.
+- `setSelectedIndex(index)` — imperatively move the highlighted item, clamping into range and snapping `rotateIndex` to the containing page.
+- `setSearchQuery(query)` — imperatively set the search query and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
+- `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode or on a disabled item, and fires `onToggle`.
+
+These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
 ## Props
 
