@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink'
-import React, { type FC, useEffect, useMemo, useState } from 'react'
+import React, { type FC, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Item<V> = {
   /**
@@ -11,6 +11,13 @@ export type Item<V> = {
   label: string
   value: V
   hotkey?: string
+  /**
+   * Custom indicator shown only for the highlighted item in single-select
+   * mode. Ignored when `multiple` is true — the built-in checkbox indicator
+   * takes precedence there (a dev warning is logged if both are supplied).
+   * To customize the indicator in multi-select mode, use
+   * `indicatorComponent` instead.
+   */
   indicator?: React.ReactNode
   disabled?: boolean
   /**
@@ -314,6 +321,13 @@ export function useEnhancedSelectInput<V>({
   }
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Keep the latest onHighlight in a ref so the highlight effect below can
+  // depend only on the highlighted index, not on the callback reference —
+  // an inline arrow function (as shown in the README) is a new reference
+  // every render and would otherwise re-fire the effect every render.
+  const onHighlightReference = useRef(onHighlight)
+  onHighlightReference.current = onHighlight
+
   // Filter items based on search query
   const filteredItems =
     searchable && searchQuery
@@ -332,9 +346,6 @@ export function useEnhancedSelectInput<V>({
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
-  const [rotateIndex, setRotateIndex] = useState(
-    limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
-  )
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
     const disabledKeys = new Set(
       items.filter((item) => item.disabled).map((item) => itemKey(item))
@@ -343,15 +354,19 @@ export function useEnhancedSelectInput<V>({
       (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
     )
   })
+  // Mirrors `checkedKeys` synchronously so the Enter branch below can read
+  // the committed set even when a Space toggle and Enter are written in the
+  // same tick (no intervening render to flush the `checkedKeys` state).
+  const checkedKeysReference = useRef(checkedKeys)
 
   const hasItems = filteredItems.length > 0
-  // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes
-  // without the selection moving (e.g. a consumer shrinking `limit` to fit a
-  // resized terminal) — pageStarts recomputes but rotateIndex doesn't. Snap
-  // it down to the nearest valid page start on every render rather than
-  // requiring an exact match, so the visible window is always bounded by the
-  // current `limit` even mid-transition.
-  const effectiveRotateIndex = limit ? pageStartFor(pageStarts, rotateIndex) : 0
+  // Derive the pagination window offset directly from selectedIndex so there
+  // is a single source of truth. pageStartFor finds the largest page-start
+  // that is <= selectedIndex, keeping the selection inside the visible window
+  // even when limit or pageStarts change at runtime (e.g. terminal resize).
+  const effectiveRotateIndex = limit
+    ? pageStartFor(pageStarts, selectedIndex)
+    : 0
   const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
@@ -398,7 +413,6 @@ export function useEnhancedSelectInput<V>({
 
     if (filteredItems.length === 0) {
       setSelectedIndex(0)
-      if (limit) setRotateIndex(0)
       return
     }
 
@@ -406,29 +420,46 @@ export function useEnhancedSelectInput<V>({
     if (!currentItem || currentItem.disabled) {
       const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
       setSelectedIndex(newIndex)
-      if (limit) setRotateIndex(pageStartFor(pageStarts, newIndex))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
 
+  // Warn in development when per-item `indicator` is combined with
+  // `multiple` — the checkbox indicator always wins in multi-select mode,
+  // so a supplied `item.indicator` is silently unused otherwise. Depend on
+  // this derived boolean (not `items`) so the warning doesn't re-fire on
+  // every parent re-render that passes a new-but-equivalent items array.
+  const hasIgnoredIndicator =
+    multiple && items.some((item) => Boolean(item.indicator))
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!hasIgnoredIndicator) return
+    console.warn(
+      '[ink-enhanced-select-input] item.indicator is ignored when multiple is true — ' +
+        'the built-in checkbox indicator takes precedence. Use indicatorComponent to ' +
+        'customize indicators in multi-select mode.'
+    )
+  }, [hasIgnoredIndicator])
+
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content).
+  // parent re-render that passes a new array with identical content) or
+  // when onHighlight's reference changes (an inline callback is a new
+  // reference every render).
   useEffect(() => {
     if (hasItems) {
       const highlightedItem = filteredItems[selectedIndex]
       if (highlightedItem && !highlightedItem.disabled) {
-        onHighlight?.(highlightedItem)
+        onHighlightReference.current?.(highlightedItem)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, onHighlight, hasItems])
+  }, [selectedIndex, hasItems])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
-    if (limit) {
-      setRotateIndex(pageStartFor(pageStarts, nextIndex))
-    }
   }
 
   useInput(
@@ -438,7 +469,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && (key.backspace || key.delete)) {
         setSearchQuery((previous) => previous.slice(0, -1))
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -447,7 +477,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && key.escape && searchQuery) {
         setSearchQuery('')
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -486,14 +515,19 @@ export function useEnhancedSelectInput<V>({
         const item = filteredItems[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
-          setCheckedKeys((previous) => {
-            const next = new Set(previous)
-            const nowChecked = !next.has(k)
-            if (nowChecked) next.add(k)
-            else next.delete(k)
-            onToggle?.(item, nowChecked)
-            return next
-          })
+          // Compute the next set from the ref (not the `previous` argument
+          // React's updater would hand us) and assign it to the ref
+          // synchronously, right here — React may defer actually invoking a
+          // functional setState updater, so a same-tick Enter that reads
+          // checkedKeysReference.current must not depend on that updater having
+          // run yet.
+          const next = new Set(checkedKeysReference.current)
+          const nowChecked = !next.has(k)
+          if (nowChecked) next.add(k)
+          else next.delete(k)
+          checkedKeysReference.current = next
+          onToggle?.(item, nowChecked)
+          setCheckedKeys(next)
         }
 
         return
@@ -540,10 +574,13 @@ export function useEnhancedSelectInput<V>({
           // In multi-select mode Enter confirms the full selection. Default
           // to `items` (not `filteredItems`) so checks made before/between
           // search filters aren't silently dropped from the confirmed set.
+          // Read from the ref (not the `checkedKeys` state) since a Space
+          // toggle queued in the same tick has not been committed to state
+          // yet when this handler runs.
           const confirmSource =
             confirmScope === 'filtered' ? filteredItems : items
           const confirmed = confirmSource.filter((item) =>
-            checkedKeys.has(itemKey(item))
+            checkedKeysReference.current.has(itemKey(item))
           )
           onConfirm?.(confirmed)
         } else {
@@ -561,7 +598,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && input && !key.ctrl && !key.meta) {
         setSearchQuery((previous) => previous + input)
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -708,9 +744,15 @@ export function EnhancedSelectInput<V>({
         gap={isVertical ? 0 : 2}
       >
         {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+          // A disabled item never gets a selection cursor, even if it's the
+          // resolved selectedIndex (e.g. every item is disabled, so
+          // resolveInitialIndex has nowhere valid to land). This keeps the
+          // render in agreement with the onHighlight effect, which only
+          // fires for enabled items.
+          const isSelected =
+            index + rotateIndex === selectedIndex && !item.disabled
           const isChecked = isMultiple
-            ? checkedKeys.has(item.key ?? String(item.value))
+            ? checkedKeys.has(itemKey(item))
             : undefined
 
           // Determine if we need to render a group header before this item.
@@ -729,7 +771,7 @@ export function EnhancedSelectInput<V>({
           }
 
           return (
-            <React.Fragment key={item.key ?? String(item.value)}>
+            <React.Fragment key={itemKey(item)}>
               {groupHeader}
               <Box>
                 {item.indicator && !isMultiple ? (
