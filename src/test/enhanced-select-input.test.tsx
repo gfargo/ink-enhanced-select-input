@@ -5331,3 +5331,42 @@ test.serial(
     t.is(highlighted, 'Apple')
   }
 )
+
+test.serial(
+  'typeahead: combined with multiple, jumps the highlight without toggling checkedKeys',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
+
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        typeahead
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'Apple')
+    t.is((lastFrame()!.match(/\[x]/g) ?? []).length, 0)
+
+    stdin.write('c')
+    await delay()
+    t.is(highlighted, 'Cherry')
+    t.is((lastFrame()!.match(/\[x]/g) ?? []).length, 0)
+
+    stdin.write(SPACE)
+    await delay()
+    const frame = lastFrame()!
+    t.is((frame.match(/\[x]/g) ?? []).length, 1)
+    const cherryLine = frame.split('\n').find((line) => line.includes('Cherry'))
+    t.true(cherryLine?.includes('[x]'))
+  }
+)
