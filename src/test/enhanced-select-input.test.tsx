@@ -21,6 +21,12 @@ const ESCAPE = '\u001B'
 const HOME = '\u001B[H'
 const END = '\u001B[F'
 const SPACE = ' '
+const CTRL_X = '\u0018' // Ctrl+X
+const ALT_X = '\u001Bx' // Alt+X
+const CTRL_J = '\u000A' // Ctrl+J
+const CTRL_K = '\u000B' // Ctrl+K
+const CTRL_H = '\u0008' // Ctrl+H
+const CTRL_L = '\u000C' // Ctrl+L
 
 // Small delay to let React/Ink process state updates
 const delay = async (ms = 250) =>
@@ -619,6 +625,50 @@ test.serial('hotkey does not trigger for disabled item', async (t) => {
   t.is(selected, '')
 })
 
+test('Ctrl+<letter> does not trigger a matching item hotkey', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'Danger', value: 'danger', hotkey: 'x' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(CTRL_X)
+  await delay()
+  t.is(selected, '')
+})
+
+test('Alt+<letter> does not trigger a matching item hotkey', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'Danger', value: 'danger', hotkey: 'x' },
+  ]
+
+  let selected = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onSelect={(item) => {
+        selected = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ALT_X)
+  await delay()
+  t.is(selected, '')
+})
+
 // --- isFocused ---
 
 test.serial('isFocused=false disables keyboard input', async (t) => {
@@ -936,6 +986,66 @@ test.serial('vim nav key takes priority over matching hotkey', async (t) => {
   await delay()
   t.is(highlighted, 'B')
   t.is(selected, '') // Hotkey must not have fired
+})
+
+test('Ctrl+J and Ctrl+K do not navigate in vertical orientation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="vertical"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(CTRL_K)
+  await delay()
+  t.is(highlighted, 'A') // Ctrl+K must not navigate up/wrap
+
+  stdin.write(CTRL_J)
+  await delay()
+  t.is(highlighted, 'A') // Ctrl+J must not navigate down
+})
+
+test('Ctrl+H and Ctrl+L do not navigate in horizontal orientation', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      orientation="horizontal"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(CTRL_L)
+  await delay()
+  t.is(highlighted, 'A') // Ctrl+L must not navigate right
+
+  stdin.write(CTRL_H)
+  await delay()
+  t.is(highlighted, 'A') // Ctrl+H must not navigate left
 })
 
 // --- DefaultIndicatorComponent in isolation ---
