@@ -3351,13 +3351,13 @@ test('searchable: escape clears the search query', async (t) => {
 
   await delay()
   stdin.write('app')
-  await delay()
+  await waitFor(() => !lastFrame()!.includes('Banana'))
 
   let frame = lastFrame()!
   t.false(frame.includes('Banana'))
 
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ Search...'))
 
   frame = lastFrame()!
   // Query cleared — all items visible again
@@ -3497,7 +3497,7 @@ test('searchable: vim keys (j/k) are treated as search input, not navigation', a
 
   await delay()
   stdin.write('j')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ j'))
 
   const frame = lastFrame()!
   // 'j' should be in the search query, not navigate
@@ -3527,7 +3527,7 @@ test('searchable: hotkeys are disabled', async (t) => {
 
   await delay()
   stdin.write('a')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   // 'a' should filter, not trigger hotkey
   t.is(selected, '')
@@ -3547,7 +3547,7 @@ test('searchable: shows "No matches" when query matches nothing', async (t) => {
 
   await delay()
   stdin.write('xyz')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('No matches'))
 
   const frame = lastFrame()!
   t.true(frame.includes('No matches'))
@@ -3576,12 +3576,12 @@ test('searchable: selection resets to first item when query changes', async (t) 
 
   await delay()
   stdin.write(ARROW_DOWN)
-  await delay()
+  await waitFor(() => highlighted === 'Apricot')
   t.is(highlighted, 'Apricot')
 
   // Typing resets selection to first match
   stdin.write('b')
-  await delay()
+  await waitFor(() => highlighted === 'Banana')
   t.is(highlighted, 'Banana')
 })
 
@@ -3666,7 +3666,7 @@ test('searchable: hook exposes searchQuery in result', async (t) => {
   t.is(result?.searchQuery, '')
 
   stdin.write('app')
-  await delay()
+  await waitFor(() => result?.searchQuery === 'app')
   t.is(result?.searchQuery, 'app')
 })
 
@@ -3695,7 +3695,7 @@ test('searchable: works with limit/pagination', async (t) => {
 
   await delay()
   stdin.write('a')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   const frame = lastFrame()!
   // "a" matches Alpha, Bravo (has 'a'), Charlie (has 'a'), Delta (has 'a'), Able
@@ -3716,7 +3716,7 @@ test('searchable: groups still render with filtered items', async (t) => {
 
   await delay()
   stdin.write('ap')
-  await delay()
+  await waitFor(() => !lastFrame()!.includes('Broccoli'))
 
   const frame = lastFrame()!
   t.true(frame.includes('── Fruits ──'))
@@ -3825,7 +3825,7 @@ test('searchable + multiple: confirmScope "filtered" restores scoped confirm beh
   ]
 
   let confirmed: string[] = []
-  const { stdin } = render(
+  const { stdin, lastFrame } = render(
     <EnhancedSelectInput
       searchable
       multiple
@@ -3840,9 +3840,11 @@ test('searchable + multiple: confirmScope "filtered" restores scoped confirm beh
 
   await delay()
   stdin.write('ap')
-  await delay()
+  // Wait for the filter to actually land before confirming — otherwise Enter
+  // can race the query state update and confirm against the unfiltered set.
+  await waitFor(() => !lastFrame()!.includes('Banana'))
   stdin.write(ENTER)
-  await delay()
+  await waitFor(() => confirmed.length > 0)
 
   // Only "apple" matches the filter AND is checked; cherry is excluded
   // because confirmScope is explicitly opted into filtered-only confirm.
@@ -3980,7 +3982,7 @@ test('searchable: multiple backspaces progressively restore items', async (t) =>
 
   await delay()
   stdin.write('app')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ app'))
 
   let frame = lastFrame()!
   t.true(frame.includes('/ app'))
@@ -3990,7 +3992,7 @@ test('searchable: multiple backspaces progressively restore items', async (t) =>
 
   // Single backspace to "ap" — now Apricot also matches
   stdin.write('\u007F')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('Apricot'))
 
   frame = lastFrame()!
   t.true(frame.includes('/ ap'))
@@ -4040,7 +4042,7 @@ test('keyMap.arrows=false still allows vim key navigation', async (t) => {
   )
   await delay()
   stdin.write('j')
-  await delay()
+  await waitFor(() => highlighted === 'B')
   t.is(highlighted, 'B')
 })
 
@@ -4083,7 +4085,7 @@ test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
   )
   await delay()
   stdin.write(ARROW_DOWN)
-  await delay()
+  await waitFor(() => highlighted === 'B')
   t.is(highlighted, 'B')
 })
 
