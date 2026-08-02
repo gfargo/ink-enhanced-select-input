@@ -812,6 +812,20 @@ test('all items disabled: nothing is navigable', async (t) => {
   t.is(selected, '')
 })
 
+test('all items disabled: no selection cursor is rendered', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b', disabled: true },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  // `resolveInitialIndex` lands on index 0 (the clamped fallback) since
+  // nothing is enabled — render must not paint that as selected.
+  t.false(lastFrame()!.includes('>'))
+})
+
 test('all items disabled: Home/End do not move cursor or fire onHighlight', async (t) => {
   const items = [
     { label: 'A', value: 'a', disabled: true },
@@ -1011,6 +1025,41 @@ test('Escape does not call onCancel when isFocused=false', async (t) => {
     <EnhancedSelectInput
       items={items}
       isFocused={false}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await delay()
+  t.false(cancelled)
+})
+
+test('Escape calls onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      onCancel={() => {
+        cancelled = true
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ESCAPE)
+  await waitFor(() => cancelled)
+  t.true(cancelled)
+})
+
+test('keyMap.cancel=false disables Escape → onCancel when items list is empty', async (t) => {
+  let cancelled = false
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={[]}
+      keyMap={{ cancel: false }}
       onCancel={() => {
         cancelled = true
       }}
@@ -1514,6 +1563,74 @@ test('selection preserved when items update but current slot is still valid', as
   t.is(highlighted, 'B')
 })
 
+// --- #62: onHighlight refires on every parent re-render when the callback is inline ---
+
+test('inline onHighlight is not re-invoked on parent re-renders with no highlight change', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper({ tick }: { readonly tick: number }) {
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+          }}
+        />
+      </Box>
+    )
+  }
+
+  const { rerender } = render(<Wrapper tick={0} />)
+  await delay()
+  t.is(callCount, 1)
+
+  for (let tick = 1; tick <= 5; tick++) {
+    rerender(<Wrapper tick={tick} />)
+    // eslint-disable-next-line no-await-in-loop
+    await delay()
+  }
+
+  t.is(callCount, 1)
+})
+
+test('setState inside onHighlight does not cause an infinite render loop', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper() {
+    const [tick, setTick] = React.useState(0)
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+            setTick((previous) => previous + 1)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  render(<Wrapper />)
+  await delay(300)
+
+  t.is(callCount, 1)
+})
+
 // --- #16: duplicate key warning ---
 
 test('warns in development when object-valued items have no key field', async (t) => {
@@ -1564,6 +1681,121 @@ test('no duplicate key warning when all items have explicit keys', async (t) => 
     console.warn = originalWarn
   }
 })
+
+// --- #44: item.indicator + multiple warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when item.indicator is combined with multiple',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.indicator is ignored')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+test.serial('no item.indicator warning when multiple is false', async (t) => {
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...arguments_: unknown[]) => {
+    warnings.push(String(arguments_[0]))
+  }
+
+  try {
+    render(
+      <EnhancedSelectInput
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    t.false(warnings.some((w) => w.includes('item.indicator is ignored')))
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test.serial(
+  'item.indicator warning does not re-fire on re-render with an equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      const { rerender } = render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterMount = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.true(firingsAfterMount > 0)
+
+      // Re-render with a new array reference carrying identical content —
+      // the derived boolean signal should stay the same, so the effect
+      // should not fire again.
+      rerender(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterRerender = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.is(firingsAfterRerender, firingsAfterMount)
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+// Serial: this test's render triggers the item.indicator dev warning as a
+// side effect, which would otherwise race the console.warn stubs above.
+test.serial(
+  'multi-select renders checkbox, not per-item indicator',
+  async (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('[ ]'))
+    t.false(frame.includes('★'))
+  }
+)
 
 // --- Multi-select mode (#12) ---
 
@@ -1686,6 +1918,66 @@ test('multi-select enter with nothing checked calls onConfirm with empty array',
 
   t.not(confirmed, undefined)
   t.is(confirmed!.length, 0)
+})
+
+test('multi-select space then enter in the same tick confirms the toggled item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Check A
+  stdin.write(ENTER) // Same tick, no await between the two writes
+  await delay()
+
+  t.is(confirmed.length, 1)
+  t.true(confirmed.includes('a'))
+})
+
+test('multi-select several toggles then enter in one tick confirms the final checked set', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(SPACE) // Check A
+  await delay()
+  stdin.write(ARROW_DOWN) // → B
+  await delay()
+  stdin.write(ARROW_DOWN) // → C
+  await delay()
+  stdin.write(SPACE) // Check C
+  stdin.write(ENTER) // Same tick, no await between the two writes
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('a'))
+  t.true(confirmed.includes('c'))
 })
 
 test('multi-select onToggle fires with item and checked state', async (t) => {
@@ -3111,11 +3403,15 @@ test('searchable: escape clears query first, then onCancel on second press', asy
 
   await delay()
   stdin.write('a')
-  await delay()
+  // Wait for the typed query to actually land before pressing Escape —
+  // under load a fixed delay() isn't always long enough, and an Escape
+  // sent while the query is still empty is indistinguishable from the
+  // "clear query" case only by accident (see comment on `waitFor` above).
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   // First escape clears query
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => cancelled || lastFrame()!.includes('/ Search...'))
   t.false(cancelled)
   t.true(lastFrame()!.includes('/ Search...'))
 
@@ -3166,7 +3462,7 @@ test('searchable: enter selects from filtered results', async (t) => {
   ]
 
   let selected = ''
-  const { stdin } = render(
+  const { stdin, lastFrame } = render(
     <EnhancedSelectInput
       searchable
       items={items}
@@ -3178,7 +3474,11 @@ test('searchable: enter selects from filtered results', async (t) => {
 
   await delay()
   stdin.write('ban')
-  await delay()
+  // Wait for the filter to actually land before pressing Enter — under
+  // load a fixed delay() isn't always long enough for the query state
+  // update to commit, which would leave Apple highlighted instead of the
+  // filtered-to Banana.
+  await waitFor(() => lastFrame()!.includes('/ ban'))
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'Banana')
@@ -3471,14 +3771,81 @@ test('searchable + multiple: can filter then confirm checked items', async (t) =
   )
 
   await delay()
-  // Filter to only "ap" items, then confirm — should still include
-  // all previously checked items that match the filter
+  // Filter to only "ap" items, then confirm — checked items hidden by the
+  // active filter (cherry) must still be included, not silently dropped.
   stdin.write('ap')
   await delay()
   stdin.write(ENTER)
   await delay()
 
-  // Only "apple" matches the filter AND is checked
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('cherry'))
+})
+
+test('searchable + multiple: checking items across two different queries confirms both', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'banana']}
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  // Filter to a query that hides "apple" entirely, then confirm — apple
+  // was checked before this query and must survive into onConfirm.
+  stdin.write('ban')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(confirmed.length, 2)
+  t.true(confirmed.includes('apple'))
+  t.true(confirmed.includes('banana'))
+})
+
+test('searchable + multiple: confirmScope "filtered" restores scoped confirm behaviour', async (t) => {
+  const items = [
+    { label: 'Apple', value: 'apple' },
+    { label: 'Apricot', value: 'apricot' },
+    { label: 'Banana', value: 'banana' },
+    { label: 'Cherry', value: 'cherry' },
+  ]
+
+  let confirmed: string[] = []
+  const { stdin } = render(
+    <EnhancedSelectInput
+      searchable
+      multiple
+      items={items}
+      defaultSelectedKeys={['apple', 'cherry']}
+      confirmScope="filtered"
+      onConfirm={(selected) => {
+        confirmed = selected.map((item) => String(item.value))
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('ap')
+  await delay()
+  stdin.write(ENTER)
+  await delay()
+
+  // Only "apple" matches the filter AND is checked; cherry is excluded
+  // because confirmScope is explicitly opted into filtered-only confirm.
   t.is(confirmed.length, 1)
   t.true(confirmed.includes('apple'))
 })

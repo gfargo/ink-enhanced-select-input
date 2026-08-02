@@ -85,6 +85,8 @@ render(<Demo />)
 
 Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
 
+> **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
+
 ```tsx
 import React, { useState } from 'react'
 import { render, Text } from 'ink'
@@ -131,6 +133,8 @@ render(<MultiDemo />)
   onSelect={(item) => console.log(item.value)}
 />
 ```
+
+`item.indicator` only applies in single-select mode — see the [Multi-select](#multi-select) note above for the multi-select behaviour.
 
 ### Grouped Items
 
@@ -290,7 +294,7 @@ If you need a fully custom renderer while keeping the built-in navigation, hotke
 import { useEnhancedSelectInput } from 'ink-enhanced-select-input'
 
 function MyCustomSelect({ items, onSelect }) {
-  const { selectedIndex, visibleItems, itemsAbove, itemsBelow } =
+  const { selectedIndex, rotateIndex, visibleItems, itemsAbove, itemsBelow } =
     useEnhancedSelectInput({ items, onSelect })
 
   return (
@@ -299,7 +303,7 @@ function MyCustomSelect({ items, onSelect }) {
       {visibleItems.map((item, i) => (
         <Text
           key={item.key ?? String(item.value)}
-          color={i === selectedIndex ? 'cyan' : undefined}
+          color={i + rotateIndex === selectedIndex ? 'cyan' : undefined}
         >
           {item.label}
         </Text>
@@ -314,27 +318,28 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 
 ## Props
 
-| Prop                   | Type                                        | Default                       | Description                                                    |
-| ---------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                       |
-| `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                        |
-| `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                        |
-| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count |
-| `indicatorComponent`   | `FC<IndicatorProps>`                        | `DefaultIndicatorComponent`   | Custom selection indicator                                     |
-| `itemComponent`        | `FC<ItemProps>`                             | `DefaultItemComponent`        | Custom item renderer                                           |
-| `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only     |
-| `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                       |
-| `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                                  |
-| `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                               |
-| `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list             |
-| `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)       |
-| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select                         |
-| `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items    |
-| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode       |
-| `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                   |
-| `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                               |
-| `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty              |
-| `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts     |
+| Prop                   | Type                                        | Default                       | Description                                                                                                                                                          |
+| ---------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                             |
+| `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
+| `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
+| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
+| `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
+| `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
+| `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |
+| `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                                                                                                                             |
+| `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                                                                                                                                        |
+| `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                                                                                                                                     |
+| `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list                                                                                                                   |
+| `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)                                                                                                             |
+| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select                                                                                                                               |
+| `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items, unaffected by the active search filter                                                                  |
+| `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query |
+| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                             |
+| `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                         |
+| `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                     |
+| `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                    |
+| `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
 
 ### Item Shape
 
@@ -344,7 +349,7 @@ type Item<V> = {
   label: string
   value: V
   hotkey?: string
-  indicator?: React.ReactNode
+  indicator?: React.ReactNode // Single-select only — ignored (with a dev warning) when `multiple` is true
   disabled?: boolean
   group?: string // Items with the same group are rendered under a shared header
 }
