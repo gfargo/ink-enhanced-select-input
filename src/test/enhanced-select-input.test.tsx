@@ -1652,6 +1652,50 @@ test.serial('no item.indicator warning when multiple is false', async (t) => {
   }
 })
 
+test.serial(
+  'item.indicator warning does not re-fire on re-render with an equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      const { rerender } = render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterMount = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.true(firingsAfterMount > 0)
+
+      // Re-render with a new array reference carrying identical content —
+      // the derived boolean signal should stay the same, so the effect
+      // should not fire again.
+      rerender(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterRerender = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.is(firingsAfterRerender, firingsAfterMount)
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
 // Serial: this test's render triggers the item.indicator dev warning as a
 // side effect, which would otherwise race the console.warn stubs above.
 test.serial(
