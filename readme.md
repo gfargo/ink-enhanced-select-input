@@ -19,6 +19,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
 - **Searchable Mode:** Type to filter items inline with case-insensitive matching.
+- **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
@@ -218,6 +219,29 @@ When typing:
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
 
+### Type-ahead Jump
+
+Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and only takes effect when `searchable` is off. Typing printable characters builds a short-lived buffer and jumps the highlight to the first non-disabled item whose label starts with it (case-insensitive) — it moves the highlight only, it never calls `onSelect`/`onConfirm`. The buffer resets after `typeaheadTimeout` ms of inactivity (default `500`).
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  typeahead
+  typeaheadTimeout={500}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+**Key behavior in type-ahead mode:**
+
+- Typing `d` then `e` within the idle window jumps to the first item starting with `de`
+- Typing again after the idle window resets the buffer to a single new character
+- Vim keys (`h/j/k/l`) are excluded from the buffer and keep navigating
+- If the buffer is idle/empty and the typed character matches an enabled item's `hotkey`, the hotkey fires as usual; once a buffer is active, further characters append to it instead of firing hotkeys
+- A character with no matching item leaves the current selection unchanged
+- Ignored entirely when `searchable` is `true` — printable characters remain search input in that mode
+- In single-select mode, `Space` is treated as a buffer character (the multi-select toggle path doesn't apply), so a leading space only matches labels that begin with a space
+
 ### Avoiding Key Conflicts (`keyMap`)
 
 Because Ink does not support event propagation stopping, every `useInput` handler in your app receives every keypress simultaneously. If your application already binds one of the component's default keys globally, you can disable individual key groups with the `keyMap` prop — the component ignores those keys without interfering with your own handlers.
@@ -358,6 +382,8 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                     |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                    |
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
+| `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                        |
+| `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                            |
 
 ### Item Shape
 
@@ -401,6 +427,11 @@ Disabled items are automatically skipped during navigation, including by `Home` 
 > **Searchable mode:** When `searchable` is enabled, vim keys and hotkeys are
 > disabled — all printable characters go to the search query. Arrow keys still
 > navigate. Backspace edits the query. Escape clears it.
+
+> **Type-ahead mode:** When `typeahead` is enabled (and `searchable` is not),
+> printable characters build a jump buffer instead of firing hotkeys or search.
+> The highlight jumps to the first matching item; no selection is made. An
+> idle/empty buffer still yields to a matching hotkey.
 
 ## Development
 

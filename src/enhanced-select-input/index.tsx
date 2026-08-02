@@ -111,6 +111,10 @@ export type UseEnhancedSelectInputProperties<V> = {
    * See {@link KeyMap} for available groups and defaults.
    */
   readonly keyMap?: KeyMap
+  /** Enable type-ahead jump in non-searchable mode. Ignored when `searchable`. Default: false. */
+  readonly typeahead?: boolean
+  /** Idle window (ms) after which the type-ahead buffer resets. Default: 500. */
+  readonly typeaheadTimeout?: number
 }
 
 /** Full component props — hook props plus rendering customisation. */
@@ -368,6 +372,8 @@ export function useEnhancedSelectInput<V>({
   onToggle,
   searchable = false,
   keyMap,
+  typeahead = false,
+  typeaheadTimeout = 500,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   // Resolve full key map — any flag not supplied defaults to enabled (true).
   const km = {
@@ -431,6 +437,10 @@ export function useEnhancedSelectInput<V>({
   // the committed set even when a Space toggle and Enter are written in the
   // same tick (no intervening render to flush the `checkedKeys` state).
   const checkedKeysReference = useRef(checkedKeys)
+  const typeaheadBuffer = useRef<{ text: string; time: number }>({
+    text: '',
+    time: 0,
+  })
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex so there
@@ -717,6 +727,42 @@ export function useEnhancedSelectInput<V>({
         setSearchQueryState((previous) => previous + input)
         setSelectedIndexState(0)
         return
+      }
+
+      // Type-ahead: in non-searchable mode, accumulate printable characters
+      // into a short-lived buffer and jump the highlight to the first item
+      // whose label starts with it. Idle buffers reset after
+      // `typeaheadTimeout` ms. A fresh/idle buffer yields to a matching item
+      // hotkey (see hotkey block below); once a buffer is active, subsequent
+      // characters append to it instead of firing hotkeys.
+      if (
+        typeahead &&
+        !searchable &&
+        input &&
+        !key.ctrl &&
+        !key.meta &&
+        !isActiveVimKey
+      ) {
+        const now = Date.now()
+        const active =
+          typeaheadBuffer.current.text !== '' &&
+          now - typeaheadBuffer.current.time < typeaheadTimeout
+        const isHotkeyChar =
+          km.select &&
+          !multiple &&
+          filteredItems.some((item) => item.hotkey === input && !item.disabled)
+
+        if (active || !isHotkeyChar) {
+          const next = active ? typeaheadBuffer.current.text + input : input
+          typeaheadBuffer.current = { text: next, time: now }
+          const matchIndex = filteredItems.findIndex(
+            (item) =>
+              !item.disabled &&
+              item.label.toLowerCase().startsWith(next.toLowerCase())
+          )
+          if (matchIndex !== -1) updateSelection(matchIndex)
+          return
+        }
       }
 
       // Hotkeys: active vim nav keys take priority over item hotkeys.
