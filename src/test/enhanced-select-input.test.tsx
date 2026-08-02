@@ -41,7 +41,7 @@ const waitFor = async (condition: () => boolean, timeout = 2000) => {
   }
 }
 
-test('render with default options', (t) => {
+test.serial('render with default options', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
       items={[
@@ -75,7 +75,7 @@ test('render with default options', (t) => {
   }
 })
 
-test('render with horizontal orientation', (t) => {
+test.serial('render with horizontal orientation', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
       orientation="horizontal"
@@ -110,7 +110,7 @@ test('render with horizontal orientation', (t) => {
   }
 })
 
-test('render with custom hotkeys', (t) => {
+test.serial('render with custom hotkeys', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
       items={[
@@ -137,7 +137,7 @@ test('render with custom hotkeys', (t) => {
   }
 })
 
-test('render with custom indicators on each item', (t) => {
+test.serial('render with custom indicators on each item', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
       items={[
@@ -159,7 +159,7 @@ test('render with custom indicators on each item', (t) => {
   }
 })
 
-test('render with custom item component', (t) => {
+test.serial('render with custom item component', (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
       itemComponent={({ isSelected, label, isDisabled }) => (
@@ -195,7 +195,7 @@ test('render with custom item component', (t) => {
 
 // --- Empty State ---
 
-test('render empty items list', (t) => {
+test.serial('render empty items list', (t) => {
   const { lastFrame } = render(<EnhancedSelectInput items={[]} />)
   const frame = lastFrame()
   t.true(frame !== undefined)
@@ -203,7 +203,7 @@ test('render empty items list', (t) => {
 
 // --- initialIndex ---
 
-test('initialIndex selects the correct item', async (t) => {
+test.serial('initialIndex selects the correct item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -227,7 +227,7 @@ test('initialIndex selects the correct item', async (t) => {
   t.true(frame.includes('C'))
 })
 
-test('initialIndex out of bounds clamps to last item', async (t) => {
+test.serial('initialIndex out of bounds clamps to last item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -248,31 +248,34 @@ test('initialIndex out of bounds clamps to last item', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('initialIndex on a disabled item skips to nearest enabled', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b', disabled: true },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'initialIndex on a disabled item skips to nearest enabled',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b', disabled: true },
+      { label: 'C', value: 'c' },
+    ]
 
-  let highlighted = ''
-  render(
-    <EnhancedSelectInput
-      items={items}
-      initialIndex={1}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    render(
+      <EnhancedSelectInput
+        items={items}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'C')
-})
+    await delay()
+    t.is(highlighted, 'C')
+  }
+)
 
 // --- Keyboard Navigation (vertical, arrow keys) ---
 
-test('arrow down moves selection down', async (t) => {
+test.serial('arrow down moves selection down', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -301,7 +304,7 @@ test('arrow down moves selection down', async (t) => {
   t.is(highlighted, 'C')
 })
 
-test('arrow up moves selection up', async (t) => {
+test.serial('arrow up moves selection up', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -325,7 +328,7 @@ test('arrow up moves selection up', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('navigation wraps around from last to first', async (t) => {
+test.serial('navigation wraps around from last to first', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -348,7 +351,7 @@ test('navigation wraps around from last to first', async (t) => {
   t.is(highlighted, 'A')
 })
 
-test('navigation wraps around from first to last', async (t) => {
+test.serial('navigation wraps around from first to last', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -372,7 +375,7 @@ test('navigation wraps around from first to last', async (t) => {
 
 // --- Vim-style navigation ---
 
-test('j/k keys navigate vertically', async (t) => {
+test.serial('j/k keys navigate vertically', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -403,7 +406,7 @@ test('j/k keys navigate vertically', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('h/l keys navigate horizontally', async (t) => {
+test.serial('h/l keys navigate horizontally', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -435,36 +438,39 @@ test('h/l keys navigate horizontally', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('arrow left/right navigate in horizontal orientation', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'arrow left/right navigate in horizontal orientation',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      orientation="horizontal"
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        orientation="horizontal"
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ARROW_RIGHT)
-  await delay()
-  t.is(highlighted, 'B')
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(highlighted, 'B')
 
-  stdin.write(ARROW_LEFT)
-  await delay()
-  t.is(highlighted, 'A')
-})
+    stdin.write(ARROW_LEFT)
+    await delay()
+    t.is(highlighted, 'A')
+  }
+)
 
 // --- Disabled Item Skipping ---
 
-test('navigation skips disabled items', async (t) => {
+test.serial('navigation skips disabled items', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b', disabled: true },
@@ -489,33 +495,36 @@ test('navigation skips disabled items', async (t) => {
   t.is(highlighted, 'C')
 })
 
-test('navigation skips multiple consecutive disabled items', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b', disabled: true },
-    { label: 'C', value: 'c', disabled: true },
-    { label: 'D', value: 'd' },
-  ]
+test.serial(
+  'navigation skips multiple consecutive disabled items',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b', disabled: true },
+      { label: 'C', value: 'c', disabled: true },
+      { label: 'D', value: 'd' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'D')
-})
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'D')
+  }
+)
 
 // --- onSelect ---
 
-test('enter key triggers onSelect', async (t) => {
+test.serial('enter key triggers onSelect', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -537,7 +546,7 @@ test('enter key triggers onSelect', async (t) => {
   t.is(selected, 'A')
 })
 
-test('navigate then select', async (t) => {
+test.serial('navigate then select', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -566,7 +575,7 @@ test('navigate then select', async (t) => {
 
 // --- Hotkey Selection ---
 
-test('hotkey triggers onSelect for matching item', async (t) => {
+test.serial('hotkey triggers onSelect for matching item', async (t) => {
   const items = [
     { label: 'A', value: 'a', hotkey: 'x' },
     { label: 'B', value: 'b', hotkey: 'y' },
@@ -588,7 +597,7 @@ test('hotkey triggers onSelect for matching item', async (t) => {
   t.is(selected, 'B')
 })
 
-test('hotkey does not trigger for disabled item', async (t) => {
+test.serial('hotkey does not trigger for disabled item', async (t) => {
   const items = [
     { label: 'A', value: 'a', hotkey: 'x' },
     { label: 'B', value: 'b', hotkey: 'y', disabled: true },
@@ -612,7 +621,7 @@ test('hotkey does not trigger for disabled item', async (t) => {
 
 // --- isFocused ---
 
-test('isFocused=false disables keyboard input', async (t) => {
+test.serial('isFocused=false disables keyboard input', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -637,7 +646,7 @@ test('isFocused=false disables keyboard input', async (t) => {
 
 // --- limit prop pagination ---
 
-test('limit restricts visible items', (t) => {
+test.serial('limit restricts visible items', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -656,45 +665,48 @@ test('limit restricts visible items', (t) => {
   t.false(frame.includes('D'))
 })
 
-test('limit scrolls to show items beyond the initial window', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-    { label: 'D', value: 'd' },
-  ]
+test.serial(
+  'limit scrolls to show items beyond the initial window',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+    ]
 
-  let highlighted = ''
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput
-      items={items}
-      limit={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'A')
+    await delay()
+    t.is(highlighted, 'A')
 
-  // Move to B
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'B')
+    // Move to B
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B')
 
-  // Move to C — should scroll the window
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'C')
+    // Move to C — should scroll the window
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'C')
 
-  const frame = lastFrame()!
-  // Window should now show C and D
-  t.true(frame.includes('C'))
-  t.true(frame.includes('D'))
-})
+    const frame = lastFrame()!
+    // Window should now show C and D
+    t.true(frame.includes('C'))
+    t.true(frame.includes('D'))
+  }
+)
 
-test('limit scrolls backward when navigating up', async (t) => {
+test.serial('limit scrolls backward when navigating up', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -727,7 +739,7 @@ test('limit scrolls backward when navigating up', async (t) => {
   t.true(frame.includes('B'))
 })
 
-test('limit wraps around from last item to first', async (t) => {
+test.serial('limit wraps around from last item to first', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -760,7 +772,7 @@ test('limit wraps around from last item to first', async (t) => {
 
 // --- initialIndex edge cases ---
 
-test('negative initialIndex clamps to first item', async (t) => {
+test.serial('negative initialIndex clamps to first item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -783,7 +795,7 @@ test('negative initialIndex clamps to first item', async (t) => {
 
 // --- All items disabled ---
 
-test('all items disabled: nothing is navigable', async (t) => {
+test.serial('all items disabled: nothing is navigable', async (t) => {
   const items = [
     { label: 'A', value: 'a', disabled: true },
     { label: 'B', value: 'b', disabled: true },
@@ -812,38 +824,58 @@ test('all items disabled: nothing is navigable', async (t) => {
   t.is(selected, '')
 })
 
-test('all items disabled: Home/End do not move cursor or fire onHighlight', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', disabled: true },
-    { label: 'B', value: 'b', disabled: true },
-  ]
+test.serial(
+  'all items disabled: no selection cursor is rendered',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', disabled: true },
+      { label: 'B', value: 'b', disabled: true },
+    ]
 
-  let highlightCount = 0
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      onHighlight={() => {
-        highlightCount++
-      }}
-    />
-  )
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
-  await delay()
-  // Reset after initial mount highlight
-  highlightCount = 0
+    await delay()
+    // `resolveInitialIndex` lands on index 0 (the clamped fallback) since
+    // nothing is enabled — render must not paint that as selected.
+    t.false(lastFrame()!.includes('>'))
+  }
+)
 
-  stdin.write(HOME)
-  await delay()
-  t.is(highlightCount, 0)
+test.serial(
+  'all items disabled: Home/End do not move cursor or fire onHighlight',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', disabled: true },
+      { label: 'B', value: 'b', disabled: true },
+    ]
 
-  stdin.write(END)
-  await delay()
-  t.is(highlightCount, 0)
-})
+    let highlightCount = 0
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    // Reset after initial mount highlight
+    highlightCount = 0
+
+    stdin.write(HOME)
+    await delay()
+    t.is(highlightCount, 0)
+
+    stdin.write(END)
+    await delay()
+    t.is(highlightCount, 0)
+  }
+)
 
 // --- Enter on disabled item ---
 
-test('enter on a disabled item does not trigger onSelect', async (t) => {
+test.serial('enter on a disabled item does not trigger onSelect', async (t) => {
   // Start with the only selectable item disabled via the initial highlight
   const items = [
     { label: 'A', value: 'a', disabled: true },
@@ -873,7 +905,7 @@ test('enter on a disabled item does not trigger onSelect', async (t) => {
 
 // --- Hotkey / vim-key conflict ---
 
-test('vim nav key takes priority over matching hotkey', async (t) => {
+test.serial('vim nav key takes priority over matching hotkey', async (t) => {
   // In vertical orientation, 'j' navigates down.
   // An item with hotkey='j' should NOT fire onSelect when j is pressed.
   const items = [
@@ -908,7 +940,7 @@ test('vim nav key takes priority over matching hotkey', async (t) => {
 
 // --- DefaultIndicatorComponent in isolation ---
 
-test('DefaultIndicatorComponent renders selected state', (t) => {
+test.serial('DefaultIndicatorComponent renders selected state', (t) => {
   const items = [{ label: 'X', value: 'x' }]
   const item = items[0]!
 
@@ -925,60 +957,66 @@ test('DefaultIndicatorComponent renders selected state', (t) => {
 
 // --- Horizontal wrap-around ---
 
-test('horizontal navigation wraps around from last to first', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'horizontal navigation wraps around from last to first',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      orientation="horizontal"
-      initialIndex={1}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        orientation="horizontal"
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'B')
+    await delay()
+    t.is(highlighted, 'B')
 
-  stdin.write(ARROW_RIGHT)
-  await delay()
-  t.is(highlighted, 'A')
-})
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(highlighted, 'A')
+  }
+)
 
-test('horizontal navigation wraps around from first to last', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'horizontal navigation wraps around from first to last',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      orientation="horizontal"
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        orientation="horizontal"
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'A')
+    await delay()
+    t.is(highlighted, 'A')
 
-  stdin.write(ARROW_LEFT)
-  await delay()
-  t.is(highlighted, 'B')
-})
+    stdin.write(ARROW_LEFT)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
 
 // --- onCancel (Escape key) ---
 
-test('Escape calls onCancel', async (t) => {
+test.serial('Escape calls onCancel', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1000,7 +1038,7 @@ test('Escape calls onCancel', async (t) => {
   t.true(cancelled)
 })
 
-test('Escape does not call onCancel when isFocused=false', async (t) => {
+test.serial('Escape does not call onCancel when isFocused=false', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1023,7 +1061,7 @@ test('Escape does not call onCancel when isFocused=false', async (t) => {
   t.false(cancelled)
 })
 
-test('Escape calls onCancel when items list is empty', async (t) => {
+test.serial('Escape calls onCancel when items list is empty', async (t) => {
   let cancelled = false
   const { stdin } = render(
     <EnhancedSelectInput
@@ -1040,25 +1078,28 @@ test('Escape calls onCancel when items list is empty', async (t) => {
   t.true(cancelled)
 })
 
-test('keyMap.cancel=false disables Escape → onCancel when items list is empty', async (t) => {
-  let cancelled = false
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={[]}
-      keyMap={{ cancel: false }}
-      onCancel={() => {
-        cancelled = true
-      }}
-    />
-  )
+test.serial(
+  'keyMap.cancel=false disables Escape → onCancel when items list is empty',
+  async (t) => {
+    let cancelled = false
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={[]}
+        keyMap={{ cancel: false }}
+        onCancel={() => {
+          cancelled = true
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ESCAPE)
-  await delay()
-  t.false(cancelled)
-})
+    await delay()
+    stdin.write(ESCAPE)
+    await delay()
+    t.false(cancelled)
+  }
+)
 
-test('Escape is a no-op when onCancel is not provided', async (t) => {
+test.serial('Escape is a no-op when onCancel is not provided', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
 
   let highlighted = ''
@@ -1080,7 +1121,7 @@ test('Escape is a no-op when onCancel is not provided', async (t) => {
 
 // --- Home / End keys ---
 
-test('Home key jumps to first enabled item', async (t) => {
+test.serial('Home key jumps to first enabled item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1106,7 +1147,7 @@ test('Home key jumps to first enabled item', async (t) => {
   t.is(highlighted, 'A')
 })
 
-test('End key jumps to last enabled item', async (t) => {
+test.serial('End key jumps to last enabled item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1131,7 +1172,7 @@ test('End key jumps to last enabled item', async (t) => {
   t.is(highlighted, 'C')
 })
 
-test('Home skips leading disabled items', async (t) => {
+test.serial('Home skips leading disabled items', async (t) => {
   const items = [
     { label: 'A', value: 'a', disabled: true },
     { label: 'B', value: 'b', disabled: true },
@@ -1158,7 +1199,7 @@ test('Home skips leading disabled items', async (t) => {
   t.is(highlighted, 'C')
 })
 
-test('End skips trailing disabled items', async (t) => {
+test.serial('End skips trailing disabled items', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1182,7 +1223,7 @@ test('End skips trailing disabled items', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('Home/End update rotateIndex when limit is active', async (t) => {
+test.serial('Home/End update rotateIndex when limit is active', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1224,61 +1265,67 @@ test('Home/End update rotateIndex when limit is active', async (t) => {
 
 // --- showScrollIndicators ---
 
-test('showScrollIndicators shows below indicator when items are clipped', (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-    { label: 'D', value: 'd' },
-  ]
+test.serial(
+  'showScrollIndicators shows below indicator when items are clipped',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+    ]
 
-  const { lastFrame } = render(
-    <EnhancedSelectInput showScrollIndicators items={items} limit={2} />
-  )
+    const { lastFrame } = render(
+      <EnhancedSelectInput showScrollIndicators items={items} limit={2} />
+    )
 
-  const frame = lastFrame()!
-  t.true(frame.includes('▼'))
-  t.true(frame.includes('2 more'))
-  t.false(frame.includes('▲'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('▼'))
+    t.true(frame.includes('2 more'))
+    t.false(frame.includes('▲'))
+  }
+)
 
-test('showScrollIndicators shows both indicators when window is mid-list', async (t) => {
-  // 6 items, limit=2, start at index 2 → window [C,D], 2 above, 2 below
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-    { label: 'D', value: 'd' },
-    { label: 'E', value: 'e' },
-    { label: 'F', value: 'f' },
-  ]
+test.serial(
+  'showScrollIndicators shows both indicators when window is mid-list',
+  async (t) => {
+    // 6 items, limit=2, start at index 2 → window [C,D], 2 above, 2 below
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+      { label: 'E', value: 'e' },
+      { label: 'F', value: 'f' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput
-      showScrollIndicators
-      items={items}
-      limit={2}
-      initialIndex={2}
-    />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        showScrollIndicators
+        items={items}
+        limit={2}
+        initialIndex={2}
+      />
+    )
 
-  await delay()
-  const frame = lastFrame()!
-  t.true(frame.includes('▲'))
-  t.true(frame.includes('▼'))
-  t.true(frame.includes('2 more'))
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('▲'))
+    t.true(frame.includes('▼'))
+    t.true(frame.includes('2 more'))
 
-  // Navigate to last window (E/F) — no more below
-  stdin.write(ARROW_DOWN)
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  const frame2 = lastFrame()!
-  t.true(frame2.includes('▲'))
-  t.false(frame2.includes('▼'))
-})
+    // Navigate to last window (E/F) — no more below
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    const frame2 = lastFrame()!
+    t.true(frame2.includes('▲'))
+    t.false(frame2.includes('▼'))
+  }
+)
 
-test('showScrollIndicators hidden by default', (t) => {
+test.serial('showScrollIndicators hidden by default', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1292,20 +1339,23 @@ test('showScrollIndicators hidden by default', (t) => {
   t.false(frame.includes('▼'))
 })
 
-test('showScrollIndicators not shown when all items fit in window', (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'showScrollIndicators not shown when all items fit in window',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  const { lastFrame } = render(
-    <EnhancedSelectInput showScrollIndicators items={items} limit={5} />
-  )
+    const { lastFrame } = render(
+      <EnhancedSelectInput showScrollIndicators items={items} limit={5} />
+    )
 
-  const frame = lastFrame()!
-  t.false(frame.includes('▲'))
-  t.false(frame.includes('▼'))
-})
+    const frame = lastFrame()!
+    t.false(frame.includes('▲'))
+    t.false(frame.includes('▼'))
+  }
+)
 
 // --- useEnhancedSelectInput hook ---
 
@@ -1332,7 +1382,7 @@ function HookHarness(properties: HookHarnessProperties) {
   return null
 }
 
-test('hook returns correct initial state', async (t) => {
+test.serial('hook returns correct initial state', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1358,7 +1408,7 @@ test('hook returns correct initial state', async (t) => {
   t.is(result?.rotateIndex, 0)
 })
 
-test('hook returns correct pagination state', async (t) => {
+test.serial('hook returns correct pagination state', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1387,7 +1437,7 @@ test('hook returns correct pagination state', async (t) => {
   t.is(result?.itemsBelow, 0)
 })
 
-test('hook responds to keyboard input', async (t) => {
+test.serial('hook responds to keyboard input', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1411,7 +1461,7 @@ test('hook responds to keyboard input', async (t) => {
   t.is(result?.selectedIndex, 1)
 })
 
-test('hook returns empty state for empty items', async (t) => {
+test.serial('hook returns empty state for empty items', async (t) => {
   let result: UseEnhancedSelectInputResult<unknown> | undefined
 
   render(
@@ -1682,58 +1732,300 @@ test('toggle is a no-op on disabled items in multiple mode', async (t) => {
 
 // --- #15: items prop sync after mount ---
 
-test('selection clamps when items shrink below current index', async (t) => {
-  const initialItems = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'selection clamps when items shrink below current index',
+  async (t) => {
+    const initialItems = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
 
-  let highlighted = ''
+    let highlighted = ''
 
-  const { rerender } = render(
-    <EnhancedSelectInput
-      items={initialItems}
-      initialIndex={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    const { rerender } = render(
+      <EnhancedSelectInput
+        items={initialItems}
+        initialIndex={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'C')
+    await delay()
+    t.is(highlighted, 'C')
 
-  // Shrink to 2 items — index 2 no longer exists
-  rerender(
-    <EnhancedSelectInput
-      items={[
-        { label: 'A', value: 'a' },
-        { label: 'B', value: 'b' },
-      ]}
-      initialIndex={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    // Shrink to 2 items — index 2 no longer exists
+    rerender(
+      <EnhancedSelectInput
+        items={[
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b' },
+        ]}
+        initialIndex={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await waitFor(() => highlighted === 'B')
-  t.is(highlighted, 'B')
-})
+    await waitFor(() => highlighted === 'B')
+    t.is(highlighted, 'B')
+  }
+)
 
-test('selection moves off a now-disabled item when items update', async (t) => {
+test.serial(
+  'selection moves off a now-disabled item when items update',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+
+    const { rerender } = render(
+      <EnhancedSelectInput
+        items={items}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'B')
+
+    // Mark B as disabled — selection should move to nearest enabled item
+    rerender(
+      <EnhancedSelectInput
+        items={[
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b', disabled: true },
+          { label: 'C', value: 'c' },
+        ]}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await waitFor(() => highlighted !== 'B')
+    t.not(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'selection preserved when items update but current slot is still valid',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+
+    const { rerender } = render(
+      <EnhancedSelectInput
+        items={items}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'B')
+
+    // Replace with fresh reference, same content — selection must stay on B
+    rerender(
+      <EnhancedSelectInput
+        items={[
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b' },
+          { label: 'C', value: 'c' },
+        ]}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+// --- #62: onHighlight refires on every parent re-render when the callback is inline ---
+
+test('inline onHighlight is not re-invoked on parent re-renders with no highlight change', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
     { label: 'C', value: 'c' },
   ]
 
+  let callCount = 0
+
+  function Wrapper({ tick }: { readonly tick: number }) {
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+          }}
+        />
+      </Box>
+    )
+  }
+
+  const { rerender } = render(<Wrapper tick={0} />)
+  await delay()
+  t.is(callCount, 1)
+
+  for (let tick = 1; tick <= 5; tick++) {
+    rerender(<Wrapper tick={tick} />)
+    // eslint-disable-next-line no-await-in-loop
+    await delay()
+  }
+
+  t.is(callCount, 1)
+})
+
+test('setState inside onHighlight does not cause an infinite render loop', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper() {
+    const [tick, setTick] = React.useState(0)
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+            setTick((previous) => previous + 1)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  render(<Wrapper />)
+  await delay(300)
+
+  t.is(callCount, 1)
+})
+
+test('onHighlight fires with the new item when its content changes at the same index', async (t) => {
+  let highlighted = ''
+  let callCount = 0
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+  const callsAfterMount = callCount
+
+  // Same length, same selectedIndex, but the item at index 1 now has
+  // different content (and thus a different derived key) — onHighlight
+  // must fire again with the new item rather than staying silent because
+  // selectedIndex didn't change.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B2', value: 'b2' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await waitFor(() => callCount > callsAfterMount)
+  t.is(highlighted, 'B2')
+})
+
+test('onHighlight does not re-fire when items update with identical content', async (t) => {
+  let callCount = 0
+  // Stable reference across rerenders (like a memoized parent callback) so
+  // this isolates the items-array-identity behaviour from onHighlight
+  // identity, which is independently a dep of the effect.
+  const onHighlight = () => {
+    callCount++
+  }
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  const callsAfterMount = callCount
+  t.true(callsAfterMount > 0)
+
+  // Fresh array reference, identical content and keys — must not trigger
+  // a spurious onHighlight call.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  t.is(callCount, callsAfterMount)
+})
+
+test('revalidation effect moves selection off an item that becomes disabled', async (t) => {
   let highlighted = ''
 
   const { rerender } = render(
     <EnhancedSelectInput
-      items={items}
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+      ]}
       initialIndex={1}
       onHighlight={(item) => {
         highlighted = item.label
@@ -1744,7 +2036,10 @@ test('selection moves off a now-disabled item when items update', async (t) => {
   await delay()
   t.is(highlighted, 'B')
 
-  // Mark B as disabled — selection should move to nearest enabled item
+  // The highlighted item (B, index 1) becomes disabled — the revalidation
+  // effect must notice on the next filteredItems change and move the
+  // selection to the nearest enabled item (C) rather than leaving
+  // selectedIndex pointing at a now-disabled item.
   rerender(
     <EnhancedSelectInput
       items={[
@@ -1759,39 +2054,19 @@ test('selection moves off a now-disabled item when items update', async (t) => {
     />
   )
 
-  await waitFor(() => highlighted !== 'B')
-  t.not(highlighted, 'B')
+  await waitFor(() => highlighted === 'C')
+  t.is(highlighted, 'C')
 })
 
-test('selection preserved when items update but current slot is still valid', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
-
+test('revalidation effect resets selection when the highlighted item is filtered out', async (t) => {
   let highlighted = ''
 
   const { rerender } = render(
     <EnhancedSelectInput
-      items={items}
-      initialIndex={1}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
-
-  await delay()
-  t.is(highlighted, 'B')
-
-  // Replace with fresh reference, same content — selection must stay on B
-  rerender(
-    <EnhancedSelectInput
       items={[
-        { label: 'A', value: 'a' },
-        { label: 'B', value: 'b' },
-        { label: 'C', value: 'c' },
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Cherry', value: 'cherry' },
       ]}
       initialIndex={1}
       onHighlight={(item) => {
@@ -1801,12 +2076,115 @@ test('selection preserved when items update but current slot is still valid', as
   )
 
   await delay()
-  t.is(highlighted, 'B')
+  t.is(highlighted, 'Banana')
+
+  // Shrinking the item set out from under a fixed initialIndex/selectedIndex
+  // (no search involved) removes the previously highlighted item — the
+  // revalidation effect must fall back to the nearest valid index instead
+  // of reading past the end of the new array.
+  rerender(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await waitFor(() => highlighted === 'Apple')
+  t.is(highlighted, 'Apple')
 })
 
 // --- #16: duplicate key warning ---
 
-test('warns in development when object-valued items have no key field', async (t) => {
+test.serial(
+  'warns in development when object-valued items have no key field',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          items={[
+            { label: 'A', value: { id: 1 } },
+            { label: 'B', value: { id: 2 } },
+          ]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+test.serial(
+  'no duplicate key warning when all items have explicit keys',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          items={[
+            { key: 'item-1', label: 'A', value: { id: 1 } },
+            { key: 'item-2', label: 'B', value: { id: 2 } },
+          ]}
+        />
+      )
+
+      await delay()
+      t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+// --- #44: item.indicator + multiple warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when item.indicator is combined with multiple',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.indicator is ignored')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+test.serial('no item.indicator warning when multiple is false', async (t) => {
   const warnings: string[] = []
   const originalWarn = console.warn
   console.warn = (...arguments_: unknown[]) => {
@@ -1816,60 +2194,98 @@ test('warns in development when object-valued items have no key field', async (t
   try {
     render(
       <EnhancedSelectInput
-        items={[
-          { label: 'A', value: { id: 1 } },
-          { label: 'B', value: { id: 2 } },
-        ]}
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
       />
     )
 
     await delay()
-    t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
-    t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+    t.false(warnings.some((w) => w.includes('item.indicator is ignored')))
   } finally {
     console.warn = originalWarn
   }
 })
 
-test('no duplicate key warning when all items have explicit keys', async (t) => {
-  const warnings: string[] = []
-  const originalWarn = console.warn
-  console.warn = (...arguments_: unknown[]) => {
-    warnings.push(String(arguments_[0]))
-  }
+test.serial(
+  'item.indicator warning does not re-fire on re-render with an equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
 
-  try {
-    render(
+    try {
+      const { rerender } = render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterMount = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.true(firingsAfterMount > 0)
+
+      // Re-render with a new array reference carrying identical content —
+      // the derived boolean signal should stay the same, so the effect
+      // should not fire again.
+      rerender(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterRerender = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.is(firingsAfterRerender, firingsAfterMount)
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+// Serial: this test's render triggers the item.indicator dev warning as a
+// side effect, which would otherwise race the console.warn stubs above.
+test.serial(
+  'multi-select renders checkbox, not per-item indicator',
+  async (t) => {
+    const { lastFrame } = render(
       <EnhancedSelectInput
-        items={[
-          { key: 'item-1', label: 'A', value: { id: 1 } },
-          { key: 'item-2', label: 'B', value: { id: 2 } },
-        ]}
+        multiple
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
       />
     )
 
     await delay()
-    t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
-  } finally {
-    console.warn = originalWarn
+    const frame = lastFrame()!
+    t.true(frame.includes('[ ]'))
+    t.false(frame.includes('★'))
   }
-})
+)
 
 // --- Multi-select mode (#12) ---
 
-test('multi-select renders checkbox indicators instead of arrow cursor', (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
-  const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
-  const frame = lastFrame()!
-  t.true(frame.includes('[ ]'))
-  t.false(frame.includes('>'))
-})
+test.serial(
+  'multi-select renders checkbox indicators instead of arrow cursor',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+    const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
+    const frame = lastFrame()!
+    t.true(frame.includes('[ ]'))
+    t.false(frame.includes('>'))
+  }
+)
 
-test('multi-select space toggles checked state on', async (t) => {
+test.serial('multi-select space toggles checked state on', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1886,7 +2302,7 @@ test('multi-select space toggles checked state on', async (t) => {
   t.true(lastFrame()!.includes('[x]'))
 })
 
-test('multi-select space toggles checked state off', async (t) => {
+test.serial('multi-select space toggles checked state off', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   const { stdin, lastFrame } = render(
     <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
@@ -1900,7 +2316,7 @@ test('multi-select space toggles checked state off', async (t) => {
   t.false(lastFrame()!.includes('[x]'))
 })
 
-test('multi-select defaultSelectedKeys pre-checks items', (t) => {
+test.serial('multi-select defaultSelectedKeys pre-checks items', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -1918,154 +2334,169 @@ test('multi-select defaultSelectedKeys pre-checks items', (t) => {
   t.is((frame.match(/\[ ]/g) ?? []).length, 1)
 })
 
-test('multi-select enter calls onConfirm with checked items', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'multi-select enter calls onConfirm with checked items',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(SPACE) // Check A
-  await delay()
-  stdin.write(ARROW_DOWN) // → B
-  await delay()
-  stdin.write(ARROW_DOWN) // → C
-  await delay()
-  stdin.write(SPACE) // Check C
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ARROW_DOWN) // → B
+    await delay()
+    stdin.write(ARROW_DOWN) // → C
+    await delay()
+    stdin.write(SPACE) // Check C
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.is(confirmed.length, 2)
-  t.true(confirmed.includes('a'))
-  t.true(confirmed.includes('c'))
-})
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('a'))
+    t.true(confirmed.includes('c'))
+  }
+)
 
-test('multi-select enter with nothing checked calls onConfirm with empty array', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'multi-select enter with nothing checked calls onConfirm with empty array',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  let confirmed: unknown[] | undefined
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onConfirm={(selected) => {
-        confirmed = selected
-      }}
-    />
-  )
+    let confirmed: unknown[] | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.not(confirmed, undefined)
-  t.is(confirmed!.length, 0)
-})
+    t.not(confirmed, undefined)
+    t.is(confirmed!.length, 0)
+  }
+)
 
-test('multi-select space then enter in the same tick confirms the toggled item', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
+test.serial(
+  'multi-select space then enter in the same tick confirms the toggled item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(SPACE) // Check A
-  stdin.write(ENTER) // Same tick, no await between the two writes
-  await delay()
+    await delay()
+    stdin.write(SPACE) // Check A
+    stdin.write(ENTER) // Same tick, no await between the two writes
+    await delay()
 
-  t.is(confirmed.length, 1)
-  t.true(confirmed.includes('a'))
-})
+    t.is(confirmed.length, 1)
+    t.true(confirmed.includes('a'))
+  }
+)
 
-test('multi-select several toggles then enter in one tick confirms the final checked set', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'multi-select several toggles then enter in one tick confirms the final checked set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(SPACE) // Check A
-  await delay()
-  stdin.write(ARROW_DOWN) // → B
-  await delay()
-  stdin.write(ARROW_DOWN) // → C
-  await delay()
-  stdin.write(SPACE) // Check C
-  stdin.write(ENTER) // Same tick, no await between the two writes
-  await delay()
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ARROW_DOWN) // → B
+    await delay()
+    stdin.write(ARROW_DOWN) // → C
+    await delay()
+    stdin.write(SPACE) // Check C
+    stdin.write(ENTER) // Same tick, no await between the two writes
+    await delay()
 
-  t.is(confirmed.length, 2)
-  t.true(confirmed.includes('a'))
-  t.true(confirmed.includes('c'))
-})
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('a'))
+    t.true(confirmed.includes('c'))
+  }
+)
 
-test('multi-select onToggle fires with item and checked state', async (t) => {
-  const items = [{ label: 'A', value: 'a' }]
+test.serial(
+  'multi-select onToggle fires with item and checked state',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
 
-  const log: Array<{ label: string; checked: boolean }> = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onToggle={(item, checked) => {
-        log.push({ label: item.label, checked })
-      }}
-    />
-  )
+    const log: Array<{ label: string; checked: boolean }> = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onToggle={(item, checked) => {
+          log.push({ label: item.label, checked })
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(SPACE)
-  await delay()
-  t.is(log.length, 1)
-  t.is(log[0]?.label, 'A')
-  t.is(log[0]?.checked, true)
+    await delay()
+    stdin.write(SPACE)
+    await delay()
+    t.is(log.length, 1)
+    t.is(log[0]?.label, 'A')
+    t.is(log[0]?.checked, true)
 
-  stdin.write(SPACE)
-  await delay()
-  t.is(log.length, 2)
-  t.is(log[1]?.checked, false)
-})
+    stdin.write(SPACE)
+    await delay()
+    t.is(log.length, 2)
+    t.is(log[1]?.checked, false)
+  }
+)
 
-test('multi-select space only toggles enabled items', async (t) => {
+test.serial('multi-select space only toggles enabled items', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b', disabled: true },
@@ -2097,30 +2528,33 @@ test('multi-select space only toggles enabled items', async (t) => {
   t.false(toggled.includes('B'))
 })
 
-test('multi-select hotkeys do not fire in multi-select mode', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', hotkey: 'x' },
-    { label: 'B', value: 'b', hotkey: 'y' },
-  ]
+test.serial(
+  'multi-select hotkeys do not fire in multi-select mode',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', hotkey: 'x' },
+      { label: 'B', value: 'b', hotkey: 'y' },
+    ]
 
-  let selected = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onSelect={(item) => {
-        selected = item.label
-      }}
-    />
-  )
+    let selected = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('x')
-  await delay()
-  t.is(selected, '')
-})
+    await delay()
+    stdin.write('x')
+    await delay()
+    t.is(selected, '')
+  }
+)
 
-test('multi-select hotkey hints not shown in render', (t) => {
+test.serial('multi-select hotkey hints not shown in render', (t) => {
   const items = [
     { label: 'A', value: 'a', hotkey: 'x' },
     { label: 'B', value: 'b', hotkey: 'y' },
@@ -2132,74 +2566,83 @@ test('multi-select hotkey hints not shown in render', (t) => {
   t.false(frame.includes('(y)'))
 })
 
-test('multi-select isChecked passed to custom indicatorComponent', async (t) => {
-  const items = [{ label: 'A', value: 'a' }]
+test.serial(
+  'multi-select isChecked passed to custom indicatorComponent',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
 
-  let receivedIsChecked: boolean | undefined
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      indicatorComponent={({ isChecked }) => {
-        receivedIsChecked = isChecked
-        return null
-      }}
-    />
-  )
+    let receivedIsChecked: boolean | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        indicatorComponent={({ isChecked }) => {
+          receivedIsChecked = isChecked
+          return null
+        }}
+      />
+    )
 
-  await delay()
-  t.is(receivedIsChecked, false)
+    await delay()
+    t.is(receivedIsChecked, false)
 
-  stdin.write(SPACE)
-  await delay()
-  t.is(receivedIsChecked, true)
-})
+    stdin.write(SPACE)
+    await delay()
+    t.is(receivedIsChecked, true)
+  }
+)
 
-test('multi-select isChecked passed to custom itemComponent', async (t) => {
-  const items = [{ label: 'A', value: 'a' }]
+test.serial(
+  'multi-select isChecked passed to custom itemComponent',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
 
-  let receivedIsChecked: boolean | undefined
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      itemComponent={({ isChecked }) => {
-        receivedIsChecked = isChecked
-        return null
-      }}
-    />
-  )
+    let receivedIsChecked: boolean | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        itemComponent={({ isChecked }) => {
+          receivedIsChecked = isChecked
+          return null
+        }}
+      />
+    )
 
-  await delay()
-  t.is(receivedIsChecked, false)
+    await delay()
+    t.is(receivedIsChecked, false)
 
-  stdin.write(SPACE)
-  await delay()
-  t.is(receivedIsChecked, true)
-})
+    stdin.write(SPACE)
+    await delay()
+    t.is(receivedIsChecked, true)
+  }
+)
 
-test('DefaultIndicatorComponent renders checkboxes in multi-select mode', (t) => {
-  const item = { label: 'X', value: 'x' }
+test.serial(
+  'DefaultIndicatorComponent renders checkboxes in multi-select mode',
+  (t) => {
+    const item = { label: 'X', value: 'x' }
 
-  const { lastFrame: checkedFrame } = render(
-    <DefaultIndicatorComponent isSelected isChecked item={item} />
-  )
-  const { lastFrame: uncheckedFrame } = render(
-    <DefaultIndicatorComponent
-      isSelected={false}
-      item={item}
-      isChecked={false}
-    />
-  )
+    const { lastFrame: checkedFrame } = render(
+      <DefaultIndicatorComponent isSelected isChecked item={item} />
+    )
+    const { lastFrame: uncheckedFrame } = render(
+      <DefaultIndicatorComponent
+        isSelected={false}
+        item={item}
+        isChecked={false}
+      />
+    )
 
-  t.true(checkedFrame()!.includes('[x]'))
-  t.true(uncheckedFrame()!.includes('[ ]'))
-  t.false(checkedFrame()!.includes('>'))
-})
+    t.true(checkedFrame()!.includes('[x]'))
+    t.true(uncheckedFrame()!.includes('[ ]'))
+    t.false(checkedFrame()!.includes('>'))
+  }
+)
 
 // --- Item Groups ---
 
-test('group headers are rendered before grouped items', (t) => {
+test.serial('group headers are rendered before grouped items', (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'Recent' },
     { label: 'B', value: 'b', group: 'Recent' },
@@ -2216,47 +2659,53 @@ test('group headers are rendered before grouped items', (t) => {
   t.true(frame.includes('C'))
 })
 
-test('group header appears only once per group in visible window', (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'Fruits' },
-    { label: 'B', value: 'b', group: 'Fruits' },
-    { label: 'C', value: 'c', group: 'Fruits' },
-  ]
+test.serial(
+  'group header appears only once per group in visible window',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'Fruits' },
+      { label: 'B', value: 'b', group: 'Fruits' },
+      { label: 'C', value: 'c', group: 'Fruits' },
+    ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
-  const frame = lastFrame()!
-  const matches = frame.split('── Fruits ──')
-  // Split produces N+1 parts for N occurrences, so 2 parts = 1 occurrence
-  t.is(matches.length, 2)
-})
+    const frame = lastFrame()!
+    const matches = frame.split('── Fruits ──')
+    // Split produces N+1 parts for N occurrences, so 2 parts = 1 occurrence
+    t.is(matches.length, 2)
+  }
+)
 
-test('group headers are non-navigable (navigation skips them)', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'First' },
-    { label: 'B', value: 'b', group: 'Second' },
-  ]
+test.serial(
+  'group headers are non-navigable (navigation skips them)',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'A')
+    await delay()
+    t.is(highlighted, 'A')
 
-  stdin.write(ARROW_DOWN)
-  await delay()
-  // Should navigate to B, not get stuck on a header
-  t.is(highlighted, 'B')
-})
+    stdin.write(ARROW_DOWN)
+    await delay()
+    // Should navigate to B, not get stuck on a header
+    t.is(highlighted, 'B')
+  }
+)
 
-test('items without group do not render a header', (t) => {
+test.serial('items without group do not render a header', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2268,7 +2717,7 @@ test('items without group do not render a header', (t) => {
   t.false(frame.includes('──'))
 })
 
-test('mixed grouped and ungrouped items render correctly', (t) => {
+test.serial('mixed grouped and ungrouped items render correctly', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b', group: 'Special' },
@@ -2287,7 +2736,7 @@ test('mixed grouped and ungrouped items render correctly', (t) => {
   t.false(lines[0]!.includes('──'))
 })
 
-test('custom groupHeaderComponent is used when provided', (t) => {
+test.serial('custom groupHeaderComponent is used when provided', (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'Custom' },
     { label: 'B', value: 'b', group: 'Custom' },
@@ -2305,49 +2754,52 @@ test('custom groupHeaderComponent is used when provided', (t) => {
   t.false(frame.includes('──'))
 })
 
-test('group headers render correctly with limit/pagination', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'First' },
-    { label: 'B', value: 'b', group: 'First' },
-    { label: 'C', value: 'c', group: 'Second' },
-    { label: 'D', value: 'd', group: 'Second' },
-  ]
+test.serial(
+  'group headers render correctly with limit/pagination',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
 
-  // Limit counts rendered rows (items + headers), so a 2-item group needs
-  // limit=3 to fit its header alongside both items in one page.
-  let highlighted = ''
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput
-      items={items}
-      limit={3}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    // Limit counts rendered rows (items + headers), so a 2-item group needs
+    // limit=3 to fit its header alongside both items in one page.
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  // Initial window shows A and B (both in "First" group)
-  const frame1 = lastFrame()!
-  t.true(frame1.includes('── First ──'))
-  t.true(frame1.includes('A'))
-  t.true(frame1.includes('B'))
+    await delay()
+    // Initial window shows A and B (both in "First" group)
+    const frame1 = lastFrame()!
+    t.true(frame1.includes('── First ──'))
+    t.true(frame1.includes('A'))
+    t.true(frame1.includes('B'))
 
-  // Navigate to C — window scrolls to show C and D
-  stdin.write(ARROW_DOWN)
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'C')
+    // Navigate to C — window scrolls to show C and D
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'C')
 
-  const frame2 = lastFrame()!
-  t.true(frame2.includes('── Second ──'))
-  t.true(frame2.includes('C'))
-  t.true(frame2.includes('D'))
-})
+    const frame2 = lastFrame()!
+    t.true(frame2.includes('── Second ──'))
+    t.true(frame2.includes('C'))
+    t.true(frame2.includes('D'))
+  }
+)
 // --- Additional Group Tests ---
 
-test('group headers render in horizontal orientation', (t) => {
+test.serial('group headers render in horizontal orientation', (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'Left' },
     { label: 'B', value: 'b', group: 'Right' },
@@ -2362,7 +2814,7 @@ test('group headers render in horizontal orientation', (t) => {
   t.true(frame.includes('── Right ──'))
 })
 
-test('group headers work with multi-select mode', async (t) => {
+test.serial('group headers work with multi-select mode', async (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'Group1' },
     { label: 'B', value: 'b', group: 'Group1' },
@@ -2384,50 +2836,56 @@ test('group headers work with multi-select mode', async (t) => {
   t.true(frame2.includes('── Group1 ──'))
 })
 
-test('group headers render for groups containing disabled items', (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'Tools', disabled: true },
-    { label: 'B', value: 'b', group: 'Tools' },
-  ]
+test.serial(
+  'group headers render for groups containing disabled items',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'Tools', disabled: true },
+      { label: 'B', value: 'b', group: 'Tools' },
+    ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
-  const frame = lastFrame()!
-  t.true(frame.includes('── Tools ──'))
-  t.true(frame.includes('A'))
-  t.true(frame.includes('B'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('── Tools ──'))
+    t.true(frame.includes('A'))
+    t.true(frame.includes('B'))
+  }
+)
 
-test('non-contiguous items with same group each render under their own header', (t) => {
-  // Non-contiguous items sharing a group name must each be preceded by their
-  // own group header.  The old Set-based approach only emitted the header on
-  // the first occurrence, causing later occurrences to render inside a foreign
-  // section.
-  const items = [
-    { label: 'A', value: 'a', group: 'Alpha' },
-    { label: 'B', value: 'b', group: 'Beta' },
-    { label: 'C', value: 'c', group: 'Alpha' },
-  ]
+test.serial(
+  'non-contiguous items with same group each render under their own header',
+  (t) => {
+    // Non-contiguous items sharing a group name must each be preceded by their
+    // own group header.  The old Set-based approach only emitted the header on
+    // the first occurrence, causing later occurrences to render inside a foreign
+    // section.
+    const items = [
+      { label: 'A', value: 'a', group: 'Alpha' },
+      { label: 'B', value: 'b', group: 'Beta' },
+      { label: 'C', value: 'c', group: 'Alpha' },
+    ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
-  const frame = lastFrame()!
+    const frame = lastFrame()!
 
-  // Alpha header must appear twice: once before A and once before C.
-  const alphaMatches = frame.split('── Alpha ──')
-  t.is(alphaMatches.length, 3) // 2 occurrences → 3 parts when split
-  t.true(frame.includes('── Beta ──'))
+    // Alpha header must appear twice: once before A and once before C.
+    const alphaMatches = frame.split('── Alpha ──')
+    t.is(alphaMatches.length, 3) // 2 occurrences → 3 parts when split
+    t.true(frame.includes('── Beta ──'))
 
-  // C's Alpha header must come after the Beta header, proving C is NOT
-  // rendered inside the Beta section.
-  const betaIndex = frame.indexOf('── Beta ──')
-  const secondAlphaIndex = frame.indexOf('── Alpha ──', betaIndex)
-  const cIndex = frame.indexOf('C')
-  t.true(secondAlphaIndex > betaIndex)
-  t.true(cIndex > secondAlphaIndex)
-})
+    // C's Alpha header must come after the Beta header, proving C is NOT
+    // rendered inside the Beta section.
+    const betaIndex = frame.indexOf('── Beta ──')
+    const secondAlphaIndex = frame.indexOf('── Alpha ──', betaIndex)
+    const cIndex = frame.indexOf('C')
+    t.true(secondAlphaIndex > betaIndex)
+    t.true(cIndex > secondAlphaIndex)
+  }
+)
 
-test('group headers with showScrollIndicators', (t) => {
+test.serial('group headers with showScrollIndicators', (t) => {
   const items = [
     { label: 'A', value: 'a', group: 'First' },
     { label: 'B', value: 'b', group: 'First' },
@@ -2449,115 +2907,138 @@ test('group headers with showScrollIndicators', (t) => {
 
 // --- B9: group headers must count against limit ---
 
-test('limit bounds rendered row count, not just item count, when every item has its own group', (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'G1' },
-    { label: 'B', value: 'b', group: 'G2' },
-    { label: 'C', value: 'c', group: 'G3' },
-    { label: 'D', value: 'd', group: 'G4' },
-  ]
+test.serial(
+  'limit bounds rendered row count, not just item count, when every item has its own group',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G1' },
+      { label: 'B', value: 'b', group: 'G2' },
+      { label: 'C', value: 'c', group: 'G3' },
+      { label: 'D', value: 'd', group: 'G4' },
+    ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={3} />)
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={3} />
+    )
 
-  const frame = lastFrame()!
-  const contentLines = frame.split('\n').filter((line) => line.trim() !== '')
-  t.true(contentLines.length <= 3)
-})
+    const frame = lastFrame()!
+    const contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+    t.true(contentLines.length <= 3)
+  }
+)
 
-test('hook: visibleItems plus headers stay within limit for grouped items', async (t) => {
-  const items: Array<Item<unknown>> = [
-    { label: 'A', value: 'a', group: 'G1' },
-    { label: 'B', value: 'b', group: 'G2' },
-    { label: 'C', value: 'c', group: 'G3' },
-    { label: 'D', value: 'd', group: 'G4' },
-  ]
+test.serial(
+  'hook: visibleItems plus headers stay within limit for grouped items',
+  async (t) => {
+    const items: Array<Item<unknown>> = [
+      { label: 'A', value: 'a', group: 'G1' },
+      { label: 'B', value: 'b', group: 'G2' },
+      { label: 'C', value: 'c', group: 'G3' },
+      { label: 'D', value: 'd', group: 'G4' },
+    ]
 
-  let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
 
-  render(
-    <HookHarness
-      items={items}
-      limit={3}
-      onResult={(r) => {
-        result = r
-      }}
-    />
-  )
+    render(
+      <HookHarness
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
 
-  await delay()
-  const visibleItems = result?.visibleItems ?? []
-  const headerCount = visibleItems.filter((item, index) => {
-    const previous = index > 0 ? visibleItems[index - 1] : undefined
-    return item.group && item.group !== previous?.group
-  }).length
+    await delay()
+    const visibleItems = result?.visibleItems ?? []
+    const headerCount = visibleItems.filter((item, index) => {
+      const previous = index > 0 ? visibleItems[index - 1] : undefined
+      return item.group && item.group !== previous?.group
+    }).length
 
-  const rowCount = visibleItems.length + headerCount
-  t.true(rowCount <= 3)
-  t.is(
-    (result?.itemsAbove ?? 0) + visibleItems.length + (result?.itemsBelow ?? 0),
-    items.length
-  )
-})
+    const rowCount = visibleItems.length + headerCount
+    t.true(rowCount <= 3)
+    t.is(
+      (result?.itemsAbove ?? 0) +
+        visibleItems.length +
+        (result?.itemsBelow ?? 0),
+      items.length
+    )
+  }
+)
 
-test('shrinking limit at runtime keeps rendered row count bounded even when selection is unchanged', async (t) => {
-  // Reproduces a dynamic terminal-resize scenario: a consumer lowers `limit`
-  // without the selection moving. `rotateIndex` was a valid page start under
-  // the old limit but not necessarily under the new one — the window must
-  // still stay within the new bound.
-  const items = [
-    { label: 'A', value: 'a', group: 'G1' },
-    { label: 'B', value: 'b', group: 'G2' },
-    { label: 'C', value: 'c', group: 'G3' },
-    { label: 'D', value: 'd', group: 'G4' },
-    { label: 'E', value: 'e', group: 'G5' },
-    { label: 'F', value: 'f', group: 'G6' },
-  ]
+test.serial(
+  'shrinking limit at runtime keeps rendered row count bounded even when selection is unchanged',
+  async (t) => {
+    // Reproduces a dynamic terminal-resize scenario: a consumer lowers `limit`
+    // without the selection moving. `rotateIndex` was a valid page start under
+    // the old limit but not necessarily under the new one — the window must
+    // still stay within the new bound.
+    const items = [
+      { label: 'A', value: 'a', group: 'G1' },
+      { label: 'B', value: 'b', group: 'G2' },
+      { label: 'C', value: 'c', group: 'G3' },
+      { label: 'D', value: 'd', group: 'G4' },
+      { label: 'E', value: 'e', group: 'G5' },
+      { label: 'F', value: 'f', group: 'G6' },
+    ]
 
-  const { rerender, lastFrame } = render(
-    <EnhancedSelectInput items={items} limit={6} initialIndex={3} />
-  )
+    const { rerender, lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={6} initialIndex={3} />
+    )
 
-  await delay()
-  let frame = lastFrame()!
-  let contentLines = frame.split('\n').filter((line) => line.trim() !== '')
-  t.true(contentLines.length <= 6)
+    await delay()
+    let frame = lastFrame()!
+    let contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+    t.true(contentLines.length <= 6)
 
-  // Shrink limit while the selected index (3) stays valid — nothing else
-  // about the props changes, so only the pageStarts recompute triggers.
-  rerender(<EnhancedSelectInput items={items} limit={3} initialIndex={3} />)
+    // Shrink limit while the selected index (3) stays valid — nothing else
+    // about the props changes, so only the pageStarts recompute triggers.
+    rerender(<EnhancedSelectInput items={items} limit={3} initialIndex={3} />)
 
-  await delay()
-  frame = lastFrame()!
-  contentLines = frame.split('\n').filter((line) => line.trim() !== '')
-  t.true(contentLines.length <= 3)
-})
+    await delay()
+    frame = lastFrame()!
+    contentLines = frame.split('\n').filter((line) => line.trim() !== '')
+    t.true(contentLines.length <= 3)
+  }
+)
 
-test('limit=1 with a grouped item still renders the item (header + item exceeds limit)', (t) => {
-  const items = [
-    { label: 'A', value: 'a', group: 'Group' },
-    { label: 'B', value: 'b', group: 'Group' },
-  ]
+test.serial(
+  'limit=1 with a grouped item still renders the item (header + item exceeds limit)',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'Group' },
+      { label: 'B', value: 'b', group: 'Group' },
+    ]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} limit={1} />)
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={1} />
+    )
 
-  const frame = lastFrame()!
-  t.true(frame.includes('── Group ──'))
-  t.true(frame.includes('A'))
-  t.false(frame.includes('B'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('── Group ──'))
+    t.true(frame.includes('A'))
+    t.false(frame.includes('B'))
+  }
+)
 
 // --- DefaultGroupHeaderComponent isolation ---
 
-test('DefaultGroupHeaderComponent renders label with decorators', (t) => {
-  const { lastFrame } = render(<DefaultGroupHeaderComponent label="My Group" />)
+test.serial(
+  'DefaultGroupHeaderComponent renders label with decorators',
+  (t) => {
+    const { lastFrame } = render(
+      <DefaultGroupHeaderComponent label="My Group" />
+    )
 
-  const frame = lastFrame()!
-  t.true(frame.includes('── My Group ──'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('── My Group ──'))
+  }
+)
 
 // --- Edge Cases: Single Item ---
 
-test('single item list: navigation wraps to itself', async (t) => {
+test.serial('single item list: navigation wraps to itself', async (t) => {
   const items = [{ label: 'Only', value: 'only' }]
 
   let highlighted = ''
@@ -2584,7 +3065,7 @@ test('single item list: navigation wraps to itself', async (t) => {
 
 // --- Edge Cases: limit ---
 
-test('limit larger than items count shows all items', (t) => {
+test.serial('limit larger than items count shows all items', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2598,7 +3079,7 @@ test('limit larger than items count shows all items', (t) => {
   t.is(frame.split('\n').length, 2)
 })
 
-test('limit=1 shows single item at a time', async (t) => {
+test.serial('limit=1 shows single item at a time', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2632,7 +3113,7 @@ test('limit=1 shows single item at a time', async (t) => {
 
 // --- Escape in multi-select mode ---
 
-test('Escape calls onCancel in multi-select mode', async (t) => {
+test.serial('Escape calls onCancel in multi-select mode', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2659,7 +3140,7 @@ test('Escape calls onCancel in multi-select mode', async (t) => {
 
 // --- Home/End in horizontal orientation ---
 
-test('Home key works in horizontal orientation', async (t) => {
+test.serial('Home key works in horizontal orientation', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2686,7 +3167,7 @@ test('Home key works in horizontal orientation', async (t) => {
   t.is(highlighted, 'A')
 })
 
-test('End key works in horizontal orientation', async (t) => {
+test.serial('End key works in horizontal orientation', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2712,29 +3193,32 @@ test('End key works in horizontal orientation', async (t) => {
 
 // --- Multi-select with item.key field ---
 
-test('multi-select defaultSelectedKeys works with explicit item.key', (t) => {
-  const items = [
-    { key: 'k1', label: 'A', value: { id: 1 } },
-    { key: 'k2', label: 'B', value: { id: 2 } },
-    { key: 'k3', label: 'C', value: { id: 3 } },
-  ]
+test.serial(
+  'multi-select defaultSelectedKeys works with explicit item.key',
+  (t) => {
+    const items = [
+      { key: 'k1', label: 'A', value: { id: 1 } },
+      { key: 'k2', label: 'B', value: { id: 2 } },
+      { key: 'k3', label: 'C', value: { id: 3 } },
+    ]
 
-  const { lastFrame } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      defaultSelectedKeys={['k1', 'k3']}
-    />
-  )
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        defaultSelectedKeys={['k1', 'k3']}
+      />
+    )
 
-  const frame = lastFrame()!
-  t.is((frame.match(/\[x]/g) ?? []).length, 2)
-  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
-})
+    const frame = lastFrame()!
+    t.is((frame.match(/\[x]/g) ?? []).length, 2)
+    t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+  }
+)
 
 // --- Hook: isFocused=false ---
 
-test('hook ignores all input when isFocused=false', async (t) => {
+test.serial('hook ignores all input when isFocused=false', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2765,7 +3249,7 @@ test('hook ignores all input when isFocused=false', async (t) => {
 
 // --- Navigation on empty items does nothing ---
 
-test('keyboard input on empty items does not crash', async (t) => {
+test.serial('keyboard input on empty items does not crash', async (t) => {
   const { stdin, lastFrame } = render(<EnhancedSelectInput items={[]} />)
 
   await delay()
@@ -2789,7 +3273,7 @@ test('keyboard input on empty items does not crash', async (t) => {
 
 // --- Hotkey updates highlight position ---
 
-test('hotkey updates selectedIndex to the hotkey item', async (t) => {
+test.serial('hotkey updates selectedIndex to the hotkey item', async (t) => {
   const items = [
     { label: 'A', value: 'a', hotkey: 'x' },
     { label: 'B', value: 'b', hotkey: 'y' },
@@ -2821,47 +3305,50 @@ test('hotkey updates selectedIndex to the hotkey item', async (t) => {
 
 // --- Hotkey in horizontal mode with h/l conflict ---
 
-test('h/l hotkeys are ignored in horizontal orientation (nav takes priority)', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', hotkey: 'h' },
-    { label: 'B', value: 'b', hotkey: 'l' },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'h/l hotkeys are ignored in horizontal orientation (nav takes priority)',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', hotkey: 'h' },
+      { label: 'B', value: 'b', hotkey: 'l' },
+      { label: 'C', value: 'c' },
+    ]
 
-  let selected = ''
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      orientation="horizontal"
-      onSelect={(item) => {
-        selected = item.label
-      }}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let selected = ''
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        orientation="horizontal"
+        onSelect={(item) => {
+          selected = item.label
+        }}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'A')
+    await delay()
+    t.is(highlighted, 'A')
 
-  // 'l' should navigate right, not trigger hotkey
-  stdin.write('l')
-  await delay()
-  t.is(highlighted, 'B')
-  t.is(selected, '')
+    // 'l' should navigate right, not trigger hotkey
+    stdin.write('l')
+    await delay()
+    t.is(highlighted, 'B')
+    t.is(selected, '')
 
-  // 'h' should navigate left, not trigger hotkey
-  stdin.write('h')
-  await delay()
-  t.is(highlighted, 'A')
-  t.is(selected, '')
-})
+    // 'h' should navigate left, not trigger hotkey
+    stdin.write('h')
+    await delay()
+    t.is(highlighted, 'A')
+    t.is(selected, '')
+  }
+)
 
 // --- onSelect not provided does not crash ---
 
-test('enter without onSelect does not crash', async (t) => {
+test.serial('enter without onSelect does not crash', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2879,7 +3366,7 @@ test('enter without onSelect does not crash', async (t) => {
 
 // --- onHighlight not provided does not crash ---
 
-test('navigation without onHighlight does not crash', async (t) => {
+test.serial('navigation without onHighlight does not crash', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2897,7 +3384,7 @@ test('navigation without onHighlight does not crash', async (t) => {
 
 // --- Multi-select: navigation still works ---
 
-test('multi-select navigation with arrow keys works', async (t) => {
+test.serial('multi-select navigation with arrow keys works', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2933,7 +3420,7 @@ test('multi-select navigation with arrow keys works', async (t) => {
 
 // --- Multi-select: Home/End work ---
 
-test('multi-select Home/End navigation works', async (t) => {
+test.serial('multi-select Home/End navigation works', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2963,7 +3450,7 @@ test('multi-select Home/End navigation works', async (t) => {
 
 // --- Indicator component receives the item ---
 
-test('indicatorComponent receives the current item', (t) => {
+test.serial('indicatorComponent receives the current item', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -2986,7 +3473,7 @@ test('indicatorComponent receives the current item', (t) => {
 
 // --- Per-item indicator only shows when selected ---
 
-test('per-item indicator only shows for selected item', async (t) => {
+test.serial('per-item indicator only shows for selected item', async (t) => {
   const items = [
     { label: 'A', value: 'a', indicator: '★' },
     { label: 'B', value: 'b', indicator: '●' },
@@ -3010,7 +3497,7 @@ test('per-item indicator only shows for selected item', async (t) => {
 
 // --- Scroll indicators in horizontal mode ---
 
-test('showScrollIndicators uses ◀/▶ in horizontal mode', (t) => {
+test.serial('showScrollIndicators uses ◀/▶ in horizontal mode', (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -3038,7 +3525,7 @@ test('showScrollIndicators uses ◀/▶ in horizontal mode', (t) => {
 
 // --- Rapid navigation ---
 
-test('rapid sequential navigation lands on correct item', async (t) => {
+test.serial('rapid sequential navigation lands on correct item', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -3071,7 +3558,7 @@ test('rapid sequential navigation lands on correct item', async (t) => {
 
 // --- onHighlight fires on initial render ---
 
-test('onHighlight fires on initial mount', async (t) => {
+test.serial('onHighlight fires on initial mount', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -3091,108 +3578,180 @@ test('onHighlight fires on initial mount', async (t) => {
   t.is(highlighted, 'A')
 })
 
-test('onHighlight fires with correct item when initialIndex is set', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-  ]
+test.serial(
+  'onHighlight fires with correct item when initialIndex is set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
 
-  let highlighted = ''
-  render(
-    <EnhancedSelectInput
-      items={items}
-      initialIndex={1}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    render(
+      <EnhancedSelectInput
+        items={items}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'B')
-})
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'onHighlight fires with the new item when filtering swaps the item at the same index',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const highlights: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onHighlight={(item) => {
+          highlights.push(item.label)
+        }}
+      />
+    )
+
+    await delay()
+    t.deepEqual(highlights, ['Apple'])
+
+    // Filtering to "b" drops "Apple" and leaves "Banana" as the sole match at
+    // index 0 — the same index "Apple" already occupied — so onHighlight must
+    // still fire for the newly-highlighted item.
+    stdin.write('b')
+    await delay()
+
+    t.deepEqual(highlights, ['Apple', 'Banana'])
+  }
+)
+
+test.serial(
+  'onHighlight does not fire again when the same item stays highlighted across a re-render',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
+
+    const highlights: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onHighlight={(item) => {
+          highlights.push(item.label)
+        }}
+      />
+    )
+
+    await delay()
+    t.deepEqual(highlights, ['Apple'])
+
+    // Filtering to "a" still matches "Apple" first, so no new highlight call.
+    stdin.write('a')
+    await delay()
+
+    t.deepEqual(highlights, ['Apple'])
+  }
+)
 
 // --- Generic value type ---
 
-test('works with complex object values when key is provided', async (t) => {
-  type MyValue = { id: number; name: string }
-  const items: Array<{ key: string; label: string; value: MyValue }> = [
-    { key: 'item-1', label: 'First', value: { id: 1, name: 'one' } },
-    { key: 'item-2', label: 'Second', value: { id: 2, name: 'two' } },
-  ]
+test.serial(
+  'works with complex object values when key is provided',
+  async (t) => {
+    type MyValue = { id: number; name: string }
+    const items: Array<{ key: string; label: string; value: MyValue }> = [
+      { key: 'item-1', label: 'First', value: { id: 1, name: 'one' } },
+      { key: 'item-2', label: 'Second', value: { id: 2, name: 'two' } },
+    ]
 
-  let selected: MyValue | undefined
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      onSelect={(item) => {
-        selected = item.value
-      }}
-    />
-  )
+    let selected: MyValue | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onSelect={(item) => {
+          selected = item.value
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.not(selected, undefined)
-  t.is(selected?.id, 2)
-  t.is(selected?.name, 'two')
-})
+    t.not(selected, undefined)
+    t.is(selected?.id, 2)
+    t.is(selected?.name, 'two')
+  }
+)
 
 // --- Multi-select: toggle then navigate then confirm ---
 
-test('multi-select: toggle multiple items across navigation then confirm', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-    { label: 'C', value: 'c' },
-    { label: 'D', value: 'd' },
-  ]
+test.serial(
+  'multi-select: toggle multiple items across navigation then confirm',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(SPACE) // Check A
-  await delay()
-  stdin.write(ARROW_DOWN) // → B
-  await delay()
-  stdin.write(ARROW_DOWN) // → C
-  await delay()
-  stdin.write(SPACE) // Check C
-  await delay()
-  stdin.write(ARROW_DOWN) // → D
-  await delay()
-  stdin.write(SPACE) // Check D
-  await delay()
-  stdin.write(ARROW_UP) // → C
-  await delay()
-  stdin.write(SPACE) // Uncheck C
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ARROW_DOWN) // → B
+    await delay()
+    stdin.write(ARROW_DOWN) // → C
+    await delay()
+    stdin.write(SPACE) // Check C
+    await delay()
+    stdin.write(ARROW_DOWN) // → D
+    await delay()
+    stdin.write(SPACE) // Check D
+    await delay()
+    stdin.write(ARROW_UP) // → C
+    await delay()
+    stdin.write(SPACE) // Uncheck C
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.is(confirmed.length, 2)
-  t.true(confirmed.includes('a'))
-  t.true(confirmed.includes('d'))
-  t.false(confirmed.includes('c'))
-})
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('a'))
+    t.true(confirmed.includes('d'))
+    t.false(confirmed.includes('c'))
+  }
+)
 
 // --- Items update: items grow ---
 
-test('selection stays valid when items grow', async (t) => {
+test.serial('selection stays valid when items grow', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -3234,43 +3793,46 @@ test('selection stays valid when items grow', async (t) => {
 
 // --- Items update: items replaced entirely ---
 
-test('selection resets when items are completely replaced', async (t) => {
-  let highlighted = ''
-  const { rerender } = render(
-    <EnhancedSelectInput
-      items={[
-        { label: 'A', value: 'a' },
-        { label: 'B', value: 'b' },
-        { label: 'C', value: 'c' },
-      ]}
-      initialIndex={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+test.serial(
+  'selection resets when items are completely replaced',
+  async (t) => {
+    let highlighted = ''
+    const { rerender } = render(
+      <EnhancedSelectInput
+        items={[
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b' },
+          { label: 'C', value: 'c' },
+        ]}
+        initialIndex={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'C')
+    await delay()
+    t.is(highlighted, 'C')
 
-  // Replace with completely different items (only 1 item)
-  rerender(
-    <EnhancedSelectInput
-      items={[{ label: 'X', value: 'x' }]}
-      initialIndex={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    // Replace with completely different items (only 1 item)
+    rerender(
+      <EnhancedSelectInput
+        items={[{ label: 'X', value: 'x' }]}
+        initialIndex={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await waitFor(() => highlighted === 'X')
-  t.is(highlighted, 'X')
-})
+    await waitFor(() => highlighted === 'X')
+    t.is(highlighted, 'X')
+  }
+)
 
 // --- Searchable Mode (#14) ---
 
-test('searchable: renders search input with placeholder', (t) => {
+test.serial('searchable: renders search input with placeholder', (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3284,7 +3846,7 @@ test('searchable: renders search input with placeholder', (t) => {
   t.true(frame.includes('Banana'))
 })
 
-test('searchable: renders custom placeholder', (t) => {
+test.serial('searchable: renders custom placeholder', (t) => {
   const items = [{ label: 'Apple', value: 'apple' }]
 
   const { lastFrame } = render(
@@ -3299,7 +3861,7 @@ test('searchable: renders custom placeholder', (t) => {
   t.true(frame.includes('/ Type to filter'))
 })
 
-test('searchable: typing filters items by label', async (t) => {
+test.serial('searchable: typing filters items by label', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3321,7 +3883,7 @@ test('searchable: typing filters items by label', async (t) => {
   t.true(frame.includes('Banana')) // "Banana" contains 'a'
 })
 
-test('searchable: filtering is case-insensitive', async (t) => {
+test.serial('searchable: filtering is case-insensitive', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3340,7 +3902,7 @@ test('searchable: filtering is case-insensitive', async (t) => {
   t.false(frame.includes('Banana'))
 })
 
-test('searchable: multi-character query narrows results', async (t) => {
+test.serial('searchable: multi-character query narrows results', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Apricot', value: 'apricot' },
@@ -3369,35 +3931,38 @@ test('searchable: multi-character query narrows results', async (t) => {
   t.false(frame2.includes('Apricot'))
 })
 
-test('searchable: backspace removes last character from query', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: backspace removes last character from query',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput searchable items={items} />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
 
-  await delay()
-  stdin.write('app')
-  await delay()
+    await delay()
+    stdin.write('app')
+    await delay()
 
-  let frame = lastFrame()!
-  t.true(frame.includes('Apple'))
-  t.false(frame.includes('Banana'))
+    let frame = lastFrame()!
+    t.true(frame.includes('Apple'))
+    t.false(frame.includes('Banana'))
 
-  // Backspace to "ap"
-  stdin.write('\u007F') // DEL/Backspace
-  await delay()
+    // Backspace to "ap"
+    stdin.write('\u007F') // DEL/Backspace
+    await delay()
 
-  frame = lastFrame()!
-  t.true(frame.includes('/ ap'))
-  t.true(frame.includes('Apple'))
-  t.false(frame.includes('Banana'))
-})
+    frame = lastFrame()!
+    t.true(frame.includes('/ ap'))
+    t.true(frame.includes('Apple'))
+    t.false(frame.includes('Banana'))
+  }
+)
 
-test('searchable: escape clears the search query', async (t) => {
+test.serial('searchable: escape clears the search query', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3424,95 +3989,104 @@ test('searchable: escape clears the search query', async (t) => {
   t.true(frame.includes('/ Search...'))
 })
 
-test('searchable: escape calls onCancel when query is already empty', async (t) => {
-  const items = [{ label: 'Apple', value: 'apple' }]
+test.serial(
+  'searchable: escape calls onCancel when query is already empty',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
 
-  let cancelled = false
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      onCancel={() => {
-        cancelled = true
-      }}
-    />
-  )
+    let cancelled = false
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onCancel={() => {
+          cancelled = true
+        }}
+      />
+    )
 
-  await delay()
-  // No query typed, escape should call onCancel
-  stdin.write(ESCAPE)
-  await waitFor(() => cancelled)
-  t.true(cancelled)
-})
+    await delay()
+    // No query typed, escape should call onCancel
+    stdin.write(ESCAPE)
+    await waitFor(() => cancelled)
+    t.true(cancelled)
+  }
+)
 
-test('searchable: escape clears query first, then onCancel on second press', async (t) => {
-  const items = [{ label: 'Apple', value: 'apple' }]
+test.serial(
+  'searchable: escape clears query first, then onCancel on second press',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
 
-  let cancelled = false
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      onCancel={() => {
-        cancelled = true
-      }}
-    />
-  )
+    let cancelled = false
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onCancel={() => {
+          cancelled = true
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('a')
-  // Wait for the typed query to actually land before pressing Escape —
-  // under load a fixed delay() isn't always long enough, and an Escape
-  // sent while the query is still empty is indistinguishable from the
-  // "clear query" case only by accident (see comment on `waitFor` above).
-  await waitFor(() => lastFrame()!.includes('/ a'))
+    await delay()
+    stdin.write('a')
+    // Wait for the typed query to actually land before pressing Escape —
+    // under load a fixed delay() isn't always long enough, and an Escape
+    // sent while the query is still empty is indistinguishable from the
+    // "clear query" case only by accident (see comment on `waitFor` above).
+    await waitFor(() => lastFrame()!.includes('/ a'))
 
-  // First escape clears query
-  stdin.write(ESCAPE)
-  await waitFor(() => cancelled || lastFrame()!.includes('/ Search...'))
-  t.false(cancelled)
-  t.true(lastFrame()!.includes('/ Search...'))
+    // First escape clears query
+    stdin.write(ESCAPE)
+    await waitFor(() => cancelled || lastFrame()!.includes('/ Search...'))
+    t.false(cancelled)
+    t.true(lastFrame()!.includes('/ Search...'))
 
-  // Second escape calls onCancel
-  stdin.write(ESCAPE)
-  await waitFor(() => cancelled)
-  t.true(cancelled)
-})
+    // Second escape calls onCancel
+    stdin.write(ESCAPE)
+    await waitFor(() => cancelled)
+    t.true(cancelled)
+  }
+)
 
-test('searchable: arrow navigation works on filtered results', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: arrow navigation works on filtered results',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('ap')
-  await delay()
-  // After filtering, first match should be highlighted
-  t.is(highlighted, 'Apple')
+    await delay()
+    stdin.write('ap')
+    await delay()
+    // After filtering, first match should be highlighted
+    t.is(highlighted, 'Apple')
 
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Apricot')
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Apricot')
 
-  stdin.write(ARROW_UP)
-  await delay()
-  t.is(highlighted, 'Apple')
-})
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(highlighted, 'Apple')
+  }
+)
 
-test('searchable: enter selects from filtered results', async (t) => {
+test.serial('searchable: enter selects from filtered results', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3542,31 +4116,34 @@ test('searchable: enter selects from filtered results', async (t) => {
   t.is(selected, 'Banana')
 })
 
-test('searchable: vim keys (j/k) are treated as search input, not navigation', async (t) => {
-  const items = [
-    { label: 'jelly', value: 'jelly' },
-    { label: 'jam', value: 'jam' },
-    { label: 'juice', value: 'juice' },
-  ]
+test.serial(
+  'searchable: vim keys (j/k) are treated as search input, not navigation',
+  async (t) => {
+    const items = [
+      { label: 'jelly', value: 'jelly' },
+      { label: 'jam', value: 'jam' },
+      { label: 'juice', value: 'juice' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput searchable items={items} />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
 
-  await delay()
-  stdin.write('j')
-  await delay()
+    await delay()
+    stdin.write('j')
+    await delay()
 
-  const frame = lastFrame()!
-  // 'j' should be in the search query, not navigate
-  t.true(frame.includes('/ j'))
-  // All items contain 'j' so all should be visible
-  t.true(frame.includes('jelly'))
-  t.true(frame.includes('jam'))
-  t.true(frame.includes('juice'))
-})
+    const frame = lastFrame()!
+    // 'j' should be in the search query, not navigate
+    t.true(frame.includes('/ j'))
+    // All items contain 'j' so all should be visible
+    t.true(frame.includes('jelly'))
+    t.true(frame.includes('jam'))
+    t.true(frame.includes('juice'))
+  }
+)
 
-test('searchable: hotkeys are disabled', async (t) => {
+test.serial('searchable: hotkeys are disabled', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple', hotkey: 'a' },
     { label: 'Banana', value: 'banana', hotkey: 'b' },
@@ -3593,57 +4170,63 @@ test('searchable: hotkeys are disabled', async (t) => {
   t.true(frame.includes('/ a'))
 })
 
-test('searchable: shows "No matches" when query matches nothing', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: shows "No matches" when query matches nothing',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput searchable items={items} />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
 
-  await delay()
-  stdin.write('xyz')
-  await delay()
+    await delay()
+    stdin.write('xyz')
+    await delay()
 
-  const frame = lastFrame()!
-  t.true(frame.includes('No matches'))
-  t.true(frame.includes('/ xyz'))
-  t.false(frame.includes('Apple'))
-  t.false(frame.includes('Banana'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('No matches'))
+    t.true(frame.includes('/ xyz'))
+    t.false(frame.includes('Apple'))
+    t.false(frame.includes('Banana'))
+  }
+)
 
-test('searchable: selection resets to first item when query changes', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: selection resets to first item when query changes',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Apricot')
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Apricot')
 
-  // Typing resets selection to first match
-  stdin.write('b')
-  await delay()
-  t.is(highlighted, 'Banana')
-})
+    // Typing resets selection to first match
+    stdin.write('b')
+    await delay()
+    t.is(highlighted, 'Banana')
+  }
+)
 
-test('searchable: works with disabled items', async (t) => {
+test.serial('searchable: works with disabled items', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple', disabled: true },
     { label: 'Apricot', value: 'apricot' },
@@ -3668,42 +4251,45 @@ test('searchable: works with disabled items', async (t) => {
   t.is(highlighted, 'Apricot')
 })
 
-test('searchable: space is treated as search character, not toggle', async (t) => {
-  const items = [
-    { label: 'Ice Cream', value: 'ice-cream' },
-    { label: 'Iced Tea', value: 'iced-tea' },
-    { label: 'Apple', value: 'apple' },
-  ]
+test.serial(
+  'searchable: space is treated as search character, not toggle',
+  async (t) => {
+    const items = [
+      { label: 'Ice Cream', value: 'ice-cream' },
+      { label: 'Iced Tea', value: 'iced-tea' },
+      { label: 'Apple', value: 'apple' },
+    ]
 
-  let result: UseEnhancedSelectInputResult<unknown> | undefined
-  const { stdin } = render(
-    <HookHarness
-      searchable
-      items={items}
-      onResult={(r) => {
-        result = r
-      }}
-    />
-  )
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('i')
-  await delay()
-  stdin.write('c')
-  await delay()
-  stdin.write('e')
-  await delay()
-  stdin.write(SPACE)
-  await delay()
+    await delay()
+    stdin.write('i')
+    await delay()
+    stdin.write('c')
+    await delay()
+    stdin.write('e')
+    await delay()
+    stdin.write(SPACE)
+    await delay()
 
-  // Verify space was captured in the query (not treated as toggle)
-  t.is(result?.searchQuery, 'ice ')
-  // "ice " matches only "Ice Cream" (not "Iced Tea" since "iced tea" doesn't contain "ice ")
-  t.is(result?.visibleItems.length, 1)
-  t.is(result?.visibleItems[0]?.label, 'Ice Cream')
-})
+    // Verify space was captured in the query (not treated as toggle)
+    t.is(result?.searchQuery, 'ice ')
+    // "ice " matches only "Ice Cream" (not "Iced Tea" since "iced tea" doesn't contain "ice ")
+    t.is(result?.visibleItems.length, 1)
+    t.is(result?.visibleItems[0]?.label, 'Ice Cream')
+  }
+)
 
-test('searchable: hook exposes searchQuery in result', async (t) => {
+test.serial('searchable: hook exposes searchQuery in result', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3728,17 +4314,20 @@ test('searchable: hook exposes searchQuery in result', async (t) => {
   t.is(result?.searchQuery, 'app')
 })
 
-test('searchable: non-searchable mode does not show search input', (t) => {
-  const items = [{ label: 'Apple', value: 'apple' }]
+test.serial(
+  'searchable: non-searchable mode does not show search input',
+  (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
 
-  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
 
-  const frame = lastFrame()!
-  t.false(frame.includes('/'))
-  t.false(frame.includes('Search'))
-})
+    const frame = lastFrame()!
+    t.false(frame.includes('/'))
+    t.false(frame.includes('Search'))
+  }
+)
 
-test('searchable: works with limit/pagination', async (t) => {
+test.serial('searchable: works with limit/pagination', async (t) => {
   const items = [
     { label: 'Alpha', value: 'alpha' },
     { label: 'Bravo', value: 'bravo' },
@@ -3761,30 +4350,33 @@ test('searchable: works with limit/pagination', async (t) => {
   t.true(frame.includes('/ a'))
 })
 
-test('searchable: groups still render with filtered items', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple', group: 'Fruits' },
-    { label: 'Apricot', value: 'apricot', group: 'Fruits' },
-    { label: 'Broccoli', value: 'broccoli', group: 'Vegetables' },
-  ]
+test.serial(
+  'searchable: groups still render with filtered items',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple', group: 'Fruits' },
+      { label: 'Apricot', value: 'apricot', group: 'Fruits' },
+      { label: 'Broccoli', value: 'broccoli', group: 'Vegetables' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput searchable items={items} />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
 
-  await delay()
-  stdin.write('ap')
-  await delay()
+    await delay()
+    stdin.write('ap')
+    await delay()
 
-  const frame = lastFrame()!
-  t.true(frame.includes('── Fruits ──'))
-  t.true(frame.includes('Apple'))
-  t.true(frame.includes('Apricot'))
-  t.false(frame.includes('Broccoli'))
-  t.false(frame.includes('── Vegetables ──'))
-})
+    const frame = lastFrame()!
+    t.true(frame.includes('── Fruits ──'))
+    t.true(frame.includes('Apple'))
+    t.true(frame.includes('Apricot'))
+    t.false(frame.includes('Broccoli'))
+    t.false(frame.includes('── Vegetables ──'))
+  }
+)
 
-test('searchable: backspace on empty query does nothing', async (t) => {
+test.serial('searchable: backspace on empty query does nothing', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3807,153 +4399,165 @@ test('searchable: backspace on empty query does nothing', async (t) => {
 
 // --- Searchable + Multi-select combination ---
 
-test('searchable + multiple: can filter then confirm checked items', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot' },
-    { label: 'Banana', value: 'banana' },
-    { label: 'Cherry', value: 'cherry' },
-  ]
+test.serial(
+  'searchable + multiple: can filter then confirm checked items',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      multiple
-      items={items}
-      defaultSelectedKeys={['apple', 'cherry']}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        multiple
+        items={items}
+        defaultSelectedKeys={['apple', 'cherry']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  // Filter to only "ap" items, then confirm — checked items hidden by the
-  // active filter (cherry) must still be included, not silently dropped.
-  stdin.write('ap')
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    // Filter to only "ap" items, then confirm — checked items hidden by the
+    // active filter (cherry) must still be included, not silently dropped.
+    stdin.write('ap')
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.is(confirmed.length, 2)
-  t.true(confirmed.includes('apple'))
-  t.true(confirmed.includes('cherry'))
-})
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('apple'))
+    t.true(confirmed.includes('cherry'))
+  }
+)
 
-test('searchable + multiple: checking items across two different queries confirms both', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-    { label: 'Cherry', value: 'cherry' },
-  ]
+test.serial(
+  'searchable + multiple: checking items across two different queries confirms both',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      multiple
-      items={items}
-      defaultSelectedKeys={['apple', 'banana']}
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        multiple
+        items={items}
+        defaultSelectedKeys={['apple', 'banana']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  // Filter to a query that hides "apple" entirely, then confirm — apple
-  // was checked before this query and must survive into onConfirm.
-  stdin.write('ban')
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    // Filter to a query that hides "apple" entirely, then confirm — apple
+    // was checked before this query and must survive into onConfirm.
+    stdin.write('ban')
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  t.is(confirmed.length, 2)
-  t.true(confirmed.includes('apple'))
-  t.true(confirmed.includes('banana'))
-})
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('apple'))
+    t.true(confirmed.includes('banana'))
+  }
+)
 
-test('searchable + multiple: confirmScope "filtered" restores scoped confirm behaviour', async (t) => {
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot' },
-    { label: 'Banana', value: 'banana' },
-    { label: 'Cherry', value: 'cherry' },
-  ]
+test.serial(
+  'searchable + multiple: confirmScope "filtered" restores scoped confirm behaviour',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
 
-  let confirmed: string[] = []
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      multiple
-      items={items}
-      defaultSelectedKeys={['apple', 'cherry']}
-      confirmScope="filtered"
-      onConfirm={(selected) => {
-        confirmed = selected.map((item) => String(item.value))
-      }}
-    />
-  )
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        multiple
+        items={items}
+        defaultSelectedKeys={['apple', 'cherry']}
+        confirmScope="filtered"
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('ap')
-  await delay()
-  stdin.write(ENTER)
-  await delay()
+    await delay()
+    stdin.write('ap')
+    await delay()
+    stdin.write(ENTER)
+    await delay()
 
-  // Only "apple" matches the filter AND is checked; cherry is excluded
-  // because confirmScope is explicitly opted into filtered-only confirm.
-  t.is(confirmed.length, 1)
-  t.true(confirmed.includes('apple'))
-})
+    // Only "apple" matches the filter AND is checked; cherry is excluded
+    // because confirmScope is explicitly opted into filtered-only confirm.
+    t.is(confirmed.length, 1)
+    t.true(confirmed.includes('apple'))
+  }
+)
 
 // --- Searchable + limit + navigation ---
 
-test('searchable + limit: navigation works within paginated filtered results', async (t) => {
-  const items = [
-    { label: 'Alpha', value: 'alpha' },
-    { label: 'Apex', value: 'apex' },
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-    { label: 'Cherry', value: 'cherry' },
-  ]
+test.serial(
+  'searchable + limit: navigation works within paginated filtered results',
+  async (t) => {
+    const items = [
+      { label: 'Alpha', value: 'alpha' },
+      { label: 'Apex', value: 'apex' },
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      limit={2}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        limit={2}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  stdin.write('a')
-  await delay()
-  // "a" matches Alpha, Apex, Apple, Banana (all contain 'a')
-  t.is(highlighted, 'Alpha')
+    await delay()
+    stdin.write('a')
+    await delay()
+    // "a" matches Alpha, Apex, Apple, Banana (all contain 'a')
+    t.is(highlighted, 'Alpha')
 
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Apex')
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Apex')
 
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Apple')
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Apple')
 
-  // Should have scrolled past the limit=2 window
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Banana')
-})
+    // Should have scrolled past the limit=2 window
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Banana')
+  }
+)
 
 // --- Searchable + isFocused=false ---
 
-test('searchable: typing blocked when isFocused=false', async (t) => {
+test.serial('searchable: typing blocked when isFocused=false', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
     { label: 'Banana', value: 'banana' },
@@ -3982,7 +4586,7 @@ test('searchable: typing blocked when isFocused=false', async (t) => {
 
 // --- Searchable + Home/End on filtered results ---
 
-test('searchable: Home/End work on filtered results', async (t) => {
+test.serial('searchable: Home/End work on filtered results', async (t) => {
   const items = [
     { label: 'Alpha', value: 'alpha' },
     { label: 'Apex', value: 'apex' },
@@ -4022,44 +4626,47 @@ test('searchable: Home/End work on filtered results', async (t) => {
 
 // --- Searchable: query with no results then backspace restores items ---
 
-test('searchable: multiple backspaces progressively restore items', async (t) => {
-  // This test verifies that backspace works to widen the filter.
-  // The existing "backspace removes last character" test covers single backspace.
-  // Here we verify the query display updates correctly.
-  const items = [
-    { label: 'Apple', value: 'apple' },
-    { label: 'Apricot', value: 'apricot' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: multiple backspaces progressively restore items',
+  async (t) => {
+    // This test verifies that backspace works to widen the filter.
+    // The existing "backspace removes last character" test covers single backspace.
+    // Here we verify the query display updates correctly.
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  const { stdin, lastFrame } = render(
-    <EnhancedSelectInput searchable items={items} />
-  )
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
 
-  await delay()
-  stdin.write('app')
-  await delay()
+    await delay()
+    stdin.write('app')
+    await delay()
 
-  let frame = lastFrame()!
-  t.true(frame.includes('/ app'))
-  t.true(frame.includes('Apple'))
-  t.false(frame.includes('Apricot'))
-  t.false(frame.includes('Banana'))
+    let frame = lastFrame()!
+    t.true(frame.includes('/ app'))
+    t.true(frame.includes('Apple'))
+    t.false(frame.includes('Apricot'))
+    t.false(frame.includes('Banana'))
 
-  // Single backspace to "ap" — now Apricot also matches
-  stdin.write('\u007F')
-  await delay()
+    // Single backspace to "ap" — now Apricot also matches
+    stdin.write('\u007F')
+    await delay()
 
-  frame = lastFrame()!
-  t.true(frame.includes('/ ap'))
-  t.true(frame.includes('Apple'))
-  t.true(frame.includes('Apricot'))
-  t.false(frame.includes('Banana'))
-})
+    frame = lastFrame()!
+    t.true(frame.includes('/ ap'))
+    t.true(frame.includes('Apple'))
+    t.true(frame.includes('Apricot'))
+    t.false(frame.includes('Banana'))
+  }
+)
 
 // --- keyMap: selective key group disabling ---
 
-test('keyMap.arrows=false disables arrow key navigation', async (t) => {
+test.serial('keyMap.arrows=false disables arrow key navigation', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -4081,28 +4688,31 @@ test('keyMap.arrows=false disables arrow key navigation', async (t) => {
   t.is(highlighted, 'A') // Must not move
 })
 
-test('keyMap.arrows=false still allows vim key navigation', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      items={items}
-      keyMap={{ arrows: false }}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
-  await delay()
-  stdin.write('j')
-  await delay()
-  t.is(highlighted, 'B')
-})
+test.serial(
+  'keyMap.arrows=false still allows vim key navigation',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        keyMap={{ arrows: false }}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    stdin.write('j')
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
 
-test('keyMap.vimKeys=false disables j/k navigation', async (t) => {
+test.serial('keyMap.vimKeys=false disables j/k navigation', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -4124,7 +4734,7 @@ test('keyMap.vimKeys=false disables j/k navigation', async (t) => {
   t.is(highlighted, 'A') // J must not navigate
 })
 
-test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
+test.serial('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -4145,7 +4755,7 @@ test('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
   t.is(highlighted, 'B')
 })
 
-test('keyMap.homeEnd=false disables Home/End keys', async (t) => {
+test.serial('keyMap.homeEnd=false disables Home/End keys', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },
@@ -4172,7 +4782,7 @@ test('keyMap.homeEnd=false disables Home/End keys', async (t) => {
   t.is(highlighted, 'B') // Must not jump to C
 })
 
-test('keyMap.cancel=false disables Escape → onCancel', async (t) => {
+test.serial('keyMap.cancel=false disables Escape → onCancel', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   let cancelled = false
   const { stdin } = render(
@@ -4190,7 +4800,7 @@ test('keyMap.cancel=false disables Escape → onCancel', async (t) => {
   t.false(cancelled)
 })
 
-test('keyMap.select=false disables Enter → onSelect', async (t) => {
+test.serial('keyMap.select=false disables Enter → onSelect', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   let selected = ''
   const { stdin } = render(
@@ -4208,26 +4818,29 @@ test('keyMap.select=false disables Enter → onSelect', async (t) => {
   t.is(selected, '')
 })
 
-test('keyMap.toggle=false disables Space in multi-select mode', async (t) => {
-  const items = [{ label: 'A', value: 'a' }]
-  let toggled = false
-  const { stdin } = render(
-    <EnhancedSelectInput
-      multiple
-      items={items}
-      keyMap={{ toggle: false }}
-      onToggle={() => {
-        toggled = true
-      }}
-    />
-  )
-  await delay()
-  stdin.write(SPACE)
-  await delay()
-  t.false(toggled)
-})
+test.serial(
+  'keyMap.toggle=false disables Space in multi-select mode',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
+    let toggled = false
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        keyMap={{ toggle: false }}
+        onToggle={() => {
+          toggled = true
+        }}
+      />
+    )
+    await delay()
+    stdin.write(SPACE)
+    await delay()
+    t.false(toggled)
+  }
+)
 
-test('keyMap defaults to all enabled when not provided', async (t) => {
+test.serial('keyMap defaults to all enabled when not provided', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
     { label: 'B', value: 'b' },

@@ -11,6 +11,13 @@ export type Item<V> = {
   label: string
   value: V
   hotkey?: string
+  /**
+   * Custom indicator shown only for the highlighted item in single-select
+   * mode. Ignored when `multiple` is true — the built-in checkbox indicator
+   * takes precedence there (a dev warning is logged if both are supplied).
+   * To customize the indicator in multi-select mode, use
+   * `indicatorComponent` instead.
+   */
   indicator?: React.ReactNode
   disabled?: boolean
   /**
@@ -340,13 +347,26 @@ export function useEnhancedSelectInput<V>({
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
 
-  // Filter items based on search query
-  const filteredItems =
-    searchable && searchQuery
-      ? items.filter((item) =>
-          item.label.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : items
+  // Keep the latest onHighlight in a ref so the highlight effect below can
+  // depend only on the highlighted index, not on the callback reference —
+  // an inline arrow function (as shown in the README) is a new reference
+  // every render and would otherwise re-fire the effect every render.
+  const onHighlightReference = useRef(onHighlight)
+  onHighlightReference.current = onHighlight
+
+  // Filter items based on search query. Memoized so the reference is stable
+  // across renders that don't actually change the item set — downstream
+  // effects depend on this reference to distinguish "items changed" from
+  // "parent re-rendered with a new-but-equivalent array".
+  const filteredItems = useMemo(
+    () =>
+      searchable && searchQuery
+        ? items.filter((item) =>
+            item.label.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : items,
+    [items, searchable, searchQuery]
+  )
 
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
@@ -359,6 +379,12 @@ export function useEnhancedSelectInput<V>({
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSelectedIndex) is reserved for the wrapper below
   const [selectedIndex, setSelectedIndexState] = useState(safeInitialIndex)
+  // Latest-value ref so the revalidation effect can read the current
+  // selectedIndex without listing it as a dependency (which would make the
+  // effect re-run on every navigation keypress instead of only when the
+  // filtered item set changes).
+  const selectedIndexReference = useRef(selectedIndex)
+  selectedIndexReference.current = selectedIndex
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
     () => new Set(defaultSelectedKeys ?? [])
   )
@@ -393,13 +419,10 @@ export function useEnhancedSelectInput<V>({
   const selectedItem = hasItems ? filteredItems[selectedIndex] : undefined
   const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
 
-  // When the items array changes, re-validate the current selectedIndex.
-  // If the item at that position is still enabled we keep it; otherwise we
-  // resolve the nearest valid index from the same position, so the selection
-  // stays as close as possible to where the user left off.
-  // Also warn in development when duplicate React keys are detected —
-  // this happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item.
+  // Warn in development when duplicate React keys are detected — this
+  // happens when V is an object and item.key is not set, causing
+  // String(value) to produce "[object Object]" for every item. Keyed only
+  // to `items` so it doesn't re-run on every search keystroke.
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
@@ -420,32 +443,77 @@ export function useEnhancedSelectInput<V>({
         )
       }
     }
+  }, [items])
 
+  // When the filtered item set changes, re-validate the current
+  // selectedIndex. If the item at that position is still enabled we keep
+  // it; otherwise we resolve the nearest valid index from the same
+  // position, so the selection stays as close as possible to where the
+  // user left off. `filteredItems` is memoized above, so this only re-runs
+  // when items/searchQuery actually change content — not on every render.
+  useEffect(() => {
     if (filteredItems.length === 0) {
       setSelectedIndexState(0)
       return
     }
 
-    const currentItem = filteredItems[selectedIndex]
+    const currentItem = filteredItems[selectedIndexReference.current]
     if (!currentItem || currentItem.disabled) {
-      const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
+      const newIndex = resolveInitialIndex(
+        filteredItems,
+        selectedIndexReference.current
+      )
       setSelectedIndexState(newIndex)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, searchQuery])
+  }, [filteredItems, limit, pageStarts])
 
-  // Only re-fire when the highlighted index changes, not when the items
-  // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content).
+  // Fire onHighlight when the highlighted item's identity (key) changes,
+  // not merely when the items array reference changes — that would cause
+  // spurious calls on every parent re-render that passes a new array with
+  // identical content. Keying on `highlightedKey` (rather than
+  // `selectedIndex`) also fixes the stale-closure bug where the item at a
+  // given index changes content while the index itself stays put: the
+  // effect now re-fires with the new item instead of silently keeping the
+  // old one.
+  const highlightedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const highlightedItemReference = useRef(highlightedItem)
+  highlightedItemReference.current = highlightedItem
+  const highlightedKey = highlightedItem ? itemKey(highlightedItem) : undefined
+
+  // Warn in development when per-item `indicator` is combined with
+  // `multiple` — the checkbox indicator always wins in multi-select mode,
+  // so a supplied `item.indicator` is silently unused otherwise. Depend on
+  // this derived boolean (not `items`) so the warning doesn't re-fire on
+  // every parent re-render that passes a new-but-equivalent items array.
+  const hasIgnoredIndicator =
+    multiple && items.some((item) => Boolean(item.indicator))
+
   useEffect(() => {
-    if (hasItems) {
-      const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem && !highlightedItem.disabled) {
-        onHighlight?.(highlightedItem)
-      }
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!hasIgnoredIndicator) return
+    console.warn(
+      '[ink-enhanced-select-input] item.indicator is ignored when multiple is true — ' +
+        'the built-in checkbox indicator takes precedence. Use indicatorComponent to ' +
+        'customize indicators in multi-select mode.'
+    )
+  }, [hasIgnoredIndicator])
+
+  // Re-fire whenever the highlighted item's *identity* changes, not just its
+  // index — filtering can swap in a different item at the same index (e.g.
+  // typing resets selectedIndex to 0, which was already 0), and that must
+  // still notify. Not when the items array reference changes (which would
+  // cause spurious calls on every parent re-render that passes a new array
+  // with identical content) or when onHighlight's reference changes (an
+  // inline callback is a new reference every render) — both the item and
+  // the callback are read from refs so the effect can depend on nothing but
+  // `highlightedKey`, with no suppression needed.
+  useEffect(() => {
+    const item = highlightedItemReference.current
+    if (item && !item.disabled) {
+      onHighlightReference.current?.(item)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, onHighlight, hasItems])
+  }, [highlightedKey])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndexState(nextIndex)
@@ -751,7 +819,13 @@ export function EnhancedSelectInput<V>({
         gap={isVertical ? 0 : 2}
       >
         {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+          // A disabled item never gets a selection cursor, even if it's the
+          // resolved selectedIndex (e.g. every item is disabled, so
+          // resolveInitialIndex has nowhere valid to land). This keeps the
+          // render in agreement with the onHighlight effect, which only
+          // fires for enabled items.
+          const isSelected =
+            index + rotateIndex === selectedIndex && !item.disabled
           const isChecked = isMultiple
             ? checkedKeys.has(itemKey(item))
             : undefined
