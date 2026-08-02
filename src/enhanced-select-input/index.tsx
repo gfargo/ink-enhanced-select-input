@@ -311,7 +311,7 @@ function itemKey<V>(item: Item<V>): string {
 type ResolvedKeyMap = Required<KeyMap>
 
 /** Everything the intent resolver needs to read, without touching React state. */
-type InputIntentContext<V> = {
+export type InputIntentContext<V> = {
   km: ResolvedKeyMap
   searchable: boolean
   searchQuery: string
@@ -333,7 +333,7 @@ type InputIntentContext<V> = {
  * of these — the `useInput` handler then dispatches on `type` alone with no
  * further guarding.
  */
-type Intent<V> =
+export type Intent<V> =
   | { type: 'none' }
   | { type: 'search-backspace' }
   | { type: 'search-clear' }

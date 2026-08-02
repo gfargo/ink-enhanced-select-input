@@ -2,6 +2,7 @@ import test from 'ava'
 import { type Key } from 'ink'
 import {
   resolveInputIntent,
+  type InputIntentContext,
   type Item,
   type KeyMap,
 } from '../enhanced-select-input/index.js'
@@ -46,18 +47,13 @@ const items: Array<Item<string>> = [
   { key: 'c', label: 'Gamma', value: 'c', disabled: true },
 ]
 
-type ContextOverrides = {
-  km?: Partial<KeyMap>
-  searchable?: boolean
-  searchQuery?: string
-  hasItems?: boolean
-  multiple?: boolean
-  orientation?: 'vertical' | 'horizontal'
-  selectedIndex?: number
-  filteredItems?: Array<Item<string>>
-}
+type ContextOverrides = Partial<
+  Omit<InputIntentContext<string>, 'km'> & { km: Partial<KeyMap> }
+>
 
-const context = (overrides: ContextOverrides = {}) => ({
+const context = (
+  overrides: ContextOverrides = {}
+): InputIntentContext<string> => ({
   km: { ...allKeyMapEnabled, ...overrides.km },
   searchable: overrides.searchable ?? false,
   searchQuery: overrides.searchQuery ?? '',
