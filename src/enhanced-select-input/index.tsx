@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink'
-import React, { type FC, useEffect, useMemo, useState } from 'react'
+import React, { type FC, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Item<V> = {
   /**
@@ -314,6 +314,13 @@ export function useEnhancedSelectInput<V>({
   }
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Keep the latest onHighlight in a ref so the highlight effect below can
+  // depend only on the highlighted index, not on the callback reference —
+  // an inline arrow function (as shown in the README) is a new reference
+  // every render and would otherwise re-fire the effect every render.
+  const onHighlightReference = useRef(onHighlight)
+  onHighlightReference.current = onHighlight
+
   // Filter items based on search query
   const filteredItems =
     searchable && searchQuery
@@ -332,21 +339,22 @@ export function useEnhancedSelectInput<V>({
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
   const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
-  const [rotateIndex, setRotateIndex] = useState(
-    limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
-  )
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
     () => new Set(defaultSelectedKeys ?? [])
   )
+  // Mirrors `checkedKeys` synchronously so the Enter branch below can read
+  // the committed set even when a Space toggle and Enter are written in the
+  // same tick (no intervening render to flush the `checkedKeys` state).
+  const checkedKeysReference = useRef(checkedKeys)
 
   const hasItems = filteredItems.length > 0
-  // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes
-  // without the selection moving (e.g. a consumer shrinking `limit` to fit a
-  // resized terminal) — pageStarts recomputes but rotateIndex doesn't. Snap
-  // it down to the nearest valid page start on every render rather than
-  // requiring an exact match, so the visible window is always bounded by the
-  // current `limit` even mid-transition.
-  const effectiveRotateIndex = limit ? pageStartFor(pageStarts, rotateIndex) : 0
+  // Derive the pagination window offset directly from selectedIndex so there
+  // is a single source of truth. pageStartFor finds the largest page-start
+  // that is <= selectedIndex, keeping the selection inside the visible window
+  // even when limit or pageStarts change at runtime (e.g. terminal resize).
+  const effectiveRotateIndex = limit
+    ? pageStartFor(pageStarts, selectedIndex)
+    : 0
   const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
@@ -393,7 +401,6 @@ export function useEnhancedSelectInput<V>({
 
     if (filteredItems.length === 0) {
       setSelectedIndex(0)
-      if (limit) setRotateIndex(0)
       return
     }
 
@@ -401,7 +408,6 @@ export function useEnhancedSelectInput<V>({
     if (!currentItem || currentItem.disabled) {
       const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
       setSelectedIndex(newIndex)
-      if (limit) setRotateIndex(pageStartFor(pageStarts, newIndex))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
@@ -417,19 +423,18 @@ export function useEnhancedSelectInput<V>({
   // typing resets selectedIndex to 0, which was already 0), and that must
   // still notify. Not when the items array reference changes (which would
   // cause spurious calls on every parent re-render that passes a new array
-  // with identical content).
+  // with identical content) or when onHighlight's reference changes (an
+  // inline callback is a new reference every render) — read the latest
+  // callback from a ref instead.
   useEffect(() => {
     if (highlightedItem && highlightedKey) {
-      onHighlight?.(highlightedItem)
+      onHighlightReference.current?.(highlightedItem)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightedKey, onHighlight])
+  }, [highlightedKey])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
-    if (limit) {
-      setRotateIndex(pageStartFor(pageStarts, nextIndex))
-    }
   }
 
   useInput(
@@ -439,7 +444,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && (key.backspace || key.delete)) {
         setSearchQuery((previous) => previous.slice(0, -1))
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -448,7 +452,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && key.escape && searchQuery) {
         setSearchQuery('')
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -487,14 +490,19 @@ export function useEnhancedSelectInput<V>({
         const item = filteredItems[selectedIndex]
         if (item && !item.disabled) {
           const k = itemKey(item)
-          setCheckedKeys((previous) => {
-            const next = new Set(previous)
-            const nowChecked = !next.has(k)
-            if (nowChecked) next.add(k)
-            else next.delete(k)
-            onToggle?.(item, nowChecked)
-            return next
-          })
+          // Compute the next set from the ref (not the `previous` argument
+          // React's updater would hand us) and assign it to the ref
+          // synchronously, right here — React may defer actually invoking a
+          // functional setState updater, so a same-tick Enter that reads
+          // checkedKeysReference.current must not depend on that updater having
+          // run yet.
+          const next = new Set(checkedKeysReference.current)
+          const nowChecked = !next.has(k)
+          if (nowChecked) next.add(k)
+          else next.delete(k)
+          checkedKeysReference.current = next
+          onToggle?.(item, nowChecked)
+          setCheckedKeys(next)
         }
 
         return
@@ -541,10 +549,13 @@ export function useEnhancedSelectInput<V>({
           // In multi-select mode Enter confirms the full selection. Default
           // to `items` (not `filteredItems`) so checks made before/between
           // search filters aren't silently dropped from the confirmed set.
+          // Read from the ref (not the `checkedKeys` state) since a Space
+          // toggle queued in the same tick has not been committed to state
+          // yet when this handler runs.
           const confirmSource =
             confirmScope === 'filtered' ? filteredItems : items
           const confirmed = confirmSource.filter((item) =>
-            checkedKeys.has(itemKey(item))
+            checkedKeysReference.current.has(itemKey(item))
           )
           onConfirm?.(confirmed)
         } else {
@@ -562,7 +573,6 @@ export function useEnhancedSelectInput<V>({
       if (searchable && input && !key.ctrl && !key.meta) {
         setSearchQuery((previous) => previous + input)
         setSelectedIndex(0)
-        if (limit) setRotateIndex(0)
         return
       }
 
@@ -711,7 +721,7 @@ export function EnhancedSelectInput<V>({
         {visibleItems.map((item, index) => {
           const isSelected = index + rotateIndex === selectedIndex
           const isChecked = isMultiple
-            ? checkedKeys.has(item.key ?? String(item.value))
+            ? checkedKeys.has(itemKey(item))
             : undefined
 
           // Determine if we need to render a group header before this item.
@@ -730,7 +740,7 @@ export function EnhancedSelectInput<V>({
           }
 
           return (
-            <React.Fragment key={item.key ?? String(item.value)}>
+            <React.Fragment key={itemKey(item)}>
               {groupHeader}
               <Box>
                 {item.indicator && !isMultiple ? (

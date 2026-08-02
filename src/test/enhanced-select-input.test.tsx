@@ -1591,6 +1591,74 @@ test.serial(
   }
 )
 
+// --- #62: onHighlight refires on every parent re-render when the callback is inline ---
+
+test('inline onHighlight is not re-invoked on parent re-renders with no highlight change', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper({ tick }: { readonly tick: number }) {
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+          }}
+        />
+      </Box>
+    )
+  }
+
+  const { rerender } = render(<Wrapper tick={0} />)
+  await delay()
+  t.is(callCount, 1)
+
+  for (let tick = 1; tick <= 5; tick++) {
+    rerender(<Wrapper tick={tick} />)
+    // eslint-disable-next-line no-await-in-loop
+    await delay()
+  }
+
+  t.is(callCount, 1)
+})
+
+test('setState inside onHighlight does not cause an infinite render loop', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let callCount = 0
+
+  function Wrapper() {
+    const [tick, setTick] = React.useState(0)
+    return (
+      <Box>
+        <Text>{tick}</Text>
+        <EnhancedSelectInput
+          items={items}
+          onHighlight={() => {
+            callCount++
+            setTick((previous) => previous + 1)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  render(<Wrapper />)
+  await delay(300)
+
+  t.is(callCount, 1)
+})
+
 // --- #16: duplicate key warning ---
 
 test.serial(
@@ -1777,6 +1845,72 @@ test.serial(
 
     t.not(confirmed, undefined)
     t.is(confirmed!.length, 0)
+  }
+)
+
+test.serial(
+  'multi-select space then enter in the same tick confirms the toggled item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(SPACE) // Check A
+    stdin.write(ENTER) // Same tick, no await between the two writes
+    await delay()
+
+    t.is(confirmed.length, 1)
+    t.true(confirmed.includes('a'))
+  }
+)
+
+test.serial(
+  'multi-select several toggles then enter in one tick confirms the final checked set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ARROW_DOWN) // → B
+    await delay()
+    stdin.write(ARROW_DOWN) // → C
+    await delay()
+    stdin.write(SPACE) // Check C
+    stdin.write(ENTER) // Same tick, no await between the two writes
+    await delay()
+
+    t.is(confirmed.length, 2)
+    t.true(confirmed.includes('a'))
+    t.true(confirmed.includes('c'))
   }
 )
 
