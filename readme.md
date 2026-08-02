@@ -19,6 +19,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
 - **Searchable Mode:** Type to filter items inline with case-insensitive matching.
+- **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
@@ -85,6 +86,8 @@ render(<Demo />)
 
 Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
 
+> **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
+
 ```tsx
 import React, { useState } from 'react'
 import { render, Text } from 'ink'
@@ -131,6 +134,8 @@ render(<MultiDemo />)
   onSelect={(item) => console.log(item.value)}
 />
 ```
+
+`item.indicator` only applies in single-select mode — see the [Multi-select](#multi-select) note above for the multi-select behaviour.
 
 ### Grouped Items
 
@@ -214,6 +219,29 @@ When typing:
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
 
+### Type-ahead Jump
+
+Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and only takes effect when `searchable` is off. Typing printable characters builds a short-lived buffer and jumps the highlight to the first non-disabled item whose label starts with it (case-insensitive) — it moves the highlight only, it never calls `onSelect`/`onConfirm`. The buffer resets after `typeaheadTimeout` ms of inactivity (default `500`).
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  typeahead
+  typeaheadTimeout={500}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+**Key behavior in type-ahead mode:**
+
+- Typing `d` then `e` within the idle window jumps to the first item starting with `de`
+- Typing again after the idle window resets the buffer to a single new character
+- Vim keys (`h/j/k/l`) are excluded from the buffer and keep navigating
+- If the buffer is idle/empty and the typed character matches an enabled item's `hotkey`, the hotkey fires as usual; once a buffer is active, further characters append to it instead of firing hotkeys
+- A character with no matching item leaves the current selection unchanged
+- Ignored entirely when `searchable` is `true` — printable characters remain search input in that mode
+- In single-select mode, `Space` is treated as a buffer character (the multi-select toggle path doesn't apply), so a leading space only matches labels that begin with a space
+
 ### Avoiding Key Conflicts (`keyMap`)
 
 Because Ink does not support event propagation stopping, every `useInput` handler in your app receives every keypress simultaneously. If your application already binds one of the component's default keys globally, you can disable individual key groups with the `keyMap` prop — the component ignores those keys without interfering with your own handlers.
@@ -284,13 +312,13 @@ function MyItem({ isSelected, isDisabled, label }) {
 
 ### Headless Hook
 
-If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly:
+If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly — either from the main package or from the dedicated `ink-enhanced-select-input/headless` subpath (no component/render code included):
 
 ```tsx
-import { useEnhancedSelectInput } from 'ink-enhanced-select-input'
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
 
 function MyCustomSelect({ items, onSelect }) {
-  const { selectedIndex, visibleItems, itemsAbove, itemsBelow } =
+  const { visibleItems, windowIndex, itemsAbove, itemsBelow } =
     useEnhancedSelectInput({ items, onSelect })
 
   return (
@@ -299,7 +327,7 @@ function MyCustomSelect({ items, onSelect }) {
       {visibleItems.map((item, i) => (
         <Text
           key={item.key ?? String(item.value)}
-          color={i === selectedIndex ? 'cyan' : undefined}
+          color={i === windowIndex ? 'cyan' : undefined}
         >
           {item.label}
         </Text>
@@ -310,31 +338,52 @@ function MyCustomSelect({ items, onSelect }) {
 }
 ```
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns `{ selectedIndex, rotateIndex, visibleItems, hasItems, itemsAbove, itemsBelow, checkedKeys, searchQuery }`. `checkedKeys` is a `Set<string>` of checked item keys — only populated when `multiple` is `true`. `searchQuery` is the current filter string — empty when `searchable` is false.
+`windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
+
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns:
+
+- `selectedIndex` — index of the highlighted item within `filteredItems`.
+- `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
+- `windowIndex` — index of the highlighted item within `visibleItems` (`selectedIndex - rotateIndex`; `-1` when there are no items).
+- `visibleItems` — the slice of items visible in the current window.
+- `filteredItems` — all items after search filtering, before pagination.
+- `selectedItem` — the currently highlighted item, or `undefined` when there are no items.
+- `hasItems` — `true` when `filteredItems` is non-empty.
+- `itemsAbove` / `itemsBelow` — counts of items hidden above/below the current window.
+- `checkedKeys` — a `Set<string>` of checked item keys, only populated when `multiple` is `true`.
+- `searchQuery` — the current filter string, empty when `searchable` is `false`.
+- `setSelectedIndex(index)` — imperatively move the highlighted item, clamping into range and snapping `rotateIndex` to the containing page.
+- `setSearchQuery(query)` — imperatively set the search query and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
+- `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode or on a disabled item, and fires `onToggle`.
+
+These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
 ## Props
 
-| Prop                   | Type                                        | Default                       | Description                                                    |
-| ---------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                       |
-| `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                        |
-| `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                        |
-| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count |
-| `indicatorComponent`   | `FC<IndicatorProps>`                        | `DefaultIndicatorComponent`   | Custom selection indicator                                     |
-| `itemComponent`        | `FC<ItemProps>`                             | `DefaultItemComponent`        | Custom item renderer                                           |
-| `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only     |
-| `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                       |
-| `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                                  |
-| `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                               |
-| `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list             |
-| `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)       |
-| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select                         |
-| `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items    |
-| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode       |
-| `groupHeaderComponent` | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                   |
-| `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                               |
-| `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty              |
-| `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts     |
+| Prop                   | Type                                        | Default                       | Description                                                                                                                                                          |
+| ---------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                             |
+| `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
+| `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
+| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
+| `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
+| `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
+| `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |
+| `onHighlight`          | `(item: Item<V>) => void`                   | —                             | Called when the highlighted item changes                                                                                                                             |
+| `onCancel`             | `() => void`                                | —                             | Called when Escape is pressed                                                                                                                                        |
+| `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                                                                                                                                     |
+| `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list                                                                                                                   |
+| `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)                                                                                                             |
+| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select. Keys belonging to `disabled` items are ignored — a disabled item can never be checked or seeded into `onConfirm`             |
+| `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items, unaffected by the active search filter                                                                  |
+| `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query |
+| `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                             |
+| `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                         |
+| `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                     |
+| `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                    |
+| `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
+| `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                        |
+| `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                            |
 
 ### Item Shape
 
@@ -344,7 +393,7 @@ type Item<V> = {
   label: string
   value: V
   hotkey?: string
-  indicator?: React.ReactNode
+  indicator?: React.ReactNode // Single-select only — ignored (with a dev warning) when `multiple` is true
   disabled?: boolean
   group?: string // Items with the same group are rendered under a shared header
 }
@@ -378,6 +427,11 @@ Disabled items are automatically skipped during navigation, including by `Home` 
 > **Searchable mode:** When `searchable` is enabled, vim keys and hotkeys are
 > disabled — all printable characters go to the search query. Arrow keys still
 > navigate. Backspace edits the query. Escape clears it.
+
+> **Type-ahead mode:** When `typeahead` is enabled (and `searchable` is not),
+> printable characters build a jump buffer instead of firing hotkeys or search.
+> The highlight jumps to the first matching item; no selection is made. An
+> idle/empty buffer still yields to a matching hotkey.
 
 ## Development
 

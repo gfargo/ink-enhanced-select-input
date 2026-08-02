@@ -1,5 +1,5 @@
 import { Box, Text, useInput, type Key } from 'ink'
-import React, { type FC, useEffect, useMemo, useState } from 'react'
+import React, { type FC, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Item<V> = {
   /**
@@ -11,6 +11,13 @@ export type Item<V> = {
   label: string
   value: V
   hotkey?: string
+  /**
+   * Custom indicator shown only for the highlighted item in single-select
+   * mode. Ignored when `multiple` is true — the built-in checkbox indicator
+   * takes precedence there (a dev warning is logged if both are supplied).
+   * To customize the indicator in multi-select mode, use
+   * `indicatorComponent` instead.
+   */
   indicator?: React.ReactNode
   disabled?: boolean
   /**
@@ -81,6 +88,13 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly onConfirm?: (items: Array<Item<V>>) => void
   /**
+   * Which set of items `onConfirm` draws from in multi-select mode.
+   * 'all' (default) confirms every checked item even if hidden by the
+   * active search filter; 'filtered' confirms only checked items that
+   * currently match the search query. Only used when `multiple` is true.
+   */
+  readonly confirmScope?: 'all' | 'filtered'
+  /**
    * Called each time an item is toggled in multi-select mode (Space).
    * Receives the toggled item and whether it is now checked.
    */
@@ -97,6 +111,10 @@ export type UseEnhancedSelectInputProperties<V> = {
    * See {@link KeyMap} for available groups and defaults.
    */
   readonly keyMap?: KeyMap
+  /** Enable type-ahead jump in non-searchable mode. Ignored when `searchable`. Default: false. */
+  readonly typeahead?: boolean
+  /** Idle window (ms) after which the type-ahead buffer resets. Default: 500. */
+  readonly typeaheadTimeout?: number
 }
 
 /** Full component props — hook props plus rendering customisation. */
@@ -240,15 +258,49 @@ export function computePageStarts<V>(
   return starts
 }
 
-/** Largest page-start index in `pageStarts` that is `<= index`. */
-function pageStartFor(pageStarts: number[], index: number): number {
+/**
+ * Largest page-start index in `pageStarts` that is `<= index`.
+ * Binary search — `pageStarts` is always strictly ascending (see
+ * `computePageStarts`), so per-render lookup cost is O(log pages) rather
+ * than O(pages), keeping navigation cheap even over very large lists.
+ */
+export function pageStartFor(pageStarts: number[], index: number): number {
+  let low = 0
+  let high = pageStarts.length - 1
   let result = 0
-  for (const start of pageStarts) {
-    if (start <= index) result = start
-    else break
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = pageStarts[mid]!
+    if (candidate <= index) {
+      result = candidate
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
   }
 
   return result
+}
+
+/**
+ * Index within `pageStarts` of the entry exactly equal to `start`, or `-1`
+ * if no such entry exists. Binary search counterpart to `Array#indexOf` for
+ * the same strictly-ascending array.
+ */
+export function pageIndexOfStart(pageStarts: number[], start: number): number {
+  let low = 0
+  let high = pageStarts.length - 1
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = pageStarts[mid]!
+    if (candidate === start) return mid
+    if (candidate < start) low = mid + 1
+    else high = mid - 1
+  }
+
+  return -1
 }
 
 function itemKey<V>(item: Item<V>): string {
@@ -268,14 +320,18 @@ type InputIntentContext<V> = {
   orientation: 'vertical' | 'horizontal'
   selectedIndex: number
   filteredItems: Array<Item<V>>
+  /** Enable type-ahead jump resolution in non-searchable mode. Defaults to false. */
+  typeahead?: boolean
+  /** Whether the type-ahead buffer is currently active (non-empty, not yet idle-expired). Defaults to false. */
+  typeaheadActive?: boolean
 }
 
 /**
  * The single normalized intent a keypress maps to. Every modifier/mode guard
- * (keyMap flags, searchable, multiple, active-vim-key) is evaluated exactly
- * once, inside {@link resolveInputIntent}, to produce one of these — the
- * `useInput` handler then dispatches on `type` alone with no further
- * guarding.
+ * (keyMap flags, searchable, multiple, active-vim-key, Ctrl/Alt chords) is
+ * evaluated exactly once, inside {@link resolveInputIntent}, to produce one
+ * of these — the `useInput` handler then dispatches on `type` alone with no
+ * further guarding.
  */
 type Intent<V> =
   | { type: 'none' }
@@ -287,6 +343,7 @@ type Intent<V> =
   | { type: 'navigate'; index: number }
   | { type: 'submit' }
   | { type: 'search-append'; char: string }
+  | { type: 'typeahead'; char: string }
   | { type: 'hotkey'; item: Item<V>; index: number }
 
 /** Backspace/Delete and Escape-while-querying, scoped to searchable mode. */
@@ -329,7 +386,8 @@ function resolveJumpIntent<V>(
 function resolveNavigateStep<V>(
   input: string,
   key: Key,
-  context: InputIntentContext<V>
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean
 ): -1 | 1 | undefined {
   const { km, orientation, searchable } = context
   const [backwardArrow, forwardArrow, backwardVimKey, forwardVimKey] =
@@ -339,14 +397,14 @@ function resolveNavigateStep<V>(
 
   if (
     (km.arrows && backwardArrow) ||
-    (km.vimKeys && !searchable && input === backwardVimKey)
+    (km.vimKeys && !searchable && !isModifiedChord && input === backwardVimKey)
   ) {
     return -1
   }
 
   if (
     (km.arrows && forwardArrow) ||
-    (km.vimKeys && !searchable && input === forwardVimKey)
+    (km.vimKeys && !searchable && !isModifiedChord && input === forwardVimKey)
   ) {
     return 1
   }
@@ -358,9 +416,10 @@ function resolveNavigateStep<V>(
 function resolveNavigateIntent<V>(
   input: string,
   key: Key,
-  context: InputIntentContext<V>
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean
 ): Intent<V> | undefined {
-  const step = resolveNavigateStep(input, key, context)
+  const step = resolveNavigateStep(input, key, context, isModifiedChord)
   if (step === undefined) return undefined
   return {
     type: 'navigate',
@@ -373,20 +432,62 @@ function resolveNavigateIntent<V>(
 }
 
 /**
+ * Type-ahead jump-to-match, gated on the `typeahead` context flag. Not active
+ * in searchable mode, for Ctrl/Alt chords, or for an active vim nav key. A
+ * fresh/idle buffer yields to a matching item hotkey (see
+ * {@link resolveHotkeyIntent}) — once a buffer is active, subsequent
+ * characters append to it instead.
+ */
+function resolveTypeaheadIntent<V>(
+  input: string,
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean,
+  isActiveVimKey: boolean
+): Intent<V> | undefined {
+  const { km, searchable, multiple, filteredItems } = context
+
+  if (
+    !(context.typeahead ?? false) ||
+    searchable ||
+    !input ||
+    isModifiedChord ||
+    isActiveVimKey
+  ) {
+    return undefined
+  }
+
+  const isHotkeyChar =
+    km.select &&
+    !multiple &&
+    filteredItems.some((item) => item.hotkey === input && !item.disabled)
+
+  if (!(context.typeaheadActive ?? false) && isHotkeyChar) {
+    return undefined
+  }
+
+  return { type: 'typeahead', char: input }
+}
+
+/**
  * Item hotkeys. Not active in multi-select or searchable mode, and active
- * vim nav keys (which take priority over a same-character hotkey) are
- * resolved here too.
+ * vim nav keys or Ctrl/Alt chords (which take priority over a same-character
+ * hotkey) are excluded here too.
  */
 function resolveHotkeyIntent<V>(
   input: string,
-  context: InputIntentContext<V>
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean,
+  isActiveVimKey: boolean
 ): Intent<V> | undefined {
-  const { km, multiple, searchable, orientation, filteredItems } = context
-  const navigationKeys =
-    orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
-  const isActiveVimKey = km.vimKeys && !searchable && navigationKeys.has(input)
+  const { km, multiple, searchable, filteredItems } = context
 
-  if (!km.select || multiple || searchable || isActiveVimKey) {
+  if (
+    !km.select ||
+    multiple ||
+    searchable ||
+    isActiveVimKey ||
+    isModifiedChord
+  ) {
     return undefined
   }
 
@@ -403,6 +504,52 @@ function resolveHotkeyIntent<V>(
 }
 
 /**
+ * Ctrl/Alt-chord and active-vim-key modifier state, computed once per
+ * keypress. Ctrl/Alt chords (e.g. Ctrl+K, Alt+X) surface as a bare letter in
+ * `input` with `key.ctrl`/`key.meta` set — they must never be treated as vim
+ * navigation, type-ahead, or item hotkeys, since those are terminal chords
+ * with their own conventional meanings (Ctrl+C, Ctrl+W, etc.). A vim key is
+ * only "active" when vimKeys are enabled and we're not in searchable mode
+ * (where every character is search input).
+ */
+function resolveModifierState<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): { isModifiedChord: boolean; isActiveVimKey: boolean } {
+  const { km, searchable, orientation } = context
+  const isModifiedChord = key.ctrl || key.meta
+  const navigationKeys =
+    orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
+  const isActiveVimKey =
+    km.vimKeys && !searchable && !isModifiedChord && navigationKeys.has(input)
+  return { isModifiedChord, isActiveVimKey }
+}
+
+/** Space: toggle in multi-select mode (but not in searchable mode, where space is a valid search character). */
+function isToggleIntent<V>(
+  input: string,
+  context: InputIntentContext<V>
+): boolean {
+  const { km, multiple, searchable } = context
+  return km.toggle && multiple && !searchable && input === ' '
+}
+
+/**
+ * Printable characters captured as search input in searchable mode. Must be
+ * resolved after navigation-key handling.
+ */
+function resolveSearchAppendIntent<V>(
+  input: string,
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean
+): Intent<V> | undefined {
+  return context.searchable && input && !isModifiedChord
+    ? { type: 'search-append', char: input }
+    : undefined
+}
+
+/**
  * Normalizes a raw `(input, key)` keypress plus the current selection state
  * into a single {@link Intent}. Pure — reads only `context`, never touches
  * React state — so branch order (which is load-bearing) can be reasoned
@@ -416,42 +563,63 @@ export function resolveInputIntent<V>(
   key: Key,
   context: InputIntentContext<V>
 ): Intent<V> {
-  const { km, searchable, hasItems, multiple } = context
+  const { km, searchable, hasItems } = context
 
   const searchEdit = resolveSearchEditIntent(key, context)
   if (searchEdit) return searchEdit
+
+  // Escape → onCancel is a global key: it must work even when the list has
+  // no items (e.g. an empty/loading state), so it's resolved before the
+  // hasItems guard below.
+  if (km.cancel && key.escape) {
+    return { type: 'cancel' }
+  }
 
   if (!hasItems && !searchable) {
     return { type: 'none' }
   }
 
+  const { isModifiedChord, isActiveVimKey } = resolveModifierState(
+    input,
+    key,
+    context
+  )
+
   const jump = resolveJumpIntent(key, context)
   if (jump) return jump
 
-  if (km.cancel && key.escape) {
-    return { type: 'cancel' }
-  }
-
-  // Space: toggle in multi-select mode (but not in searchable mode where
-  // space is a valid search character)
-  if (km.toggle && multiple && !searchable && input === ' ') {
+  if (isToggleIntent(input, context)) {
     return { type: 'toggle' }
   }
 
-  const navigate = resolveNavigateIntent(input, key, context)
+  const navigate = resolveNavigateIntent(input, key, context, isModifiedChord)
   if (navigate) return navigate
 
   if (km.select && key.return) {
     return { type: 'submit' }
   }
 
-  // In searchable mode, capture printable characters as search input.
-  // This must come after navigation key handling.
-  if (searchable && input && !key.ctrl && !key.meta) {
-    return { type: 'search-append', char: input }
-  }
+  const searchAppend = resolveSearchAppendIntent(
+    input,
+    context,
+    isModifiedChord
+  )
+  if (searchAppend) return searchAppend
 
-  const hotkey = resolveHotkeyIntent(input, context)
+  const typeahead = resolveTypeaheadIntent(
+    input,
+    context,
+    isModifiedChord,
+    isActiveVimKey
+  )
+  if (typeahead) return typeahead
+
+  const hotkey = resolveHotkeyIntent(
+    input,
+    context,
+    isModifiedChord,
+    isActiveVimKey
+  )
   if (hotkey) return hotkey
 
   return { type: 'none' }
@@ -474,6 +642,31 @@ export type UseEnhancedSelectInputResult<V> = {
   checkedKeys: Set<string>
   /** Current search query. Empty string when searchable is false or no input yet. */
   searchQuery: string
+  /** The currently highlighted item, or undefined when there are no items. */
+  selectedItem: Item<V> | undefined
+  /** The filtered (pre-pagination) items array. */
+  filteredItems: Array<Item<V>>
+  /**
+   * Index of the highlighted item within `visibleItems` (window-relative).
+   * Always `selectedIndex - rotateIndex`. `-1` when there are no items.
+   */
+  windowIndex: number
+  /**
+   * Imperatively move the highlighted item to `index` (clamped into range,
+   * resolved to the nearest enabled item). Keeps the pagination window in sync.
+   */
+  setSelectedIndex: (index: number) => void
+  /**
+   * Imperatively set the search query, resetting the highlighted selection
+   * back to the top. No-op filtering effect unless `searchable` is true.
+   */
+  setSearchQuery: (query: string) => void
+  /**
+   * Toggle the checked state of `item` (defaults to the currently highlighted
+   * item). No-op outside `multiple` mode, when the item is missing, or when
+   * it is disabled. Fires `onToggle`.
+   */
+  toggle: (item?: Item<V>) => void
 }
 
 /**
@@ -493,9 +686,12 @@ export function useEnhancedSelectInput<V>({
   multiple = false,
   defaultSelectedKeys,
   onConfirm,
+  confirmScope = 'all',
   onToggle,
   searchable = false,
   keyMap,
+  typeahead = false,
+  typeaheadTimeout = 500,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   // Resolve full key map — any flag not supplied defaults to enabled (true).
   const km = {
@@ -506,15 +702,29 @@ export function useEnhancedSelectInput<V>({
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
   }
-  const [searchQuery, setSearchQuery] = useState('')
+  // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
+  const [searchQuery, setSearchQueryState] = useState('')
 
-  // Filter items based on search query
-  const filteredItems =
-    searchable && searchQuery
-      ? items.filter((item) =>
-          item.label.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : items
+  // Keep the latest onHighlight in a ref so the highlight effect below can
+  // depend only on the highlighted index, not on the callback reference —
+  // an inline arrow function (as shown in the README) is a new reference
+  // every render and would otherwise re-fire the effect every render.
+  const onHighlightReference = useRef(onHighlight)
+  onHighlightReference.current = onHighlight
+
+  // Filter items based on search query. Memoized so the reference is stable
+  // across renders that don't actually change the item set — downstream
+  // effects depend on this reference to distinguish "items changed" from
+  // "parent re-rendered with a new-but-equivalent array".
+  const filteredItems = useMemo(
+    () =>
+      searchable && searchQuery
+        ? items.filter((item) =>
+            item.label.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : items,
+    [items, searchable, searchQuery]
+  )
 
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
@@ -525,23 +735,42 @@ export function useEnhancedSelectInput<V>({
   )
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
-  const [selectedIndex, setSelectedIndex] = useState(safeInitialIndex)
-  const [rotateIndex, setRotateIndex] = useState(
-    limit ? pageStartFor(pageStarts, safeInitialIndex) : 0
-  )
-  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
-    () => new Set(defaultSelectedKeys ?? [])
-  )
+  // eslint-disable-next-line react/hook-use-state -- public API name (setSelectedIndex) is reserved for the wrapper below
+  const [selectedIndex, setSelectedIndexState] = useState(safeInitialIndex)
+  // Latest-value ref so the revalidation effect can read the current
+  // selectedIndex without listing it as a dependency (which would make the
+  // effect re-run on every navigation keypress instead of only when the
+  // filtered item set changes).
+  const selectedIndexReference = useRef(selectedIndex)
+  selectedIndexReference.current = selectedIndex
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
+    const disabledKeys = new Set(
+      items.filter((item) => item.disabled).map((item) => itemKey(item))
+    )
+    return new Set(
+      (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
+    )
+  })
+  // Mirrors `checkedKeys` synchronously so the Enter branch below can read
+  // the committed set even when a Space toggle and Enter are written in the
+  // same tick (no intervening render to flush the `checkedKeys` state).
+  const checkedKeysReference = useRef(checkedKeys)
+  const typeaheadBuffer = useRef<{ text: string; time: number }>({
+    text: '',
+    time: 0,
+  })
 
   const hasItems = filteredItems.length > 0
-  // `rotateIndex` can go stale relative to `pageStarts` when `limit` changes
-  // without the selection moving (e.g. a consumer shrinking `limit` to fit a
-  // resized terminal) — pageStarts recomputes but rotateIndex doesn't. Snap
-  // it down to the nearest valid page start on every render rather than
-  // requiring an exact match, so the visible window is always bounded by the
-  // current `limit` even mid-transition.
-  const effectiveRotateIndex = limit ? pageStartFor(pageStarts, rotateIndex) : 0
-  const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
+  // Derive the pagination window offset directly from selectedIndex so there
+  // is a single source of truth. pageStartFor finds the largest page-start
+  // that is <= selectedIndex, keeping the selection inside the visible window
+  // even when limit or pageStarts change at runtime (e.g. terminal resize).
+  // Both lookups are binary searches — pageStarts is strictly ascending — so
+  // per-render cost is O(log pages) rather than O(pages).
+  const effectiveRotateIndex = limit
+    ? pageStartFor(pageStarts, selectedIndex)
+    : 0
+  const currentPageIndex = pageIndexOfStart(pageStarts, effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
       ? pageStarts[currentPageIndex + 1]
@@ -556,14 +785,13 @@ export function useEnhancedSelectInput<V>({
         filteredItems.length - effectiveRotateIndex - visibleItems.length
       )
     : 0
+  const selectedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
 
-  // When the items array changes, re-validate the current selectedIndex.
-  // If the item at that position is still enabled we keep it; otherwise we
-  // resolve the nearest valid index from the same position, so the selection
-  // stays as close as possible to where the user left off.
-  // Also warn in development when duplicate React keys are detected —
-  // this happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item.
+  // Warn in development when duplicate React keys are detected — this
+  // happens when V is an object and item.key is not set, causing
+  // String(value) to produce "[object Object]" for every item. Keyed only
+  // to `items` so it doesn't re-run on every search keystroke.
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
@@ -584,44 +812,118 @@ export function useEnhancedSelectInput<V>({
         )
       }
     }
+  }, [items])
 
+  // When the filtered item set changes, re-validate the current
+  // selectedIndex. If the item at that position is still enabled we keep
+  // it; otherwise we resolve the nearest valid index from the same
+  // position, so the selection stays as close as possible to where the
+  // user left off. `filteredItems` is memoized above, so this only re-runs
+  // when items/searchQuery actually change content — not on every render.
+  useEffect(() => {
     if (filteredItems.length === 0) {
-      setSelectedIndex(0)
-      if (limit) setRotateIndex(0)
+      setSelectedIndexState(0)
       return
     }
 
-    const currentItem = filteredItems[selectedIndex]
+    const currentItem = filteredItems[selectedIndexReference.current]
     if (!currentItem || currentItem.disabled) {
-      const newIndex = resolveInitialIndex(filteredItems, selectedIndex)
-      setSelectedIndex(newIndex)
-      if (limit) setRotateIndex(pageStartFor(pageStarts, newIndex))
+      const newIndex = resolveInitialIndex(
+        filteredItems,
+        selectedIndexReference.current
+      )
+      setSelectedIndexState(newIndex)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, searchQuery])
+  }, [filteredItems, limit, pageStarts])
 
-  // Only re-fire when the highlighted index changes, not when the items
-  // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content).
+  // Fire onHighlight when the highlighted item's identity (key) changes,
+  // not merely when the items array reference changes — that would cause
+  // spurious calls on every parent re-render that passes a new array with
+  // identical content. Keying on `highlightedKey` (rather than
+  // `selectedIndex`) also fixes the stale-closure bug where the item at a
+  // given index changes content while the index itself stays put: the
+  // effect now re-fires with the new item instead of silently keeping the
+  // old one.
+  const highlightedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const highlightedItemReference = useRef(highlightedItem)
+  highlightedItemReference.current = highlightedItem
+  const highlightedKey = highlightedItem ? itemKey(highlightedItem) : undefined
+
+  // Warn in development when per-item `indicator` is combined with
+  // `multiple` — the checkbox indicator always wins in multi-select mode,
+  // so a supplied `item.indicator` is silently unused otherwise. Depend on
+  // this derived boolean (not `items`) so the warning doesn't re-fire on
+  // every parent re-render that passes a new-but-equivalent items array.
+  const hasIgnoredIndicator =
+    multiple && items.some((item) => Boolean(item.indicator))
+
   useEffect(() => {
-    if (hasItems) {
-      const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem && !highlightedItem.disabled) {
-        onHighlight?.(highlightedItem)
-      }
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!hasIgnoredIndicator) return
+    console.warn(
+      '[ink-enhanced-select-input] item.indicator is ignored when multiple is true — ' +
+        'the built-in checkbox indicator takes precedence. Use indicatorComponent to ' +
+        'customize indicators in multi-select mode.'
+    )
+  }, [hasIgnoredIndicator])
+
+  // Re-fire whenever the highlighted item's *identity* changes, not just its
+  // index — filtering can swap in a different item at the same index (e.g.
+  // typing resets selectedIndex to 0, which was already 0), and that must
+  // still notify. Not when the items array reference changes (which would
+  // cause spurious calls on every parent re-render that passes a new array
+  // with identical content) or when onHighlight's reference changes (an
+  // inline callback is a new reference every render) — both the item and
+  // the callback are read from refs so the effect can depend on nothing but
+  // `highlightedKey`, with no suppression needed.
+  useEffect(() => {
+    const item = highlightedItemReference.current
+    if (item && !item.disabled) {
+      onHighlightReference.current?.(item)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, onHighlight, hasItems])
+  }, [highlightedKey])
 
   const updateSelection = (nextIndex: number) => {
-    setSelectedIndex(nextIndex)
-    if (limit) {
-      setRotateIndex(pageStartFor(pageStarts, nextIndex))
-    }
+    setSelectedIndexState(nextIndex)
+  }
+
+  // Toggle the checked state of `item` (defaults to the highlighted item) in
+  // multi-select mode. Shared by the Space keybinding and the public API so
+  // custom keybindings can reuse the exact same behaviour.
+  const toggle = (item: Item<V> | undefined = filteredItems[selectedIndex]) => {
+    if (!multiple || !item || item.disabled) return
+    const k = itemKey(item)
+    // Compute the next set from the ref (not React's functional-updater
+    // `previous` argument) and assign it back synchronously, right here —
+    // React may defer actually invoking a functional setState updater, so a
+    // same-tick Enter that reads checkedKeysReference.current must not
+    // depend on that updater having run yet.
+    const next = new Set(checkedKeysReference.current)
+    const nowChecked = !next.has(k)
+    if (nowChecked) next.add(k)
+    else next.delete(k)
+    checkedKeysReference.current = next
+    onToggle?.(item, nowChecked)
+    setCheckedKeys(next)
+  }
+
+  const setSelectedIndexPublic = (index: number) => {
+    updateSelection(resolveInitialIndex(filteredItems, index))
+  }
+
+  const setSearchQueryPublic = (query: string) => {
+    setSearchQueryState(query)
+    setSelectedIndexState(0)
   }
 
   useInput(
     (input, key) => {
+      const now = Date.now()
+      const typeaheadIsActive =
+        typeaheadBuffer.current.text !== '' &&
+        now - typeaheadBuffer.current.time < typeaheadTimeout
+
       const intent = resolveInputIntent(input, key, {
         km,
         searchable,
@@ -631,25 +933,20 @@ export function useEnhancedSelectInput<V>({
         orientation,
         selectedIndex,
         filteredItems,
+        typeahead,
+        typeaheadActive: typeaheadIsActive,
       })
 
       switch (intent.type) {
         case 'search-backspace': {
-          setSearchQuery((previous) => previous.slice(0, -1))
-          setSelectedIndex(0)
-          if (limit) setRotateIndex(0)
+          setSearchQueryState((previous) => previous.slice(0, -1))
+          setSelectedIndexState(0)
           break
         }
 
         case 'search-clear': {
-          setSearchQuery('')
-          setSelectedIndex(0)
-          if (limit) setRotateIndex(0)
-          break
-        }
-
-        case 'jump': {
-          updateSelection(intent.index)
+          setSearchQueryState('')
+          setSelectedIndexState(0)
           break
         }
 
@@ -658,20 +955,13 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
-        case 'toggle': {
-          const item = filteredItems[selectedIndex]
-          if (item && !item.disabled) {
-            const k = itemKey(item)
-            setCheckedKeys((previous) => {
-              const next = new Set(previous)
-              const nowChecked = !next.has(k)
-              if (nowChecked) next.add(k)
-              else next.delete(k)
-              onToggle?.(item, nowChecked)
-              return next
-            })
-          }
+        case 'jump': {
+          updateSelection(intent.index)
+          break
+        }
 
+        case 'toggle': {
+          toggle()
           break
         }
 
@@ -685,15 +975,22 @@ export function useEnhancedSelectInput<V>({
 
         case 'submit': {
           if (multiple) {
-            // In multi-select mode Enter confirms the full selection
-            const confirmed = filteredItems.filter((item) =>
-              checkedKeys.has(itemKey(item))
+            // In multi-select mode Enter confirms the full selection. Default
+            // to `items` (not `filteredItems`) so checks made before/between
+            // search filters aren't silently dropped from the confirmed set.
+            // Read from the ref (not the `checkedKeys` state) since a Space
+            // toggle queued in the same tick has not been committed to state
+            // yet when this handler runs.
+            const confirmSource =
+              confirmScope === 'filtered' ? filteredItems : items
+            const confirmed = confirmSource.filter((item) =>
+              checkedKeysReference.current.has(itemKey(item))
             )
             onConfirm?.(confirmed)
           } else {
-            const selectedItem = filteredItems[selectedIndex]
-            if (selectedItem && !selectedItem.disabled) {
-              onSelect?.(selectedItem)
+            const itemToSelect = filteredItems[selectedIndex]
+            if (itemToSelect && !itemToSelect.disabled) {
+              onSelect?.(itemToSelect)
             }
           }
 
@@ -701,9 +998,25 @@ export function useEnhancedSelectInput<V>({
         }
 
         case 'search-append': {
-          setSearchQuery((previous) => previous + intent.char)
-          setSelectedIndex(0)
-          if (limit) setRotateIndex(0)
+          setSearchQueryState((previous) => previous + intent.char)
+          setSelectedIndexState(0)
+          break
+        }
+
+        case 'typeahead': {
+          // Accumulate printable characters into a short-lived buffer and
+          // jump the highlight to the first item whose label starts with
+          // it. Idle buffers reset after `typeaheadTimeout` ms.
+          const next = typeaheadIsActive
+            ? typeaheadBuffer.current.text + intent.char
+            : intent.char
+          typeaheadBuffer.current = { text: next, time: now }
+          const matchIndex = filteredItems.findIndex(
+            (item) =>
+              !item.disabled &&
+              item.label.toLowerCase().startsWith(next.toLowerCase())
+          )
+          if (matchIndex !== -1) updateSelection(matchIndex)
           break
         }
 
@@ -730,6 +1043,12 @@ export function useEnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
+    selectedItem,
+    filteredItems,
+    windowIndex,
+    setSelectedIndex: setSelectedIndexPublic,
+    setSearchQuery: setSearchQueryPublic,
+    toggle,
   }
 }
 
@@ -848,9 +1167,15 @@ export function EnhancedSelectInput<V>({
         gap={isVertical ? 0 : 2}
       >
         {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+          // A disabled item never gets a selection cursor, even if it's the
+          // resolved selectedIndex (e.g. every item is disabled, so
+          // resolveInitialIndex has nowhere valid to land). This keeps the
+          // render in agreement with the onHighlight effect, which only
+          // fires for enabled items.
+          const isSelected =
+            index + rotateIndex === selectedIndex && !item.disabled
           const isChecked = isMultiple
-            ? checkedKeys.has(item.key ?? String(item.value))
+            ? checkedKeys.has(itemKey(item))
             : undefined
 
           // Determine if we need to render a group header before this item.
@@ -869,7 +1194,7 @@ export function EnhancedSelectInput<V>({
           }
 
           return (
-            <React.Fragment key={item.key ?? String(item.value)}>
+            <React.Fragment key={itemKey(item)}>
               {groupHeader}
               <Box>
                 {item.indicator && !isMultiple ? (
