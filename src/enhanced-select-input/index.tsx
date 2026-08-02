@@ -358,9 +358,14 @@ export function useEnhancedSelectInput<V>({
   // filtered item set changes).
   const selectedIndexReference = useRef(selectedIndex)
   selectedIndexReference.current = selectedIndex
-  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(
-    () => new Set(defaultSelectedKeys ?? [])
-  )
+  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
+    const disabledKeys = new Set(
+      items.filter((item) => item.disabled).map((item) => itemKey(item))
+    )
+    return new Set(
+      (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
+    )
+  })
   // Mirrors `checkedKeys` synchronously so the Enter branch below can read
   // the committed set even when a Space toggle and Enter are written in the
   // same tick (no intervening render to flush the `checkedKeys` state).
