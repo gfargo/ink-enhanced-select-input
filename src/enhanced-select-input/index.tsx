@@ -419,6 +419,12 @@ export function useEnhancedSelectInput<V>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, searchQuery])
 
+  const highlightedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const highlightedKey =
+    highlightedItem && !highlightedItem.disabled
+      ? itemKey(highlightedItem)
+      : undefined
+
   // Warn in development when per-item `indicator` is combined with
   // `multiple` — the checkbox indicator always wins in multi-select mode,
   // so a supplied `item.indicator` is silently unused otherwise. Depend on
@@ -438,20 +444,20 @@ export function useEnhancedSelectInput<V>({
     )
   }, [hasIgnoredIndicator])
 
-  // Only re-fire when the highlighted index changes, not when the items
-  // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content) or
-  // when onHighlight's reference changes (an inline callback is a new
-  // reference every render).
+  // Re-fire whenever the highlighted item's *identity* changes, not just its
+  // index — filtering can swap in a different item at the same index (e.g.
+  // typing resets selectedIndex to 0, which was already 0), and that must
+  // still notify. Not when the items array reference changes (which would
+  // cause spurious calls on every parent re-render that passes a new array
+  // with identical content) or when onHighlight's reference changes (an
+  // inline callback is a new reference every render) — read the latest
+  // callback from a ref instead.
   useEffect(() => {
-    if (hasItems) {
-      const highlightedItem = filteredItems[selectedIndex]
-      if (highlightedItem && !highlightedItem.disabled) {
-        onHighlightReference.current?.(highlightedItem)
-      }
+    if (highlightedItem && highlightedKey) {
+      onHighlightReference.current?.(highlightedItem)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, hasItems])
+  }, [highlightedKey])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
