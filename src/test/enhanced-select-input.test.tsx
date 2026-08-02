@@ -22,8 +22,10 @@ const HOME = '\u001B[H'
 const END = '\u001B[F'
 const SPACE = ' '
 
-// Small delay to let React/Ink process state updates
-const delay = async (ms = 100) =>
+// Small delay to let React/Ink process state updates. AVA runs this file's
+// ~150 tests concurrently, so the default needs enough margin that a busy
+// event loop doesn't make an assertion race the state update it's checking.
+const delay = async (ms = 300) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
@@ -1516,72 +1518,81 @@ test('selection preserved when items update but current slot is still valid', as
 
 // --- #16: duplicate key warning ---
 
-test('warns in development when object-valued items have no key field', async (t) => {
-  const warnings: string[] = []
-  const originalWarn = console.warn
-  // eslint-disable-next-line n/prefer-global/process
-  const originalNodeEnv = process.env['NODE_ENV']
-  console.warn = (...arguments_: unknown[]) => {
-    warnings.push(String(arguments_[0]))
-  }
-
-  // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
-  // eslint-disable-next-line n/prefer-global/process
-  process.env['NODE_ENV'] = 'development'
-
-  try {
-    render(
-      <EnhancedSelectInput
-        items={[
-          { label: 'A', value: { id: 1 } },
-          { label: 'B', value: { id: 2 } },
-        ]}
-      />
-    )
-
-    await delay()
-    t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
-    t.true(warnings.some((w) => w.includes('Duplicate item keys')))
-  } finally {
-    console.warn = originalWarn
-
+// These two tests stub the shared console.warn and process.env['NODE_ENV'];
+// run them serially so they don't stomp on each other's stub/restore when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when object-valued items have no key field',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
     // eslint-disable-next-line n/prefer-global/process
-    process.env['NODE_ENV'] = originalNodeEnv
-  }
-})
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
 
-test('no duplicate key warning when all items have explicit keys', async (t) => {
-  const warnings: string[] = []
-  const originalWarn = console.warn
-  // eslint-disable-next-line n/prefer-global/process
-  const originalNodeEnv = process.env['NODE_ENV']
-  console.warn = (...arguments_: unknown[]) => {
-    warnings.push(String(arguments_[0]))
-  }
-
-  // Run in development mode so the warning code path is active.
-  // eslint-disable-next-line n/prefer-global/process
-  process.env['NODE_ENV'] = 'development'
-
-  try {
-    render(
-      <EnhancedSelectInput
-        items={[
-          { key: 'item-1', label: 'A', value: { id: 1 } },
-          { key: 'item-2', label: 'B', value: { id: 2 } },
-        ]}
-      />
-    )
-
-    await delay()
-    t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
-  } finally {
-    console.warn = originalWarn
-
+    // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
     // eslint-disable-next-line n/prefer-global/process
-    process.env['NODE_ENV'] = originalNodeEnv
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          items={[
+            { label: 'A', value: { id: 1 } },
+            { label: 'B', value: { id: 2 } },
+          ]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
   }
-})
+)
+
+test.serial(
+  'no duplicate key warning when all items have explicit keys',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // Run in development mode so the warning code path is active.
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          items={[
+            { key: 'item-1', label: 'A', value: { id: 1 } },
+            { key: 'item-2', label: 'B', value: { id: 2 } },
+          ]}
+        />
+      )
+
+      await delay()
+      t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
 
 // --- Multi-select mode (#12) ---
 
