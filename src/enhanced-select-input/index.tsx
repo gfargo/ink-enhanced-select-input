@@ -314,6 +314,13 @@ export function useEnhancedSelectInput<V>({
   }
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Keep the latest onHighlight in a ref so the highlight effect below can
+  // depend only on the highlighted index, not on the callback reference —
+  // an inline arrow function (as shown in the README) is a new reference
+  // every render and would otherwise re-fire the effect every render.
+  const onHighlightReference = useRef(onHighlight)
+  onHighlightReference.current = onHighlight
+
   // Filter items based on search query
   const filteredItems =
     searchable && searchQuery
@@ -407,16 +414,18 @@ export function useEnhancedSelectInput<V>({
 
   // Only re-fire when the highlighted index changes, not when the items
   // array reference changes (which would cause spurious calls on every
-  // parent re-render that passes a new array with identical content).
+  // parent re-render that passes a new array with identical content) or
+  // when onHighlight's reference changes (an inline callback is a new
+  // reference every render).
   useEffect(() => {
     if (hasItems) {
       const highlightedItem = filteredItems[selectedIndex]
       if (highlightedItem && !highlightedItem.disabled) {
-        onHighlight?.(highlightedItem)
+        onHighlightReference.current?.(highlightedItem)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, onHighlight, hasItems])
+  }, [selectedIndex, hasItems])
 
   const updateSelection = (nextIndex: number) => {
     setSelectedIndex(nextIndex)
