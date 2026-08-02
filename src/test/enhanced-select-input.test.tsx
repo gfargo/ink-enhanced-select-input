@@ -4048,13 +4048,13 @@ test.serial('searchable: escape clears the search query', async (t) => {
 
   await delay()
   stdin.write('app')
-  await delay()
+  await waitFor(() => !lastFrame()!.includes('Banana'))
 
   let frame = lastFrame()!
   t.false(frame.includes('Banana'))
 
   stdin.write(ESCAPE)
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ Search...'))
 
   frame = lastFrame()!
   // Query cleared — all items visible again
@@ -4205,7 +4205,7 @@ test.serial(
 
     await delay()
     stdin.write('j')
-    await delay()
+    await waitFor(() => lastFrame()!.includes('/ j'))
 
     const frame = lastFrame()!
     // 'j' should be in the search query, not navigate
@@ -4236,7 +4236,7 @@ test.serial('searchable: hotkeys are disabled', async (t) => {
 
   await delay()
   stdin.write('a')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   // 'a' should filter, not trigger hotkey
   t.is(selected, '')
@@ -4258,7 +4258,7 @@ test.serial(
 
     await delay()
     stdin.write('xyz')
-    await delay()
+    await waitFor(() => lastFrame()!.includes('No matches'))
 
     const frame = lastFrame()!
     t.true(frame.includes('No matches'))
@@ -4290,12 +4290,12 @@ test.serial(
 
     await delay()
     stdin.write(ARROW_DOWN)
-    await delay()
+    await waitFor(() => highlighted === 'Apricot')
     t.is(highlighted, 'Apricot')
 
     // Typing resets selection to first match
     stdin.write('b')
-    await delay()
+    await waitFor(() => highlighted === 'Banana')
     t.is(highlighted, 'Banana')
   }
 )
@@ -4384,7 +4384,7 @@ test.serial('searchable: hook exposes searchQuery in result', async (t) => {
   t.is(result?.searchQuery, '')
 
   stdin.write('app')
-  await delay()
+  await waitFor(() => result?.searchQuery === 'app')
   t.is(result?.searchQuery, 'app')
 })
 
@@ -4416,7 +4416,7 @@ test.serial('searchable: works with limit/pagination', async (t) => {
 
   await delay()
   stdin.write('a')
-  await delay()
+  await waitFor(() => lastFrame()!.includes('/ a'))
 
   const frame = lastFrame()!
   // "a" matches Alpha, Bravo (has 'a'), Charlie (has 'a'), Delta (has 'a'), Able
@@ -4439,7 +4439,7 @@ test.serial(
 
     await delay()
     stdin.write('ap')
-    await delay()
+    await waitFor(() => !lastFrame()!.includes('Broccoli'))
 
     const frame = lastFrame()!
     t.true(frame.includes('── Fruits ──'))
@@ -4557,7 +4557,7 @@ test.serial(
     ]
 
     let confirmed: string[] = []
-    const { stdin } = render(
+    const { stdin, lastFrame } = render(
       <EnhancedSelectInput
         searchable
         multiple
@@ -4572,9 +4572,11 @@ test.serial(
 
     await delay()
     stdin.write('ap')
-    await delay()
+    // Wait for the filter to actually land before confirming — otherwise Enter
+    // can race the query state update and confirm against the unfiltered set.
+    await waitFor(() => !lastFrame()!.includes('Banana'))
     stdin.write(ENTER)
-    await delay()
+    await waitFor(() => confirmed.length > 0)
 
     // Only "apple" matches the filter AND is checked; cherry is excluded
     // because confirmScope is explicitly opted into filtered-only confirm.
@@ -4718,7 +4720,7 @@ test.serial(
 
     await delay()
     stdin.write('app')
-    await delay()
+    await waitFor(() => lastFrame()!.includes('/ app'))
 
     let frame = lastFrame()!
     t.true(frame.includes('/ app'))
@@ -4728,7 +4730,7 @@ test.serial(
 
     // Single backspace to "ap" — now Apricot also matches
     stdin.write('\u007F')
-    await delay()
+    await waitFor(() => lastFrame()!.includes('Apricot'))
 
     frame = lastFrame()!
     t.true(frame.includes('/ ap'))
@@ -4781,7 +4783,7 @@ test.serial(
     )
     await delay()
     stdin.write('j')
-    await delay()
+    await waitFor(() => highlighted === 'B')
     t.is(highlighted, 'B')
   }
 )
@@ -4825,7 +4827,7 @@ test.serial('keyMap.vimKeys=false still allows arrow navigation', async (t) => {
   )
   await delay()
   stdin.write(ARROW_DOWN)
-  await delay()
+  await waitFor(() => highlighted === 'B')
   t.is(highlighted, 'B')
 })
 

@@ -254,15 +254,49 @@ export function computePageStarts<V>(
   return starts
 }
 
-/** Largest page-start index in `pageStarts` that is `<= index`. */
-function pageStartFor(pageStarts: number[], index: number): number {
+/**
+ * Largest page-start index in `pageStarts` that is `<= index`.
+ * Binary search — `pageStarts` is always strictly ascending (see
+ * `computePageStarts`), so per-render lookup cost is O(log pages) rather
+ * than O(pages), keeping navigation cheap even over very large lists.
+ */
+export function pageStartFor(pageStarts: number[], index: number): number {
+  let low = 0
+  let high = pageStarts.length - 1
   let result = 0
-  for (const start of pageStarts) {
-    if (start <= index) result = start
-    else break
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = pageStarts[mid]!
+    if (candidate <= index) {
+      result = candidate
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
   }
 
   return result
+}
+
+/**
+ * Index within `pageStarts` of the entry exactly equal to `start`, or `-1`
+ * if no such entry exists. Binary search counterpart to `Array#indexOf` for
+ * the same strictly-ascending array.
+ */
+export function pageIndexOfStart(pageStarts: number[], start: number): number {
+  let low = 0
+  let high = pageStarts.length - 1
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = pageStarts[mid]!
+    if (candidate === start) return mid
+    if (candidate < start) low = mid + 1
+    else high = mid - 1
+  }
+
+  return -1
 }
 
 function itemKey<V>(item: Item<V>): string {
@@ -403,10 +437,12 @@ export function useEnhancedSelectInput<V>({
   // is a single source of truth. pageStartFor finds the largest page-start
   // that is <= selectedIndex, keeping the selection inside the visible window
   // even when limit or pageStarts change at runtime (e.g. terminal resize).
+  // Both lookups are binary searches — pageStarts is strictly ascending — so
+  // per-render cost is O(log pages) rather than O(pages).
   const effectiveRotateIndex = limit
     ? pageStartFor(pageStarts, selectedIndex)
     : 0
-  const currentPageIndex = pageStarts.indexOf(effectiveRotateIndex)
+  const currentPageIndex = pageIndexOfStart(pageStarts, effectiveRotateIndex)
   const nextPageStart =
     currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
       ? pageStarts[currentPageIndex + 1]
