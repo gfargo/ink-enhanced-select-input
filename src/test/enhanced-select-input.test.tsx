@@ -1676,6 +1676,171 @@ test('setState inside onHighlight does not cause an infinite render loop', async
   t.is(callCount, 1)
 })
 
+test('onHighlight fires with the new item when its content changes at the same index', async (t) => {
+  let highlighted = ''
+  let callCount = 0
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+  const callsAfterMount = callCount
+
+  // Same length, same selectedIndex, but the item at index 1 now has
+  // different content (and thus a different derived key) — onHighlight
+  // must fire again with the new item rather than staying silent because
+  // selectedIndex didn't change.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B2', value: 'b2' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+        callCount++
+      }}
+    />
+  )
+
+  await waitFor(() => callCount > callsAfterMount)
+  t.is(highlighted, 'B2')
+})
+
+test('onHighlight does not re-fire when items update with identical content', async (t) => {
+  let callCount = 0
+  // Stable reference across rerenders (like a memoized parent callback) so
+  // this isolates the items-array-identity behaviour from onHighlight
+  // identity, which is independently a dep of the effect.
+  const onHighlight = () => {
+    callCount++
+  }
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  const callsAfterMount = callCount
+  t.true(callsAfterMount > 0)
+
+  // Fresh array reference, identical content and keys — must not trigger
+  // a spurious onHighlight call.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+      ]}
+      initialIndex={1}
+      onHighlight={onHighlight}
+    />
+  )
+
+  await delay()
+  t.is(callCount, callsAfterMount)
+})
+
+test('revalidation effect moves selection off an item that becomes disabled', async (t) => {
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b' },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'B')
+
+  // The highlighted item (B, index 1) becomes disabled — the revalidation
+  // effect must notice on the next filteredItems change and move the
+  // selection to the nearest enabled item (C) rather than leaving
+  // selectedIndex pointing at a now-disabled item.
+  rerender(
+    <EnhancedSelectInput
+      items={[
+        { label: 'A', value: 'a' },
+        { label: 'B', value: 'b', disabled: true },
+        { label: 'C', value: 'c' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await waitFor(() => highlighted === 'C')
+  t.is(highlighted, 'C')
+})
+
+test('revalidation effect resets selection when the highlighted item is filtered out', async (t) => {
+  let highlighted = ''
+
+  const { rerender } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Cherry', value: 'cherry' },
+      ]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Banana')
+
+  // Shrinking the item set out from under a fixed initialIndex/selectedIndex
+  // (no search involved) removes the previously highlighted item — the
+  // revalidation effect must fall back to the nearest valid index instead
+  // of reading past the end of the new array.
+  rerender(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      initialIndex={1}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await waitFor(() => highlighted === 'Apple')
+  t.is(highlighted, 'Apple')
+})
+
 // --- #16: duplicate key warning ---
 
 test.serial(
