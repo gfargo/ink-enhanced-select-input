@@ -44,4 +44,9 @@ jobs:
         run: yarn add --dev ink@^7.1.1 react@^19.2.0 --no-lockfile
 
       - name: Test
-        run: yarn test
+        # --serial: this suite renders many concurrent Ink instances with
+        # real-timer-based assertions (fixed delay()s), which races under
+        # the CPU contention of a shared CI runner — confirmed on `main`
+        # itself independent of any test changes (gfargo/ink-enhanced-select-input#114).
+        # Serial execution trades a few extra seconds for deterministic CI.
+        run: yarn test:ci

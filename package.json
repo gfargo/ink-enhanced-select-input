@@ -32,6 +32,7 @@
     "lint:fix": "prettier --write . && xo --fix",
     "pretest": "yarn build",
     "test": "ava",
+    "test:ci": "yarn build && ava --serial",
     "test:fix": "yarn lint:fix && ava --update-snapshots"
   },
   "files": [
