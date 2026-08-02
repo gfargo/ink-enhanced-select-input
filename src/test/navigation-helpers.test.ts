@@ -4,9 +4,22 @@ import {
   findFirstValidIndex,
   findLastValidIndex,
   findNextValidIndex,
+  pageIndexOfStart,
+  pageStartFor,
   resolveInitialIndex,
   type Item,
 } from '../enhanced-select-input/index.js'
+
+/** Reference O(pages) linear scan — mirrors the pre-binary-search behaviour. */
+function linearPageStartFor(pageStarts: number[], index: number): number {
+  let result = 0
+  for (const start of pageStarts) {
+    if (start <= index) result = start
+    else break
+  }
+
+  return result
+}
 
 const mkItem = (label: string, disabled = false): Item<string> => ({
   label,
@@ -192,4 +205,50 @@ test('computePageStarts: a page always has at least one item, even when header+i
   const items = [mkGroupedItem('A', 'Group'), mkGroupedItem('B', 'Group')]
   // Limit=1 can't fit header+item (2 rows), but each page still gets 1 item.
   t.deepEqual(computePageStarts(items, 1), [0, 1])
+})
+
+// ── pageStartFor (binary search) ────────────────────────────────────────────
+
+test('pageStartFor: empty pageStarts returns 0', (t) => {
+  t.is(pageStartFor([], 5), 0)
+})
+
+test('pageStartFor: matches linear scan across exact starts, gaps, index 0, and beyond-last', (t) => {
+  const pageStarts = [0, 10, 20, 35, 50]
+  const probes = [0, 1, 9, 10, 11, 19, 20, 21, 34, 35, 49, 50, 51, 1000]
+  for (const index of probes) {
+    t.is(
+      pageStartFor(pageStarts, index),
+      linearPageStartFor(pageStarts, index),
+      `mismatch at index ${index}`
+    )
+  }
+})
+
+test('pageStartFor: index before the first start still returns the first start', (t) => {
+  // PageStarts[0] is always 0 in practice, but the helper should still
+  // behave sanely (fallback to 0) if probed below the smallest start.
+  t.is(pageStartFor([5, 10], 0), 0)
+})
+
+test('pageStartFor: single-page array returns that start for any index', (t) => {
+  t.is(pageStartFor([0], 0), 0)
+  t.is(pageStartFor([0], 999), 0)
+})
+
+// ── pageIndexOfStart (binary search) ────────────────────────────────────────
+
+test('pageIndexOfStart: empty pageStarts returns -1', (t) => {
+  t.is(pageIndexOfStart([], 0), -1)
+})
+
+test('pageIndexOfStart: matches Array#indexOf for exact and missing values', (t) => {
+  const pageStarts = [0, 10, 20, 35, 50]
+  for (const start of [0, 10, 20, 35, 50, 5, 15, -1, 51]) {
+    t.is(
+      pageIndexOfStart(pageStarts, start),
+      pageStarts.indexOf(start),
+      `mismatch at start ${start}`
+    )
+  }
 })

@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js"
     }
   },
   "type": "module",
@@ -28,11 +32,14 @@
     "lint:fix": "prettier --write . && xo --fix",
     "pretest": "yarn build",
     "test": "ava",
+    "test:ci": "yarn build && ava --serial",
     "test:fix": "yarn lint:fix && ava --update-snapshots"
   },
   "files": [
     "dist/index.js",
     "dist/index.d.ts",
+    "dist/headless.js",
+    "dist/headless.d.ts",
     "dist/enhanced-select-input"
   ],
   "peerDependencies": {
@@ -81,6 +88,7 @@
       "react/no-array-index-key": "off",
       "unicorn/filename-case": "off",
       "@typescript-eslint/ban-ts-comment": "off",
+      "react-hooks/exhaustive-deps": "error",
       "@typescript-eslint/naming-convention": [
         "error",
         {
