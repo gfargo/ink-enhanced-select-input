@@ -1519,9 +1519,15 @@ test('selection preserved when items update but current slot is still valid', as
 test('warns in development when object-valued items have no key field', async (t) => {
   const warnings: string[] = []
   const originalWarn = console.warn
+  // eslint-disable-next-line n/prefer-global/process
+  const originalNodeEnv = process.env['NODE_ENV']
   console.warn = (...arguments_: unknown[]) => {
     warnings.push(String(arguments_[0]))
   }
+
+  // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
+  // eslint-disable-next-line n/prefer-global/process
+  process.env['NODE_ENV'] = 'development'
 
   try {
     render(
@@ -1538,15 +1544,24 @@ test('warns in development when object-valued items have no key field', async (t
     t.true(warnings.some((w) => w.includes('Duplicate item keys')))
   } finally {
     console.warn = originalWarn
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = originalNodeEnv
   }
 })
 
 test('no duplicate key warning when all items have explicit keys', async (t) => {
   const warnings: string[] = []
   const originalWarn = console.warn
+  // eslint-disable-next-line n/prefer-global/process
+  const originalNodeEnv = process.env['NODE_ENV']
   console.warn = (...arguments_: unknown[]) => {
     warnings.push(String(arguments_[0]))
   }
+
+  // Run in development mode so the warning code path is active.
+  // eslint-disable-next-line n/prefer-global/process
+  process.env['NODE_ENV'] = 'development'
 
   try {
     render(
@@ -1562,6 +1577,9 @@ test('no duplicate key warning when all items have explicit keys', async (t) => 
     t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
   } finally {
     console.warn = originalWarn
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = originalNodeEnv
   }
 })
 
