@@ -28,8 +28,10 @@ const CTRL_K = '\u000B' // Ctrl+K
 const CTRL_H = '\u0008' // Ctrl+H
 const CTRL_L = '\u000C' // Ctrl+L
 
-// Small delay to let React/Ink process state updates
-const delay = async (ms = 250) =>
+// Small delay to let React/Ink process state updates. AVA runs this file's
+// ~150 tests concurrently, so the default needs enough margin that a busy
+// event loop doesn't make an assertion race the state update it's checking.
+const delay = async (ms = 300) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
@@ -2208,14 +2210,23 @@ test('revalidation effect resets selection when the highlighted item is filtered
 
 // --- #16: duplicate key warning ---
 
+// These two tests stub the shared console.warn and process.env['NODE_ENV'];
+// run them serially so they don't stomp on each other's stub/restore when
+// AVA executes the file's tests concurrently.
 test.serial(
   'warns in development when object-valued items have no key field',
   async (t) => {
     const warnings: string[] = []
     const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
     console.warn = (...arguments_: unknown[]) => {
       warnings.push(String(arguments_[0]))
     }
+
+    // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
 
     try {
       render(
@@ -2232,6 +2243,9 @@ test.serial(
       t.true(warnings.some((w) => w.includes('Duplicate item keys')))
     } finally {
       console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
     }
   }
 )
@@ -2241,9 +2255,15 @@ test.serial(
   async (t) => {
     const warnings: string[] = []
     const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
     console.warn = (...arguments_: unknown[]) => {
       warnings.push(String(arguments_[0]))
     }
+
+    // Run in development mode so the warning code path is active.
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
 
     try {
       render(
@@ -2259,6 +2279,9 @@ test.serial(
       t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
     } finally {
       console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
     }
   }
 )
@@ -2273,9 +2296,15 @@ test.serial(
   async (t) => {
     const warnings: string[] = []
     const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
     console.warn = (...arguments_: unknown[]) => {
       warnings.push(String(arguments_[0]))
     }
+
+    // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
 
     try {
       render(
@@ -2290,6 +2319,9 @@ test.serial(
       t.true(warnings.some((w) => w.includes('item.indicator is ignored')))
     } finally {
       console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
     }
   }
 )
@@ -2320,9 +2352,15 @@ test.serial(
   async (t) => {
     const warnings: string[] = []
     const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
     console.warn = (...arguments_: unknown[]) => {
       warnings.push(String(arguments_[0]))
     }
+
+    // The warning is gated on NODE_ENV !== 'production'; simulate a dev environment.
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
 
     try {
       const { rerender } = render(
@@ -2355,6 +2393,9 @@ test.serial(
       t.is(firingsAfterRerender, firingsAfterMount)
     } finally {
       console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
     }
   }
 )
