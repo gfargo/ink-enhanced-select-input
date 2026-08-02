@@ -739,7 +739,13 @@ export function EnhancedSelectInput<V>({
         gap={isVertical ? 0 : 2}
       >
         {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+          // A disabled item never gets a selection cursor, even if it's the
+          // resolved selectedIndex (e.g. every item is disabled, so
+          // resolveInitialIndex has nowhere valid to land). This keeps the
+          // render in agreement with the onHighlight effect, which only
+          // fires for enabled items.
+          const isSelected =
+            index + rotateIndex === selectedIndex && !item.disabled
           const isChecked = isMultiple
             ? checkedKeys.has(itemKey(item))
             : undefined
