@@ -11,6 +11,13 @@ export type Item<V> = {
   label: string
   value: V
   hotkey?: string
+  /**
+   * Custom indicator shown only for the highlighted item in single-select
+   * mode. Ignored when `multiple` is true — the built-in checkbox indicator
+   * takes precedence there (a dev warning is logged if both are supplied).
+   * To customize the indicator in multi-select mode, use
+   * `indicatorComponent` instead.
+   */
   indicator?: React.ReactNode
   disabled?: boolean
   /**
@@ -418,6 +425,25 @@ export function useEnhancedSelectInput<V>({
       ? itemKey(highlightedItem)
       : undefined
 
+  // Warn in development when per-item `indicator` is combined with
+  // `multiple` — the checkbox indicator always wins in multi-select mode,
+  // so a supplied `item.indicator` is silently unused otherwise. Depend on
+  // this derived boolean (not `items`) so the warning doesn't re-fire on
+  // every parent re-render that passes a new-but-equivalent items array.
+  const hasIgnoredIndicator =
+    multiple && items.some((item) => Boolean(item.indicator))
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!hasIgnoredIndicator) return
+    console.warn(
+      '[ink-enhanced-select-input] item.indicator is ignored when multiple is true — ' +
+        'the built-in checkbox indicator takes precedence. Use indicatorComponent to ' +
+        'customize indicators in multi-select mode.'
+    )
+  }, [hasIgnoredIndicator])
+
   // Re-fire whenever the highlighted item's *identity* changes, not just its
   // index — filtering can swap in a different item at the same index (e.g.
   // typing resets selectedIndex to 0, which was already 0), and that must
@@ -719,7 +745,13 @@ export function EnhancedSelectInput<V>({
         gap={isVertical ? 0 : 2}
       >
         {visibleItems.map((item, index) => {
-          const isSelected = index + rotateIndex === selectedIndex
+          // A disabled item never gets a selection cursor, even if it's the
+          // resolved selectedIndex (e.g. every item is disabled, so
+          // resolveInitialIndex has nowhere valid to land). This keeps the
+          // render in agreement with the onHighlight effect, which only
+          // fires for enabled items.
+          const isSelected =
+            index + rotateIndex === selectedIndex && !item.disabled
           const isChecked = isMultiple
             ? checkedKeys.has(itemKey(item))
             : undefined

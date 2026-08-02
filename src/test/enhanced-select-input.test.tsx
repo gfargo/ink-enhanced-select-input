@@ -825,6 +825,23 @@ test.serial('all items disabled: nothing is navigable', async (t) => {
 })
 
 test.serial(
+  'all items disabled: no selection cursor is rendered',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', disabled: true },
+      { label: 'B', value: 'b', disabled: true },
+    ]
+
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+    await delay()
+    // `resolveInitialIndex` lands on index 0 (the clamped fallback) since
+    // nothing is enabled — render must not paint that as selected.
+    t.false(lastFrame()!.includes('>'))
+  }
+)
+
+test.serial(
   'all items disabled: Home/End do not move cursor or fire onHighlight',
   async (t) => {
     const items = [
@@ -1713,6 +1730,121 @@ test.serial(
     } finally {
       console.warn = originalWarn
     }
+  }
+)
+
+// --- #44: item.indicator + multiple warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when item.indicator is combined with multiple',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.indicator is ignored')))
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+test.serial('no item.indicator warning when multiple is false', async (t) => {
+  const warnings: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...arguments_: unknown[]) => {
+    warnings.push(String(arguments_[0]))
+  }
+
+  try {
+    render(
+      <EnhancedSelectInput
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    t.false(warnings.some((w) => w.includes('item.indicator is ignored')))
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test.serial(
+  'item.indicator warning does not re-fire on re-render with an equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    try {
+      const { rerender } = render(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterMount = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.true(firingsAfterMount > 0)
+
+      // Re-render with a new array reference carrying identical content —
+      // the derived boolean signal should stay the same, so the effect
+      // should not fire again.
+      rerender(
+        <EnhancedSelectInput
+          multiple
+          items={[{ label: 'A', value: 'a', indicator: '★' }]}
+        />
+      )
+
+      await delay()
+      const firingsAfterRerender = warnings.filter((w) =>
+        w.includes('item.indicator is ignored')
+      ).length
+      t.is(firingsAfterRerender, firingsAfterMount)
+    } finally {
+      console.warn = originalWarn
+    }
+  }
+)
+
+// Serial: this test's render triggers the item.indicator dev warning as a
+// side effect, which would otherwise race the console.warn stubs above.
+test.serial(
+  'multi-select renders checkbox, not per-item indicator',
+  async (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={[{ label: 'A', value: 'a', indicator: '★' }]}
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('[ ]'))
+    t.false(frame.includes('★'))
   }
 )
 
