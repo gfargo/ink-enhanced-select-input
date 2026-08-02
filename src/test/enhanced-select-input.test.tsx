@@ -1523,6 +1523,50 @@ test('setSelectedIndex moves selection and clamps out-of-range values', async (t
   t.is(result?.selectedIndex, 0)
 })
 
+test('setSelectedIndex keeps the pagination window in sync when limit is set', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+    { label: 'E', value: 'e' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      items={items}
+      limit={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 0)
+
+  // Jump to an index on a later page — the window should snap to the page
+  // containing it, not stay put with an out-of-range windowIndex.
+  result?.setSelectedIndex(3)
+  await waitFor(() => result?.selectedIndex === 3)
+  t.is(result?.rotateIndex, 2)
+  t.is(result?.windowIndex, 1)
+  t.deepEqual(
+    result?.visibleItems.map((item) => item.value),
+    ['c', 'd']
+  )
+  t.is(result?.visibleItems[result.windowIndex]?.value, 'd')
+
+  // Jump back to the first page.
+  result?.setSelectedIndex(0)
+  await waitFor(() => result?.selectedIndex === 0)
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 0)
+})
+
 test('setSearchQuery filters items and resets selection', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
@@ -1588,11 +1632,8 @@ test('toggle flips checked state of the highlighted item and a given item', asyn
   t.deepEqual(toggled.at(-1), ['b', true])
 })
 
-test('toggle is a no-op outside multiple mode and on disabled items', async (t) => {
-  const items = [
-    { label: 'A', value: 'a', disabled: true },
-    { label: 'B', value: 'b' },
-  ]
+test('toggle is a no-op outside multiple mode', async (t) => {
+  const items = [{ label: 'A', value: 'a' }]
 
   let result: UseEnhancedSelectInputResult<unknown> | undefined
 
@@ -1610,6 +1651,30 @@ test('toggle is a no-op outside multiple mode and on disabled items', async (t) 
   await delay()
   t.is(result?.checkedKeys.size, 0)
 
+  result?.toggle(items[0])
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('toggle is a no-op on disabled items in multiple mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', disabled: true },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
   result?.toggle(items[0])
   await delay()
   t.is(result?.checkedKeys.size, 0)
