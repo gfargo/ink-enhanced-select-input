@@ -5611,6 +5611,37 @@ test.serial(
   }
 )
 
+test.serial(
+  'custom itemComponent rendering description/hint/disabledReason is not duplicated by the parent',
+  (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={[
+          {
+            label: 'Delete branch',
+            value: 'delete',
+            disabled: true,
+            description: 'This cannot be undone',
+            hint: 'Ctrl+D',
+            disabledReason: 'Upgrade to unlock',
+          },
+        ]}
+        itemComponent={({ label, description, hint, disabledReason }) => (
+          <Text>
+            {label} | {description} | {hint} | {disabledReason}
+          </Text>
+        )}
+      />
+    )
+
+    const frame = lastFrame()!
+    const count = (needle: string) => frame.split(needle).length - 1
+    t.is(count('This cannot be undone'), 1)
+    t.is(count('Ctrl+D'), 1)
+    t.is(count('Upgrade to unlock'), 1)
+  }
+)
+
 // --- separator items ---
 
 test.serial('separator renders a dimmed rule with no cursor/indicator', (t) => {

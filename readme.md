@@ -344,13 +344,23 @@ function MyIndicator({ isSelected }) {
   )
 }
 
-function MyItem({ isSelected, isDisabled, label }) {
+function MyItem({
+  isSelected,
+  isDisabled,
+  label,
+  description,
+  hint,
+  disabledReason,
+}) {
   return (
     <Text
       color={isDisabled ? 'gray' : isSelected ? 'yellow' : 'white'}
       dimColor={isDisabled}
     >
       {label}
+      {hint ? ` ${hint}` : ''}
+      {isDisabled && disabledReason ? ` — ${disabledReason}` : ''}
+      {description ? ` (${description})` : ''}
     </Text>
   )
 }
@@ -361,6 +371,8 @@ function MyItem({ isSelected, isDisabled, label }) {
   itemComponent={MyItem}
 />
 ```
+
+`ItemProperties` includes `description`, `hint`, and `disabledReason` so a custom `itemComponent` can render them however it likes. The built-in `DefaultItemComponent` is the only renderer the library draws these for automatically — once you supply your own `itemComponent`, you own rendering that text; the library won't render it a second time.
 
 ### Headless Hook
 

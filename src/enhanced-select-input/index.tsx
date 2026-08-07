@@ -1215,6 +1215,11 @@ export function EnhancedSelectInput<V>({
   const ItemComponent = itemComponent
   const GroupHeaderComponent = groupHeaderComponent
   const SeparatorComponent = separatorComponent
+  // A custom itemComponent receives description/hint/disabledReason as props
+  // specifically so it can render them itself. Rendering them again here
+  // would duplicate that text, so the parent only renders them for the
+  // built-in default, which ignores those props.
+  const isDefaultItemComponent = itemComponent === DefaultItemComponent
   const isVertical = hookProperties.orientation !== 'horizontal'
   const isMultiple = hookProperties.multiple === true
 
@@ -1312,18 +1317,22 @@ export function EnhancedSelectInput<V>({
                     hint={item.hint}
                     disabledReason={item.disabledReason}
                   />
-                  {item.hint && <Text dimColor> {item.hint}</Text>}
+                  {isDefaultItemComponent && item.hint && (
+                    <Text dimColor> {item.hint}</Text>
+                  )}
                   {item.hotkey && !isMultiple && (
                     <Text dimColor color="gray">
                       {' '}
                       ({item.hotkey})
                     </Text>
                   )}
-                  {item.disabled && item.disabledReason && (
-                    <Text dimColor> — {item.disabledReason}</Text>
-                  )}
+                  {isDefaultItemComponent &&
+                    item.disabled &&
+                    item.disabledReason && (
+                      <Text dimColor> — {item.disabledReason}</Text>
+                    )}
                 </Box>
-                {item.description && (
+                {isDefaultItemComponent && item.description && (
                   <Box marginLeft={2}>
                     <Text dimColor>{item.description}</Text>
                   </Box>
