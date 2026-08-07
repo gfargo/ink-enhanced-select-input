@@ -132,7 +132,7 @@ test('10k items: End jumps to the last item and keeps the frame bounded', async 
 
   await delay()
   stdin.write(END)
-  await delay()
+  await waitFor(() => highlighted === `Item ${ITEM_COUNT - 1}`)
 
   t.is(highlighted, `Item ${ITEM_COUNT - 1}`)
   const frame = lastFrame()!
@@ -156,9 +156,9 @@ test('10k items: Home jumps back to the first item and keeps the frame bounded',
 
   await delay()
   stdin.write(END)
-  await delay()
+  await waitFor(() => highlighted === `Item ${ITEM_COUNT - 1}`)
   stdin.write(HOME)
-  await delay()
+  await waitFor(() => highlighted === 'Item 0')
 
   t.is(highlighted, 'Item 0')
   const frame = lastFrame()!
@@ -199,7 +199,7 @@ test('10k grouped items: End jumps to the last group and item, frame stays bound
 
   await delay()
   stdin.write(END)
-  await delay()
+  await waitFor(() => highlighted === `Item ${ITEM_COUNT - 1}`)
 
   t.is(highlighted, `Item ${ITEM_COUNT - 1}`)
   const frame = lastFrame()!
