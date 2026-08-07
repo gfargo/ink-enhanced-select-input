@@ -69,6 +69,20 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
+  /**
+   * Controls the highlighted index from outside the component. When
+   * provided, navigation/jump/hotkey/typeahead keypresses call
+   * `onIndexChange` instead of moving the highlight internally — the parent
+   * owns the value and must feed it back for the highlight to move.
+   * Combine with `onIndexChange` for a fully controlled highlight. Do not
+   * pass alongside `initialIndex`, which is ignored once this is set.
+   */
+  readonly selectedIndex?: number
+  /**
+   * Called with the next index whenever a keypress would move the highlight.
+   * Only meaningful when `selectedIndex` is provided (controlled mode).
+   */
+  readonly onIndexChange?: (index: number) => void
   readonly limit?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
@@ -82,6 +96,22 @@ export type UseEnhancedSelectInputProperties<V> = {
    * Each entry should match an item's `key` field (or `String(value)` fallback).
    */
   readonly defaultSelectedKeys?: string[]
+  /**
+   * Controls the checked keys from outside the component. When provided,
+   * `Space`/`toggle()` call `onSelectedKeysChange` instead of mutating the
+   * checked set internally — the parent owns the value and must feed it
+   * back for the checkboxes to update. Combine with `onSelectedKeysChange`
+   * for a fully controlled multi-select. Do not pass alongside
+   * `defaultSelectedKeys`, which is ignored once this is set. Only used
+   * when `multiple` is true.
+   */
+  readonly selectedKeys?: string[]
+  /**
+   * Called with the next checked-keys array whenever `Space`/`toggle()`
+   * would change the checked set. Only meaningful when `selectedKeys` is
+   * provided (controlled mode).
+   */
+  readonly onSelectedKeysChange?: (keys: string[]) => void
   /**
    * Called when the user confirms a multi-select (Enter).
    * Only used when `multiple` is true.
@@ -678,6 +708,8 @@ export function useEnhancedSelectInput<V>({
   items,
   isFocused = true,
   initialIndex = 0,
+  selectedIndex: controlledIndex,
+  onIndexChange,
   limit,
   onSelect,
   onHighlight,
@@ -685,6 +717,8 @@ export function useEnhancedSelectInput<V>({
   orientation = 'vertical',
   multiple = false,
   defaultSelectedKeys,
+  selectedKeys: controlledKeys,
+  onSelectedKeysChange,
   onConfirm,
   confirmScope = 'all',
   onToggle,
@@ -735,15 +769,21 @@ export function useEnhancedSelectInput<V>({
   )
 
   const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
-  // eslint-disable-next-line react/hook-use-state -- public API name (setSelectedIndex) is reserved for the wrapper below
-  const [selectedIndex, setSelectedIndexState] = useState(safeInitialIndex)
+  const [uncontrolledIndex, setUncontrolledIndex] = useState(safeInitialIndex)
+  const isIndexControlled = controlledIndex !== undefined
+  const selectedIndex = isIndexControlled
+    ? resolveInitialIndex(filteredItems, controlledIndex)
+    : uncontrolledIndex
   // Latest-value ref so the revalidation effect can read the current
   // selectedIndex without listing it as a dependency (which would make the
   // effect re-run on every navigation keypress instead of only when the
   // filtered item set changes).
   const selectedIndexReference = useRef(selectedIndex)
   selectedIndexReference.current = selectedIndex
-  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(() => {
+  const isKeysControlled = controlledKeys !== undefined
+  const [uncontrolledCheckedKeys, setUncontrolledCheckedKeys] = useState<
+    Set<string>
+  >(() => {
     const disabledKeys = new Set(
       items.filter((item) => item.disabled).map((item) => itemKey(item))
     )
@@ -751,10 +791,19 @@ export function useEnhancedSelectInput<V>({
       (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
     )
   })
+  const controlledCheckedKeys = useMemo(() => {
+    if (!isKeysControlled) return undefined
+    const disabledKeys = new Set(
+      items.filter((item) => item.disabled).map((item) => itemKey(item))
+    )
+    return new Set(controlledKeys.filter((key) => !disabledKeys.has(key)))
+  }, [isKeysControlled, controlledKeys, items])
+  const checkedKeys = controlledCheckedKeys ?? uncontrolledCheckedKeys
   // Mirrors `checkedKeys` synchronously so the Enter branch below can read
   // the committed set even when a Space toggle and Enter are written in the
   // same tick (no intervening render to flush the `checkedKeys` state).
   const checkedKeysReference = useRef(checkedKeys)
+  checkedKeysReference.current = checkedKeys
   const typeaheadBuffer = useRef<{ text: string; time: number }>({
     text: '',
     time: 0,
@@ -820,9 +869,14 @@ export function useEnhancedSelectInput<V>({
   // position, so the selection stays as close as possible to where the
   // user left off. `filteredItems` is memoized above, so this only re-runs
   // when items/searchQuery actually change content — not on every render.
+  // Skipped when the index is controlled: the parent owns the value, and
+  // `selectedIndex` above already resolves a controlled value to a safe,
+  // in-range index for reads (pagination, `filteredItems[selectedIndex]`)
+  // without writing back to the parent.
   useEffect(() => {
+    if (isIndexControlled) return
     if (filteredItems.length === 0) {
-      setSelectedIndexState(0)
+      setUncontrolledIndex(0)
       return
     }
 
@@ -832,9 +886,9 @@ export function useEnhancedSelectInput<V>({
         filteredItems,
         selectedIndexReference.current
       )
-      setSelectedIndexState(newIndex)
+      setUncontrolledIndex(newIndex)
     }
-  }, [filteredItems, limit, pageStarts])
+  }, [filteredItems, limit, pageStarts, isIndexControlled])
 
   // Fire onHighlight when the highlighted item's identity (key) changes,
   // not merely when the items array reference changes — that would cause
@@ -868,6 +922,31 @@ export function useEnhancedSelectInput<V>({
     )
   }, [hasIgnoredIndicator])
 
+  // Warn in development when a controlled prop is combined with its
+  // uncontrolled counterpart — the uncontrolled prop is silently ignored
+  // once the controlled prop is set, which is easy to miss.
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (isIndexControlled && initialIndex !== 0) {
+      console.warn(
+        '[ink-enhanced-select-input] selectedIndex and initialIndex were both provided — ' +
+          'initialIndex is ignored once selectedIndex (controlled mode) is set.'
+      )
+    }
+  }, [isIndexControlled, initialIndex])
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (isKeysControlled && defaultSelectedKeys !== undefined) {
+      console.warn(
+        '[ink-enhanced-select-input] selectedKeys and defaultSelectedKeys were both provided — ' +
+          'defaultSelectedKeys is ignored once selectedKeys (controlled mode) is set.'
+      )
+    }
+  }, [isKeysControlled, defaultSelectedKeys])
+
   // Re-fire whenever the highlighted item's *identity* changes, not just its
   // index — filtering can swap in a different item at the same index (e.g.
   // typing resets selectedIndex to 0, which was already 0), and that must
@@ -884,8 +963,13 @@ export function useEnhancedSelectInput<V>({
     }
   }, [highlightedKey])
 
+  // Commits the next highlighted index. In controlled mode, only notifies
+  // the parent via `onIndexChange` — the parent must feed the value back
+  // through `selectedIndex` for the highlight to actually move. In
+  // uncontrolled mode, updates internal state directly.
   const updateSelection = (nextIndex: number) => {
-    setSelectedIndexState(nextIndex)
+    onIndexChange?.(nextIndex)
+    if (!isIndexControlled) setUncontrolledIndex(nextIndex)
   }
 
   // Toggle the checked state of `item` (defaults to the highlighted item) in
@@ -905,7 +989,8 @@ export function useEnhancedSelectInput<V>({
     else next.delete(k)
     checkedKeysReference.current = next
     onToggle?.(item, nowChecked)
-    setCheckedKeys(next)
+    onSelectedKeysChange?.([...next])
+    if (!isKeysControlled) setUncontrolledCheckedKeys(next)
   }
 
   const setSelectedIndexPublic = (index: number) => {
@@ -914,7 +999,7 @@ export function useEnhancedSelectInput<V>({
 
   const setSearchQueryPublic = (query: string) => {
     setSearchQueryState(query)
-    setSelectedIndexState(0)
+    updateSelection(0)
   }
 
   useInput(
@@ -940,13 +1025,13 @@ export function useEnhancedSelectInput<V>({
       switch (intent.type) {
         case 'search-backspace': {
           setSearchQueryState((previous) => previous.slice(0, -1))
-          setSelectedIndexState(0)
+          updateSelection(0)
           break
         }
 
         case 'search-clear': {
           setSearchQueryState('')
-          setSelectedIndexState(0)
+          updateSelection(0)
           break
         }
 
@@ -999,7 +1084,7 @@ export function useEnhancedSelectInput<V>({
 
         case 'search-append': {
           setSearchQueryState((previous) => previous + intent.char)
-          setSelectedIndexState(0)
+          updateSelection(0)
           break
         }
 
