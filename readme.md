@@ -21,6 +21,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Searchable Mode:** Type to filter items inline with case-insensitive matching.
 - **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
+- **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
 
@@ -176,6 +177,57 @@ You can provide a custom header renderer via `groupHeaderComponent`:
       {label}
     </Text>
   )}
+/>
+```
+
+### Descriptions, Hints & Disabled Reasons
+
+Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    {
+      label: 'Deploy to production',
+      value: 'deploy',
+      description: 'Pushes the current branch live. This cannot be undone.',
+    },
+    { label: 'Open file', value: 'open', hint: 'Ctrl+O' },
+    {
+      label: 'Premium feature',
+      value: 'premium',
+      disabled: true,
+      disabledReason: 'Upgrade to unlock',
+    },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+> **Pagination note:** `limit` budgets one visual row per item (see [Grouped Items](#grouped-items) above). A rendered `description` adds an extra line that isn't counted toward that budget, so windows containing descriptions can render taller than `limit` rows.
+
+### Separator Items
+
+Insert a non-navigable visual rule between items with `{ type: 'separator' }` — useful for grouping without a header label. Separators are skipped by all navigation (arrows, vim keys, Home/End, type-ahead, hotkeys) and are never passed to `onSelect`, `onHighlight`, or `onConfirm`.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    { label: 'Copy', value: 'copy' },
+    { label: 'Paste', value: 'paste' },
+    { type: 'separator' },
+    { label: 'Delete', value: 'delete' },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+Provide a custom separator renderer via `separatorComponent`:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  separatorComponent={() => <Text dimColor>{'· '.repeat(10)}</Text>}
 />
 ```
 
@@ -362,7 +414,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 
 | Prop                   | Type                                        | Default                       | Description                                                                                                                                                          |
 | ---------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                             |
+| `items`                | `Array<ItemOrSeparator<V>>`                 | _required_                    | List of selectable items, optionally interspersed with `{ type: 'separator' }` rows                                                                                  |
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
 | `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
@@ -379,6 +431,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query |
 | `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                             |
 | `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                         |
+| `separatorComponent`   | `FC<SeparatorProperties>`                   | `DefaultSeparatorComponent`   | Custom renderer for `{ type: 'separator' }` rows                                                                                                                     |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                     |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                    |
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
@@ -396,7 +449,17 @@ type Item<V> = {
   indicator?: React.ReactNode // Single-select only — ignored (with a dev warning) when `multiple` is true
   disabled?: boolean
   group?: string // Items with the same group are rendered under a shared header
+  description?: string // Rendered dimmed on its own line beneath the label
+  hint?: string // Rendered dimmed to the right of the label
+  disabledReason?: string // Rendered dimmed beside the label when `disabled` is true
 }
+
+type SeparatorItem = {
+  type: 'separator'
+  key?: string
+}
+
+type ItemOrSeparator<V> = Item<V> | SeparatorItem
 ```
 
 > **`key` field:** React uses `key` (or `String(value)` as a fallback) to track

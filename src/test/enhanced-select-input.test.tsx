@@ -7,7 +7,10 @@ import {
   DefaultIndicatorComponent,
   EnhancedSelectInput,
   useEnhancedSelectInput,
+  computePageStarts,
+  isSeparator,
   type Item,
+  type ItemOrSeparator,
   type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
 
@@ -1474,7 +1477,7 @@ test.serial(
 // HookHarness renders nothing but calls the hook and forwards the result.
 // Value type is unknown since tests only assert on index/count fields.
 type HookHarnessProperties = {
-  readonly items: Array<Item<unknown>>
+  readonly items: Array<ItemOrSeparator<unknown>>
   readonly initialIndex?: number
   readonly limit?: number
   readonly isFocused?: boolean
@@ -1716,11 +1719,14 @@ test('setSelectedIndex keeps the pagination window in sync when limit is set', a
   await waitFor(() => result?.selectedIndex === 3)
   t.is(result?.rotateIndex, 2)
   t.is(result?.windowIndex, 1)
+  const nonSeparatorVisible = (result?.visibleItems ?? []).filter(
+    (item): item is Item<unknown> => !isSeparator(item)
+  )
   t.deepEqual(
-    result?.visibleItems.map((item) => item.value),
+    nonSeparatorVisible.map((item) => item.value),
     ['c', 'd']
   )
-  t.is(result?.visibleItems[result.windowIndex]?.value, 'd')
+  t.is(nonSeparatorVisible[result?.windowIndex ?? -1]?.value, 'd')
 
   // Jump back to the first page.
   result?.setSelectedIndex(0)
@@ -3175,7 +3181,9 @@ test.serial(
     )
 
     await delay()
-    const visibleItems = result?.visibleItems ?? []
+    const visibleItems = (result?.visibleItems ?? []).filter(
+      (item): item is Item<unknown> => !isSeparator(item)
+    )
     const headerCount = visibleItems.filter((item, index) => {
       const previous = index > 0 ? visibleItems[index - 1] : undefined
       return item.group && item.group !== previous?.group
@@ -4510,7 +4518,8 @@ test.serial(
     t.is(result?.searchQuery, 'ice ')
     // "ice " matches only "Ice Cream" (not "Iced Tea" since "iced tea" doesn't contain "ice ")
     t.is(result?.visibleItems.length, 1)
-    t.is(result?.visibleItems[0]?.label, 'Ice Cream')
+    const first = result?.visibleItems[0]
+    t.is(first && !isSeparator(first) ? first.label : undefined, 'Ice Cream')
   }
 )
 
@@ -5519,5 +5528,326 @@ test.serial(
     t.is((frame.match(/\[x]/g) ?? []).length, 1)
     const cherryLine = frame.split('\n').find((line) => line.includes('Cherry'))
     t.true(cherryLine?.includes('[x]'))
+  }
+)
+
+// --- description / hint / disabledReason ---
+
+test.serial('description renders dimmed beneath the label', (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[
+        {
+          label: 'Delete branch',
+          value: 'delete',
+          description: 'This cannot be undone',
+        },
+      ]}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Delete branch'))
+  t.true(frame.includes('This cannot be undone'))
+  const lines = frame.split('\n')
+  const labelLine = lines.findIndex((line) => line.includes('Delete branch'))
+  const descriptionLine = lines.findIndex((line) =>
+    line.includes('This cannot be undone')
+  )
+  t.is(descriptionLine, labelLine + 1)
+})
+
+test.serial('hint renders to the right of the label', (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[{ label: 'Open file', value: 'open', hint: 'Ctrl+O' }]}
+    />
+  )
+
+  const frame = lastFrame()!
+  const line = frame.split('\n').find((l) => l.includes('Open file'))
+  t.truthy(line)
+  t.true(line!.includes('Ctrl+O'))
+  t.true(line!.indexOf('Ctrl+O') > line!.indexOf('Open file'))
+})
+
+test.serial('disabledReason renders beside a disabled item label', (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[
+        {
+          label: 'Premium feature',
+          value: 'premium',
+          disabled: true,
+          disabledReason: 'Upgrade to unlock',
+        },
+        { label: 'Free feature', value: 'free' },
+      ]}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Premium feature'))
+  t.true(frame.includes('Upgrade to unlock'))
+})
+
+test.serial(
+  'disabledReason is not shown for an enabled item even if set',
+  (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={[
+          {
+            label: 'Item A',
+            value: 'a',
+            disabledReason: 'should not appear',
+          },
+        ]}
+      />
+    )
+
+    const frame = lastFrame()!
+    t.false(frame.includes('should not appear'))
+  }
+)
+
+// --- separator items ---
+
+test.serial('separator renders a dimmed rule with no cursor/indicator', (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[
+        { label: 'Item A', value: 'a' },
+        { type: 'separator' },
+        { label: 'Item B', value: 'b' },
+      ]}
+    />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Item A'))
+  t.true(frame.includes('Item B'))
+  const lines = frame.split('\n')
+  t.is(lines.length, 3)
+  const separatorLine = lines[1]!
+  t.false(separatorLine.includes('>'))
+  t.false(separatorLine.includes('Item A'))
+  t.false(separatorLine.includes('Item B'))
+})
+
+test.serial('separator is skipped by arrow-key navigation', async (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    { label: 'Item A', value: 'a' },
+    { type: 'separator' },
+    { label: 'Item B', value: 'b' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Item A')
+
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlighted, 'Item B')
+})
+
+test.serial('separator is skipped by Home/End', async (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    { type: 'separator' },
+    { label: 'Item A', value: 'a' },
+    { label: 'Item B', value: 'b' },
+    { type: 'separator' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Item A')
+
+  stdin.write(END)
+  await delay()
+  t.is(highlighted, 'Item B')
+
+  stdin.write(HOME)
+  await delay()
+  t.is(highlighted, 'Item A')
+})
+
+test.serial(
+  'separator initialIndex resolves to nearest selectable item',
+  async (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { label: 'Item A', value: 'a' },
+      { type: 'separator' },
+      { label: 'Item B', value: 'b' },
+    ]
+
+    let highlighted = ''
+    render(
+      <EnhancedSelectInput
+        items={items}
+        initialIndex={1}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'Item B')
+  }
+)
+
+test.serial(
+  'onSelect never fires for a separator; Enter after it selects the next item',
+  async (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { label: 'Item A', value: 'a' },
+      { type: 'separator' },
+      { label: 'Item B', value: 'b' },
+    ]
+
+    let selected: string | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onSelect={(item) => {
+          selected = item.value
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(selected, 'b')
+  }
+)
+
+test.serial(
+  'searchable mode drops separators and does not crash',
+  async (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { label: 'Apple', value: 'apple' },
+      { type: 'separator' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('a')
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('Apple'))
+    t.true(frame.includes('Banana'))
+  }
+)
+
+test.serial(
+  'multi-select: separators are not toggleable and excluded from onConfirm',
+  async (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { label: 'Item A', value: 'a' },
+      { type: 'separator' },
+      { label: 'Item B', value: 'b' },
+    ]
+
+    let confirmed: Array<Item<string>> = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        onConfirm={(checked) => {
+          confirmed = checked
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(SPACE)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(SPACE)
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+
+    t.is(confirmed.length, 2)
+    t.deepEqual(
+      confirmed.map((item) => item.value),
+      ['a', 'b']
+    )
+  }
+)
+
+test.serial(
+  'a group header still renders for an item right after a separator',
+  (t) => {
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={[
+          { label: 'Item A', value: 'a', group: 'Group 1' },
+          { type: 'separator' },
+          { label: 'Item B', value: 'b', group: 'Group 1' },
+        ]}
+      />
+    )
+
+    const frame = lastFrame()!
+    t.is((frame.match(/── Group 1 ──/g) ?? []).length, 2)
+  }
+)
+
+test.serial('computePageStarts: a separator counts as exactly one row', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    { label: 'A', value: 'a' },
+    { type: 'separator' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  // A(1) + separator(1) + B(1) = 3 rows fits limit=3; C starts a new page —
+  // a separator never inflates the row budget the way a group header does.
+  t.deepEqual(computePageStarts(items, 3), [0, 3])
+})
+
+test.serial(
+  'computePageStarts: a separator breaks group continuity, so the header re-renders for the item after it',
+  (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { label: 'A', value: 'a', group: 'G' },
+      { type: 'separator' },
+      { label: 'B', value: 'b', group: 'G' },
+      { label: 'C', value: 'c', group: 'G' },
+    ]
+
+    // Header(G,1) + A(1) + separator(1) = 3 rows fills limit=3. B re-pays the
+    // header cost (1) because the separator's undefined group breaks
+    // continuity from A's group — mirroring the render layer, which also
+    // re-shows the group header for the item right after a separator.
+    t.deepEqual(computePageStarts(items, 3), [0, 2])
   }
 )
