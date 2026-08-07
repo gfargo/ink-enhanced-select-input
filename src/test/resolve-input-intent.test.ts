@@ -39,6 +39,8 @@ const allKeyMapEnabled: Required<KeyMap> = {
   cancel: true,
   select: true,
   toggle: true,
+  hotkeys: true,
+  search: true,
 }
 
 const items: Array<Item<string>> = [
@@ -62,6 +64,8 @@ const context = (
   orientation: overrides.orientation ?? ('vertical' as const),
   selectedIndex: overrides.selectedIndex ?? 0,
   filteredItems: overrides.filteredItems ?? items,
+  typeahead: overrides.typeahead ?? false,
+  typeaheadActive: overrides.typeaheadActive ?? false,
 })
 
 // Search-edit keys (backspace/delete/clear-escape) win over everything else,
@@ -221,4 +225,52 @@ test('hotkeys are disabled in searchable mode', (t) => {
     context({ km: { vimKeys: false }, searchable: true })
   )
   t.deepEqual(intent, { type: 'search-append', char: 'j' })
+})
+
+test('km.hotkeys disabled leaves Enter/select working', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({ km: { hotkeys: false } })
+  )
+  t.deepEqual(intent, { type: 'submit' })
+})
+
+test('km.hotkeys disabled turns a hotkey char into a no-op', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { hotkeys: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('km.select disabled leaves item hotkeys working', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { select: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'hotkey', item: items[0], index: 0 })
+})
+
+test('km.hotkeys disabled with typeahead lets a hotkey char be captured as typeahead', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({
+      km: { hotkeys: false, vimKeys: false },
+      typeahead: true,
+    })
+  )
+  t.deepEqual(intent, { type: 'typeahead', char: 'j' })
+})
+
+test('km.search disabled stops printable characters from being captured in searchable mode', (t) => {
+  const intent = resolveInputIntent(
+    'z',
+    key(),
+    context({ searchable: true, km: { search: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
 })

@@ -62,6 +62,16 @@ export type KeyMap = {
   readonly select?: boolean
   /** Space toggle in multi-select mode. Default: true. */
   readonly toggle?: boolean
+  /**
+   * Item hotkeys (single-char item selection, e.g. `hotkey: 'q'`). Independent
+   * of `select` — disabling `select` only turns off Enter, and disabling
+   * `hotkeys` only turns off item hotkeys. Default: true.
+   */
+  readonly hotkeys?: boolean
+  /**
+   * Printable-character capture in searchable mode. Default: true.
+   */
+  readonly search?: boolean
 }
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
@@ -457,7 +467,7 @@ function resolveTypeaheadIntent<V>(
   }
 
   const isHotkeyChar =
-    km.select &&
+    km.hotkeys &&
     !multiple &&
     filteredItems.some((item) => item.hotkey === input && !item.disabled)
 
@@ -482,7 +492,7 @@ function resolveHotkeyIntent<V>(
   const { km, multiple, searchable, filteredItems } = context
 
   if (
-    !km.select ||
+    !km.hotkeys ||
     multiple ||
     searchable ||
     isActiveVimKey ||
@@ -544,7 +554,7 @@ function resolveSearchAppendIntent<V>(
   context: InputIntentContext<V>,
   isModifiedChord: boolean
 ): Intent<V> | undefined {
-  return context.searchable && input && !isModifiedChord
+  return context.searchable && context.km.search && input && !isModifiedChord
     ? { type: 'search-append', char: input }
     : undefined
 }
@@ -701,6 +711,8 @@ export function useEnhancedSelectInput<V>({
     cancel: keyMap?.cancel ?? true,
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
+    hotkeys: keyMap?.hotkeys ?? true,
+    search: keyMap?.search ?? true,
   }
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
