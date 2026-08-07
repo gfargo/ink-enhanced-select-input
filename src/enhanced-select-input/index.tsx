@@ -69,6 +69,16 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
+  /**
+   * Max number of visible rows — items and group headers count, but each
+   * counts as exactly one row regardless of label length. `limit` bounds row
+   * *count*, not terminal width: `DefaultItemComponent` truncates an
+   * overlong label with an ellipsis (`wrap="truncate-end"`) rather than
+   * letting Ink wrap it onto extra lines, so the rendered height stays
+   * `limit` rows. A custom `itemComponent` renders its own `<Text>` and is
+   * responsible for its own truncation/wrap behaviour — an unbounded
+   * `wrap="wrap"` there can still exceed `limit` rows on narrow terminals.
+   */
   readonly limit?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
@@ -1086,6 +1096,7 @@ export function DefaultItemComponent({
     <Text
       color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
       dimColor={isDisabled}
+      wrap="truncate-end"
     >
       {label}
     </Text>

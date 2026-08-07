@@ -5521,3 +5521,39 @@ test.serial(
     t.true(cherryLine?.includes('[x]'))
   }
 )
+
+// --- B19: long labels must not wrap and inflate rendered row count past limit ---
+
+test.serial(
+  'limit stays a reliable row budget when a label is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A'.repeat(200), value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Without truncation, the 200-char label alone would wrap across
+    // multiple lines at the 100-column test width, pushing the frame past
+    // the 2-row budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+  }
+)
+
+test.serial(
+  'a long label is truncated with an ellipsis rather than wrapped onto extra lines',
+  (t) => {
+    const items = [{ label: 'A'.repeat(200), value: 'a' }]
+
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A'.repeat(200)))
+  }
+)

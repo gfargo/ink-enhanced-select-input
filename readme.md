@@ -310,6 +310,8 @@ function MyItem({ isSelected, isDisabled, label }) {
 />
 ```
 
+`DefaultItemComponent` renders its label with `wrap="truncate-end"` so an overlong label (e.g. a long file path) ellipsizes onto a single row instead of wrapping, keeping `limit` a reliable row budget. A custom `itemComponent` renders its own `<Text>` and must set its own `wrap` if it needs the same guarantee — an unbounded default `wrap="wrap"` can still push a page past `limit` rows on a narrow terminal.
+
 ### Headless Hook
 
 If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly — either from the main package or from the dedicated `ink-enhanced-select-input/headless` subpath (no component/render code included):
@@ -365,7 +367,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                             |
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
-| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
+| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count, one row each; `DefaultItemComponent` truncates overlong labels rather than wrapping them             |
 | `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
 | `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |
