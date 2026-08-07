@@ -492,7 +492,12 @@ function resolveTypeaheadIntent<V>(
 /**
  * Item hotkeys. Not active in multi-select or searchable mode, and active
  * vim nav keys or Ctrl/Alt chords (which take priority over a same-character
- * hotkey) are excluded here too.
+ * hotkey) are excluded here too. `input` is empty for arrows and other
+ * non-alphanumeric keys, which would otherwise match an unset `hotkey: ''`
+ * on an item (B14) — guarded explicitly here rather than relying solely on
+ * navigation/jump resolving first, since a key with no navigate/jump
+ * mapping (e.g. `km.arrows` disabled) can still reach this branch with an
+ * empty `input`.
  */
 function resolveHotkeyIntent<V>(
   input: string,
@@ -506,6 +511,7 @@ function resolveHotkeyIntent<V>(
     !km.hotkeys ||
     multiple ||
     searchable ||
+    !input ||
     isActiveVimKey ||
     isModifiedChord
   ) {
