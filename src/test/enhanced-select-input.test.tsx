@@ -4130,6 +4130,71 @@ test.serial('searchable: renders custom placeholder', (t) => {
   t.true(frame.includes('/ Type to filter'))
 })
 
+test.serial(
+  'searchable: search prompt renders on its own line above items in horizontal orientation',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    )
+
+    const lines = lastFrame()!.split('\n')
+    const searchLineIndex = lines.findIndex((line) =>
+      line.includes('/ Search...')
+    )
+    const itemsLineIndex = lines.findIndex(
+      (line) => line.includes('Apple') && line.includes('Banana')
+    )
+
+    t.true(searchLineIndex !== -1)
+    t.true(itemsLineIndex !== -1)
+    t.true(searchLineIndex < itemsLineIndex)
+    // The search prompt must not share a line with the items.
+    t.false(lines[searchLineIndex]!.includes('Apple'))
+  }
+)
+
+test.serial(
+  'searchable: horizontal orientation item row layout matches vertical (unaffected by the search-line wrapper)',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const horizontal = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    ).lastFrame()!
+
+    const vertical = render(
+      <EnhancedSelectInput searchable items={items} orientation="vertical" />
+    ).lastFrame()!
+
+    const horizontalLines = horizontal.split('\n')
+    const verticalLines = vertical.split('\n')
+
+    // Vertical mode still stacks each item on its own line.
+    t.true(verticalLines.some((line) => line.includes('Apple')))
+    t.true(verticalLines.some((line) => line.includes('Banana')))
+    t.false(
+      verticalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+
+    // Horizontal mode still puts both items on the same row.
+    t.true(
+      horizontalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+  }
+)
+
 test.serial('searchable: typing filters items by label', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
