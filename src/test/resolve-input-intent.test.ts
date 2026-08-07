@@ -59,6 +59,7 @@ const context = (
   km: { ...allKeyMapEnabled, ...overrides.km },
   searchable: overrides.searchable ?? false,
   searchQuery: overrides.searchQuery ?? '',
+  searchCursor: overrides.searchCursor ?? (overrides.searchQuery ?? '').length,
   hasItems: overrides.hasItems ?? true,
   multiple: overrides.multiple ?? false,
   orientation: overrides.orientation ?? ('vertical' as const),
@@ -302,4 +303,144 @@ test('km.search disabled stops printable characters from being captured in searc
     context({ searchable: true, km: { search: false } })
   )
   t.deepEqual(intent, { type: 'none' })
+})
+
+// --- Search-line cursor movement (F3: search field ergonomics) ---
+
+test('searchable left/right arrows move the search cursor in vertical orientation', (t) => {
+  const left = resolveInputIntent(
+    '',
+    key({ leftArrow: true }),
+    context({ searchable: true, searchQuery: 'ab', searchCursor: 1 })
+  )
+  t.deepEqual(left, { type: 'search-cursor-left' })
+
+  const right = resolveInputIntent(
+    '',
+    key({ rightArrow: true }),
+    context({ searchable: true, searchQuery: 'ab', searchCursor: 1 })
+  )
+  t.deepEqual(right, { type: 'search-cursor-right' })
+})
+
+test('left/right arrows are not claimed by search-cursor resolution when not searchable', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ leftArrow: true }),
+    context({ searchable: false })
+  )
+  // Vertical orientation has no left/right list navigation either, so this
+  // remains a no-op — the point of this test is that it is NOT a
+  // search-cursor intent.
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('searchable Home/End move the search cursor, not the list, in vertical orientation', (t) => {
+  const home = resolveInputIntent(
+    '',
+    key({ home: true }),
+    context({ searchable: true, searchQuery: 'ab', searchCursor: 2 })
+  )
+  t.deepEqual(home, { type: 'search-cursor-home' })
+
+  const end = resolveInputIntent(
+    '',
+    key({ end: true }),
+    context({ searchable: true, searchQuery: 'ab', searchCursor: 0 })
+  )
+  t.deepEqual(end, { type: 'search-cursor-end' })
+})
+
+test('searchable Home/End fall back to list-jump in horizontal orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ home: true }),
+    context({ searchable: true, orientation: 'horizontal' })
+  )
+  t.deepEqual(intent, { type: 'jump', index: 0 })
+})
+
+test('searchable left/right arrows fall back to list-navigate in horizontal orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ rightArrow: true }),
+    context({ searchable: true, orientation: 'horizontal' })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('Ctrl+A/Ctrl+E move the search cursor to start/end regardless of orientation', (t) => {
+  const start = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({
+      searchable: true,
+      searchQuery: 'ab',
+      searchCursor: 2,
+      orientation: 'horizontal',
+    })
+  )
+  t.deepEqual(start, { type: 'search-cursor-home' })
+
+  const end = resolveInputIntent(
+    'e',
+    key({ ctrl: true }),
+    context({ searchable: true, searchQuery: 'ab', searchCursor: 0 })
+  )
+  t.deepEqual(end, { type: 'search-cursor-end' })
+})
+
+test('Ctrl+W deletes the word before the cursor', (t) => {
+  const intent = resolveInputIntent(
+    'w',
+    key({ ctrl: true }),
+    context({ searchable: true, searchQuery: 'foo bar', searchCursor: 7 })
+  )
+  t.deepEqual(intent, { type: 'search-delete-word' })
+})
+
+test('Ctrl+U kills the query up to the cursor', (t) => {
+  const intent = resolveInputIntent(
+    'u',
+    key({ ctrl: true }),
+    context({ searchable: true, searchQuery: 'foo bar', searchCursor: 4 })
+  )
+  t.deepEqual(intent, { type: 'search-kill-to-start' })
+})
+
+test('Ctrl+W/Ctrl+U are not mistaken for search-append', (t) => {
+  const w = resolveInputIntent(
+    'w',
+    key({ ctrl: true }),
+    context({ searchable: true, searchQuery: 'foo' })
+  )
+  t.notDeepEqual(w, { type: 'search-append', char: 'w' })
+
+  const u = resolveInputIntent(
+    'u',
+    key({ ctrl: true }),
+    context({ searchable: true, searchQuery: 'foo' })
+  )
+  t.notDeepEqual(u, { type: 'search-append', char: 'u' })
+})
+
+test('search-cursor intents are not resolved when not searchable, even with matching keys', (t) => {
+  const ctrlW = resolveInputIntent(
+    'w',
+    key({ ctrl: true }),
+    context({ searchable: false })
+  )
+  t.deepEqual(ctrlW, { type: 'none' })
+
+  const home = resolveInputIntent('', key({ home: true }), context())
+  t.deepEqual(home, { type: 'jump', index: 0 })
+})
+
+test('backspace still beats search-cursor and navigation resolution', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ backspace: true, leftArrow: true }),
+    context({ searchable: true, searchQuery: 'a', searchCursor: 1 })
+  )
+  t.deepEqual(intent, { type: 'search-backspace' })
 })
