@@ -824,8 +824,8 @@ export type UseEnhancedSelectInputResult<V> = {
   /** Current search query. Empty string when searchable is false or no input yet. */
   searchQuery: string
   /**
-   * Cursor position within `searchQuery`, in `[0, searchQuery.length]`.
-   * Always 0 when searchable is false.
+   * Cursor position within `searchQuery`, clamped to `[0, searchQuery.length]`.
+   * 0 when searchable is false or no input has been entered yet.
    */
   searchCursor: number
   /** The currently highlighted item, or undefined when there are no items. */

@@ -5092,6 +5092,39 @@ test.serial(
 )
 
 test.serial(
+  'searchable: multi-character paste inserts at the cursor and advances it by the chunk length',
+  async (t) => {
+    const items = [{ label: 'AXYZC', value: 'axyzc' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('ac')
+    await waitFor(() => lastFrame()!.includes('/ ac'))
+
+    // Cursor is now between "a" and "c".
+    stdin.write(ARROW_LEFT)
+    await delay()
+
+    // Simulate a paste: Ink coalesces multiple chars delivered in one stdin
+    // event into a single keypress with a multi-char `input` string.
+    stdin.write('XY')
+    await waitFor(() => lastFrame()!.includes('/ aXYc'))
+
+    // If the cursor had stayed at its pre-paste position instead of
+    // advancing by the pasted chunk's length, this would insert "Z" before
+    // "XY" (producing "aZXYc") instead of after it.
+    stdin.write('Z')
+    await waitFor(() => lastFrame()!.includes('/ aXYZc'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('/ aXYZc'))
+  }
+)
+
+test.serial(
   'searchable: Ctrl+W deletes the word before the cursor',
   async (t) => {
     const items = [{ label: 'Foo', value: 'foo' }]
