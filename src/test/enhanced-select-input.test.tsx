@@ -5630,3 +5630,76 @@ test.serial(
     t.true(cherryLine?.includes('[x]'))
   }
 )
+
+// --- B19: long labels must not wrap and inflate rendered row count past limit ---
+
+test.serial(
+  'limit stays a reliable row budget when a label is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A'.repeat(200), value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Without truncation, the 200-char label alone would wrap across
+    // multiple lines at the 100-column test width, pushing the frame past
+    // the 2-row budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+  }
+)
+
+test.serial(
+  'a long label is truncated with an ellipsis rather than wrapped onto extra lines',
+  (t) => {
+    const items = [{ label: 'A'.repeat(200), value: 'a' }]
+
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A'.repeat(200)))
+  }
+)
+
+test.serial(
+  'limit stays a reliable row budget when a group name is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G'.repeat(200) },
+      { label: 'B', value: 'b', group: 'G'.repeat(200) },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Pagination charges the group header exactly one row; without
+    // truncation the 200-char group name would wrap across multiple lines
+    // at the 100-column test width, pushing the frame past the 2-row
+    // budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
+  }
+)
+
+test.serial(
+  'DefaultGroupHeaderComponent truncates an overlong label with an ellipsis rather than wrapping',
+  (t) => {
+    const { lastFrame } = render(
+      <DefaultGroupHeaderComponent label={'G'.repeat(200)} />
+    )
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
+  }
+)
