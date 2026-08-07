@@ -2286,6 +2286,50 @@ test.serial(
   }
 )
 
+test.serial(
+  'warns exactly once per distinct duplicate-key set across re-renders with a new-but-equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    // A fresh inline array literal every call — same content, new reference —
+    // mirrors a caller re-rendering with `items={[...]}` inline.
+    const makeItems = () => [
+      { label: 'A', value: { id: 1 } },
+      { label: 'B', value: { id: 2 } },
+    ]
+
+    try {
+      const { rerender } = render(<EnhancedSelectInput items={makeItems()} />)
+      await delay()
+
+      for (let index = 0; index < 4; index++) {
+        rerender(<EnhancedSelectInput items={makeItems()} />)
+        // eslint-disable-next-line no-await-in-loop
+        await delay()
+      }
+
+      const duplicateWarnings = warnings.filter((w) =>
+        w.includes('Duplicate item keys')
+      )
+      t.is(duplicateWarnings.length, 1)
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
 // --- #44: item.indicator + multiple warning ---
 
 // These two tests stub the global console.warn — run them serially so they

@@ -802,27 +802,41 @@ export function useEnhancedSelectInput<V>({
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item. Keyed only
-  // to `items` so it doesn't re-run on every search keystroke.
+  // String(value) to produce "[object Object]" for every item. `items` is
+  // frequently an inline array literal from the caller, so it's a new
+  // reference every render even when its content is identical — comparing
+  // the computed duplicate set by value (via lastWarnedDuplicatesReference)
+  // and only warning when it actually changes keeps this from spamming the
+  // console on every re-render.
+  const lastWarnedDuplicatesReference = useRef<string | undefined>(undefined)
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
-    if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
-      const keys = items.map((item) => itemKey(item))
-      const seen = new Set<string>()
-      const duplicates = new Set<string>()
-      for (const k of keys) {
-        if (seen.has(k)) duplicates.add(k)
-        else seen.add(k)
-      }
+    if (process.env['NODE_ENV'] === 'production' || items.length === 0) return
 
-      if (duplicates.size > 0) {
-        console.warn(
-          `[ink-enhanced-select-input] Duplicate item keys detected: ${[
-            ...duplicates,
-          ].join(', ')}. ` +
-            'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
-        )
-      }
+    const keys = items.map((item) => itemKey(item))
+    const seen = new Set<string>()
+    const duplicates = new Set<string>()
+    for (const k of keys) {
+      if (seen.has(k)) duplicates.add(k)
+      else seen.add(k)
+    }
+
+    const signature =
+      duplicates.size > 0 ? [...duplicates].sort().join(',') : undefined
+
+    if (
+      signature !== undefined &&
+      signature !== lastWarnedDuplicatesReference.current
+    ) {
+      lastWarnedDuplicatesReference.current = signature
+      console.warn(
+        `[ink-enhanced-select-input] Duplicate item keys detected: ${[
+          ...duplicates,
+        ].join(', ')}. ` +
+          'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
+      )
+    } else if (signature === undefined) {
+      lastWarnedDuplicatesReference.current = undefined
     }
   }, [items])
 
