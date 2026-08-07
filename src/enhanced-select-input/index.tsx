@@ -538,6 +538,19 @@ function resolveHotkeyIntent<V>(
   }
 }
 
+/** Resolves the full key map, defaulting any unsupplied flag to enabled (true). */
+function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
+  return {
+    arrows: keyMap?.arrows ?? true,
+    vimKeys: keyMap?.vimKeys ?? true,
+    homeEnd: keyMap?.homeEnd ?? true,
+    cancel: keyMap?.cancel ?? true,
+    select: keyMap?.select ?? true,
+    toggle: keyMap?.toggle ?? true,
+    bulk: keyMap?.bulk ?? true,
+  }
+}
+
 /**
  * Ctrl/Alt-chord and active-vim-key modifier state, computed once per
  * keypress. Ctrl/Alt chords (e.g. Ctrl+K, Alt+X) surface as a bare letter in
@@ -580,10 +593,10 @@ function isToggleIntent<V>(
 function resolveBulkIntent<V>(
   input: string,
   context: InputIntentContext<V>,
-  isModifiedChord: boolean
+  isCtrlChord: boolean
 ): Intent<V> | undefined {
   const { km, multiple } = context
-  if (!km.bulk || !multiple || !isModifiedChord) return undefined
+  if (!km.bulk || !multiple || !isCtrlChord) return undefined
 
   if (input === 'a') return { type: 'select-all' }
   if (input === 'd') return { type: 'select-none' }
@@ -649,7 +662,7 @@ export function resolveInputIntent<V>(
     return { type: 'toggle' }
   }
 
-  const bulk = resolveBulkIntent(input, context, isModifiedChord)
+  const bulk = resolveBulkIntent(input, context, key.ctrl)
   if (bulk) return bulk
 
   const navigate = resolveNavigateIntent(input, key, context, isModifiedChord)
@@ -777,16 +790,7 @@ export function useEnhancedSelectInput<V>({
   typeahead = false,
   typeaheadTimeout = 500,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
-  // Resolve full key map — any flag not supplied defaults to enabled (true).
-  const km = {
-    arrows: keyMap?.arrows ?? true,
-    vimKeys: keyMap?.vimKeys ?? true,
-    homeEnd: keyMap?.homeEnd ?? true,
-    cancel: keyMap?.cancel ?? true,
-    select: keyMap?.select ?? true,
-    toggle: keyMap?.toggle ?? true,
-    bulk: keyMap?.bulk ?? true,
-  }
+  const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
 
@@ -1062,6 +1066,50 @@ export function useEnhancedSelectInput<V>({
     setSelectedIndexState(0)
   }
 
+  // Enter: in multi-select mode confirms the full selection, gated on
+  // minSelections/maxSelections; otherwise selects the highlighted item.
+  const handleSubmit = () => {
+    if (multiple) {
+      // Read the count from the ref (not the `checkedKeys` state) since a
+      // Space toggle queued in the same tick has not been committed to
+      // state yet when this handler runs.
+      const checkedCount = checkedKeysReference.current.size
+      const valid =
+        (minSelections === undefined || checkedCount >= minSelections) &&
+        (maxSelections === undefined || checkedCount <= maxSelections)
+      if (!valid) return
+
+      // Default to `items` (not `filteredItems`) so checks made
+      // before/between search filters aren't silently dropped from the
+      // confirmed set.
+      const confirmSource = confirmScope === 'filtered' ? filteredItems : items
+      const confirmed = confirmSource.filter((item) =>
+        checkedKeysReference.current.has(itemKey(item))
+      )
+      onConfirm?.(confirmed)
+      return
+    }
+
+    const itemToSelect = filteredItems[selectedIndex]
+    if (itemToSelect && !itemToSelect.disabled) {
+      onSelect?.(itemToSelect)
+    }
+  }
+
+  // Accumulate printable characters into a short-lived buffer and jump the
+  // highlight to the first item whose label starts with it. Idle buffers
+  // reset after `typeaheadTimeout` ms.
+  const handleTypeahead = (char: string, isActive: boolean, now: number) => {
+    const next = isActive ? typeaheadBuffer.current.text + char : char
+    typeaheadBuffer.current = { text: next, time: now }
+    const matchIndex = filteredItems.findIndex(
+      (item) =>
+        !item.disabled &&
+        item.label.toLowerCase().startsWith(next.toLowerCase())
+    )
+    if (matchIndex !== -1) updateSelection(matchIndex)
+  }
+
   useInput(
     (input, key) => {
       const now = Date.now()
@@ -1134,34 +1182,7 @@ export function useEnhancedSelectInput<V>({
         }
 
         case 'submit': {
-          if (multiple) {
-            // In multi-select mode Enter confirms the full selection, gated
-            // on minSelections/maxSelections. Read the count from the ref
-            // (not the `checkedKeys` state) since a Space toggle queued in
-            // the same tick has not been committed to state yet when this
-            // handler runs.
-            const checkedCount = checkedKeysReference.current.size
-            const valid =
-              (minSelections === undefined || checkedCount >= minSelections) &&
-              (maxSelections === undefined || checkedCount <= maxSelections)
-            if (!valid) break
-
-            // Default to `items` (not `filteredItems`) so checks made
-            // before/between search filters aren't silently dropped from the
-            // confirmed set.
-            const confirmSource =
-              confirmScope === 'filtered' ? filteredItems : items
-            const confirmed = confirmSource.filter((item) =>
-              checkedKeysReference.current.has(itemKey(item))
-            )
-            onConfirm?.(confirmed)
-          } else {
-            const itemToSelect = filteredItems[selectedIndex]
-            if (itemToSelect && !itemToSelect.disabled) {
-              onSelect?.(itemToSelect)
-            }
-          }
-
+          handleSubmit()
           break
         }
 
@@ -1172,19 +1193,7 @@ export function useEnhancedSelectInput<V>({
         }
 
         case 'typeahead': {
-          // Accumulate printable characters into a short-lived buffer and
-          // jump the highlight to the first item whose label starts with
-          // it. Idle buffers reset after `typeaheadTimeout` ms.
-          const next = typeaheadIsActive
-            ? typeaheadBuffer.current.text + intent.char
-            : intent.char
-          typeaheadBuffer.current = { text: next, time: now }
-          const matchIndex = filteredItems.findIndex(
-            (item) =>
-              !item.disabled &&
-              item.label.toLowerCase().startsWith(next.toLowerCase())
-          )
-          if (matchIndex !== -1) updateSelection(matchIndex)
+          handleTypeahead(intent.char, typeaheadIsActive, now)
           break
         }
 
@@ -1275,6 +1284,23 @@ export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
   )
 }
 
+/** The "n selected[/bound]" line shown above the list in multi-select mode, or `null` when hidden. */
+function resolveSelectionCountLine(
+  show: boolean,
+  count: number,
+  bound: number | undefined
+): React.ReactNode {
+  if (!show) return null
+  return (
+    <Box>
+      <Text dimColor>
+        {count} selected
+        {bound === undefined ? '' : `/${bound}`}
+      </Text>
+    </Box>
+  )
+}
+
 export function EnhancedSelectInput<V>({
   indicatorComponent = DefaultIndicatorComponent,
   itemComponent = DefaultItemComponent,
@@ -1321,15 +1347,11 @@ export function EnhancedSelectInput<V>({
 
   const { maxSelections, minSelections } = hookProperties
   const selectionBound = maxSelections ?? minSelections
-  const selectionCountLine =
-    showSelectionCount && isMultiple ? (
-      <Box>
-        <Text dimColor>
-          {selectionCount} selected
-          {selectionBound === undefined ? '' : `/${selectionBound}`}
-        </Text>
-      </Box>
-    ) : null
+  const selectionCountLine = resolveSelectionCountLine(
+    showSelectionCount && isMultiple,
+    selectionCount,
+    selectionBound
+  )
 
   if (!hasItems) {
     // Searchable mode with no matching results

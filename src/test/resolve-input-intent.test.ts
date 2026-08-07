@@ -288,3 +288,39 @@ test('an unmodified "a" is not treated as a bulk chord', (t) => {
   )
   t.deepEqual(intent, { type: 'search-append', char: 'a' })
 })
+
+test('alt+a is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+d is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'd',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+r is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'r',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+a in searchable multi-select mode is not a bulk chord and is not appended to search (still excluded as a modified chord)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
