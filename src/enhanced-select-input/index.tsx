@@ -70,6 +70,20 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly isFocused?: boolean
   readonly initialIndex?: number
   readonly limit?: number
+  /**
+   * How the pagination window advances when the cursor reaches its edge.
+   * `'page'` (default) snaps the whole window to the next fixed page
+   * boundary. `'scroll'` advances the window one row at a time so the
+   * cursor stays where the eye already is — matching `ink-select-input`,
+   * `fzf`, and `gum`. Only meaningful when `limit` is set.
+   */
+  readonly paginationMode?: 'page' | 'scroll'
+  /**
+   * In `'scroll'` pagination mode, the number of rows of context to keep
+   * above/below the cursor before the window scrolls. Ignored in `'page'`
+   * mode. Default: `0`.
+   */
+  readonly scrollOffset?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
   /** Called when Escape is pressed while the component is focused. */
@@ -301,6 +315,37 @@ export function pageIndexOfStart(pageStarts: number[], start: number): number {
   }
 
   return -1
+}
+
+/**
+ * Cursor-following pagination window for `paginationMode: 'scroll'`. Given
+ * the previous window start, the newly-selected index, and the window size
+ * (`limit`), returns the smallest change to the window start that keeps
+ * `selectedIndex` within `[start + offset, start + limit - 1 - offset]` —
+ * i.e. the window only moves when the cursor would otherwise leave it (or
+ * leave its padded margin, when `offset > 0`), advancing one row at a time
+ * rather than snapping to a fixed page boundary. The result is always
+ * clamped to `[0, max(0, itemCount - limit)]`.
+ */
+export function scrollWindowStart(
+  previousStart: number,
+  selectedIndex: number,
+  limit: number,
+  itemCount: number,
+  offset = 0
+): number {
+  if (limit <= 0 || itemCount <= 0) return 0
+
+  const maxStart = Math.max(0, itemCount - limit)
+  let start = Math.max(0, Math.min(previousStart, maxStart))
+
+  if (selectedIndex < start + offset) {
+    start = selectedIndex - offset
+  } else if (selectedIndex > start + limit - 1 - offset) {
+    start = selectedIndex - limit + 1 + offset
+  }
+
+  return Math.max(0, Math.min(start, maxStart))
 }
 
 function itemKey<V>(item: Item<V>): string {
@@ -679,6 +724,8 @@ export function useEnhancedSelectInput<V>({
   isFocused = true,
   initialIndex = 0,
   limit,
+  paginationMode = 'page',
+  scrollOffset = 0,
   onSelect,
   onHighlight,
   onCancel,
@@ -759,25 +806,45 @@ export function useEnhancedSelectInput<V>({
     text: '',
     time: 0,
   })
+  // Cursor-following window start for `paginationMode: 'scroll'`. Persisted
+  // across renders (unlike page mode, which derives its window purely from
+  // selectedIndex) because the scroll window's position depends on its own
+  // previous position, not just the current selection.
+  const windowStartReference = useRef(0)
 
   const hasItems = filteredItems.length > 0
-  // Derive the pagination window offset directly from selectedIndex so there
-  // is a single source of truth. pageStartFor finds the largest page-start
-  // that is <= selectedIndex, keeping the selection inside the visible window
+  // Derive the pagination window offset directly from selectedIndex (plus,
+  // in scroll mode, the previous window start) so there is a single source
+  // of truth. In 'page' mode, pageStartFor finds the largest page-start that
+  // is <= selectedIndex, keeping the selection inside the visible window
   // even when limit or pageStarts change at runtime (e.g. terminal resize).
   // Both lookups are binary searches — pageStarts is strictly ascending — so
   // per-render cost is O(log pages) rather than O(pages).
-  const effectiveRotateIndex = limit
-    ? pageStartFor(pageStarts, selectedIndex)
-    : 0
-  const currentPageIndex = pageIndexOfStart(pageStarts, effectiveRotateIndex)
-  const nextPageStart =
-    currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
-      ? pageStarts[currentPageIndex + 1]
-      : filteredItems.length
-  const visibleItems = limit
-    ? filteredItems.slice(effectiveRotateIndex, nextPageStart)
-    : filteredItems
+  let effectiveRotateIndex: number
+  let visibleItems: Array<Item<V>>
+  if (limit && paginationMode === 'scroll') {
+    const windowStart = scrollWindowStart(
+      windowStartReference.current,
+      selectedIndex,
+      limit,
+      filteredItems.length,
+      scrollOffset
+    )
+    windowStartReference.current = windowStart
+    effectiveRotateIndex = windowStart
+    visibleItems = filteredItems.slice(windowStart, windowStart + limit)
+  } else {
+    effectiveRotateIndex = limit ? pageStartFor(pageStarts, selectedIndex) : 0
+    const currentPageIndex = pageIndexOfStart(pageStarts, effectiveRotateIndex)
+    const nextPageStart =
+      currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
+        ? pageStarts[currentPageIndex + 1]
+        : filteredItems.length
+    visibleItems = limit
+      ? filteredItems.slice(effectiveRotateIndex, nextPageStart)
+      : filteredItems
+  }
+
   const itemsAbove = effectiveRotateIndex
   const itemsBelow = limit
     ? Math.max(

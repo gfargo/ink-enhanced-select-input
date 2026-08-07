@@ -6,6 +6,7 @@ import {
   DefaultGroupHeaderComponent,
   DefaultIndicatorComponent,
   EnhancedSelectInput,
+  scrollWindowStart,
   useEnhancedSelectInput,
   type Item,
   type UseEnhancedSelectInputResult,
@@ -822,6 +823,333 @@ test.serial('limit wraps around from last item to first', async (t) => {
   t.true(frame.includes('A'))
 })
 
+// --- B11: scroll pagination mode ---
+
+test('scrollWindowStart: does not move while cursor stays inside the window', (t) => {
+  t.is(scrollWindowStart(0, 0, 3, 10, 0), 0)
+  t.is(scrollWindowStart(0, 2, 3, 10, 0), 0)
+})
+
+test('scrollWindowStart: advances by one row when cursor leaves the bottom edge', (t) => {
+  t.is(scrollWindowStart(0, 3, 3, 10, 0), 1)
+  t.is(scrollWindowStart(1, 4, 3, 10, 0), 2)
+})
+
+test('scrollWindowStart: retreats by one row when cursor leaves the top edge', (t) => {
+  t.is(scrollWindowStart(5, 4, 3, 10, 0), 4)
+})
+
+test('scrollWindowStart: clamps to [0, itemCount - limit]', (t) => {
+  t.is(scrollWindowStart(0, 0, 3, 10, 0), 0)
+  t.is(scrollWindowStart(7, 9, 3, 10, 0), 7)
+  t.is(scrollWindowStart(20, 9, 3, 10, 0), 7)
+})
+
+test('scrollWindowStart: itemCount smaller than limit clamps to 0', (t) => {
+  t.is(scrollWindowStart(0, 1, 5, 2, 0), 0)
+})
+
+test('scrollWindowStart: offset keeps padding rows before scrolling', (t) => {
+  // Limit=3, offset=1 → cursor must stay within [start+1, start+1] to avoid
+  // scrolling (a 1-row margin on both edges of a 3-row window).
+  t.is(scrollWindowStart(0, 1, 3, 10, 1), 0)
+  t.is(scrollWindowStart(0, 2, 3, 10, 1), 1)
+  t.is(scrollWindowStart(5, 5, 3, 10, 1), 4)
+})
+
+test.serial(
+  'scroll mode: moving down past the last visible row scrolls by one row, cursor stays on the last row',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+      { label: 'E', value: 'e' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.windowIndex, 0)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    // Cursor now on C, the last row of window [A, B, C] — window hasn't moved yet.
+    t.is(result?.selectedIndex, 2)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.windowIndex, 2)
+
+    // One more step forward pushes the cursor past the bottom edge — the
+    // window scrolls by exactly one row, cursor stays on the last row.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(result?.selectedIndex, 3)
+    t.is(result?.rotateIndex, 1)
+    t.is(result?.windowIndex, 2)
+    t.deepEqual(
+      result?.visibleItems.map((item) => item.label),
+      ['B', 'C', 'D']
+    )
+  }
+)
+
+test.serial(
+  'scroll mode: moving up past the first visible row scrolls by one row, cursor stays on the first row',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+      { label: 'E', value: 'e' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+        initialIndex={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Initial window follows the cursor to the bottom row: [B, C, D].
+    t.is(result?.selectedIndex, 3)
+    t.is(result?.rotateIndex, 1)
+    t.is(result?.windowIndex, 2)
+
+    stdin.write(ARROW_UP)
+    await delay()
+    // Cursor now on C — still inside window [B, C, D], so it hasn't moved yet.
+    t.is(result?.selectedIndex, 2)
+    t.is(result?.rotateIndex, 1)
+    t.is(result?.windowIndex, 1)
+
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(result?.selectedIndex, 1)
+    t.is(result?.rotateIndex, 1)
+    t.is(result?.windowIndex, 0)
+
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.windowIndex, 0)
+    t.deepEqual(
+      result?.visibleItems.map((item) => item.label),
+      ['A', 'B', 'C']
+    )
+  }
+)
+
+test.serial('scroll mode: Home/End land on a sane window', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+    { label: 'E', value: 'e' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={items}
+      limit={3}
+      paginationMode="scroll"
+      initialIndex={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+
+  stdin.write(END)
+  await delay()
+  t.is(result?.selectedIndex, 4)
+  t.is(result?.rotateIndex, 2)
+  t.is(result?.windowIndex, 2)
+
+  stdin.write(HOME)
+  await delay()
+  t.is(result?.selectedIndex, 0)
+  t.is(result?.rotateIndex, 0)
+  t.is(result?.windowIndex, 0)
+})
+
+test.serial(
+  'scroll mode: wrap-around from last item to first snaps the window back to the start',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+      { label: 'E', value: 'e' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+        initialIndex={4}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.selectedIndex, 4)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.windowIndex, 0)
+  }
+)
+
+test.serial(
+  'scroll mode: scrollOffset keeps context rows before scrolling',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+      { label: 'E', value: 'e' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+        scrollOffset={1}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.rotateIndex, 0)
+
+    // Without offset, window [A, B, C] wouldn't scroll until the cursor
+    // pushed past C (index 2) to D (index 3). With offset=1, one row of
+    // padding is kept below the cursor, so it scrolls a row earlier — as
+    // soon as the cursor reaches C (index 2) — and the cursor never sits on
+    // the literal last row of the window.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(result?.selectedIndex, 1)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.windowIndex, 1)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(result?.selectedIndex, 2)
+    t.is(result?.rotateIndex, 1)
+    t.is(result?.windowIndex, 1)
+  }
+)
+
+test.serial(
+  'scroll mode: filtering down below limit keeps the window sane',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'a' },
+      { label: 'Banana', value: 'b' },
+      { label: 'Cherry', value: 'c' },
+      { label: 'Date', value: 'd' },
+      { label: 'Apricot', value: 'e' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('Ap')
+    await delay()
+
+    t.is(result?.filteredItems.length, 2)
+    t.is(result?.itemsBelow, 0)
+    t.is(result?.rotateIndex, 0)
+  }
+)
+
+test.serial(
+  'page mode (default/unset paginationMode) is unaffected by scroll-mode changes',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+      { label: 'D', value: 'd' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    // Page mode still snaps the whole window to the next page boundary.
+    t.is(result?.selectedIndex, 2)
+    t.is(result?.rotateIndex, 2)
+    t.deepEqual(
+      result?.visibleItems.map((item) => item.label),
+      ['C', 'D']
+    )
+  }
+)
+
 // --- initialIndex edge cases ---
 
 test.serial('negative initialIndex clamps to first item', async (t) => {
@@ -1477,6 +1805,8 @@ type HookHarnessProperties = {
   readonly items: Array<Item<unknown>>
   readonly initialIndex?: number
   readonly limit?: number
+  readonly paginationMode?: 'page' | 'scroll'
+  readonly scrollOffset?: number
   readonly isFocused?: boolean
   readonly orientation?: 'vertical' | 'horizontal'
   // eslint-disable-next-line react/boolean-prop-naming
