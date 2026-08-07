@@ -62,6 +62,11 @@ export type KeyMap = {
   readonly select?: boolean
   /** Space toggle in multi-select mode. Default: true. */
   readonly toggle?: boolean
+  /**
+   * Bulk selection chords in multi-select mode: `Ctrl+A` select-all,
+   * `Ctrl+D` select-none, `Ctrl+R` invert. Default: true.
+   */
+  readonly bulk?: boolean
 }
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
@@ -100,6 +105,19 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly onToggle?: (item: Item<V>, checked: boolean) => void
   /**
+   * Minimum number of checked items required for `onConfirm` to fire in
+   * multi-select mode. `Enter` is a no-op while the checked count is below
+   * this threshold. Only used when `multiple` is true.
+   */
+  readonly minSelections?: number
+  /**
+   * Maximum number of items that may be checked at once in multi-select
+   * mode. `toggle` (and bulk select-all/invert) refuse to check additional
+   * items once this many are checked; unchecking is always allowed. Only
+   * used when `multiple` is true.
+   */
+  readonly maxSelections?: number
+  /**
    * Enable searchable/filterable mode. When true, printable characters
    * build a search query that filters items by label. Hotkeys and vim
    * navigation keys are disabled in this mode.
@@ -131,6 +149,16 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly showScrollIndicators?: boolean
   /** Placeholder text shown in the search input when the query is empty. */
   readonly searchPlaceholder?: string
+  /** Glyph shown for a checked item in multi-select mode. Default: `'[x]'`. */
+  readonly checkedIndicator?: string
+  /** Glyph shown for an unchecked item in multi-select mode. Default: `'[ ]'`. */
+  readonly uncheckedIndicator?: string
+  /**
+   * Render a "N selected" line above the list in multi-select mode. Shows a
+   * `/max` (or `/min`) hint when the corresponding prop is set. Default: false.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly showSelectionCount?: boolean
 }
 
 export type IndicatorProperties = {
@@ -139,6 +167,10 @@ export type IndicatorProperties = {
   readonly isChecked?: boolean
   // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
+  /** Glyph shown when `isChecked` is true. Falls back to `'[x]'`. */
+  readonly checkedIndicator?: string
+  /** Glyph shown when `isChecked` is false. Falls back to `'[ ]'`. */
+  readonly uncheckedIndicator?: string
 }
 
 export type ItemProperties = {
@@ -340,6 +372,9 @@ export type Intent<V> =
   | { type: 'jump'; index: number }
   | { type: 'cancel' }
   | { type: 'toggle' }
+  | { type: 'select-all' }
+  | { type: 'select-none' }
+  | { type: 'invert' }
   | { type: 'navigate'; index: number }
   | { type: 'submit' }
   | { type: 'search-append'; char: string }
@@ -536,6 +571,28 @@ function isToggleIntent<V>(
 }
 
 /**
+ * Bulk selection chords in multi-select mode: `Ctrl+A` select-all, `Ctrl+D`
+ * select-none, `Ctrl+R` invert. Gated on `km.bulk` and `multiple`, and only
+ * recognized as Ctrl chords so they never collide with search-append text,
+ * vim navigation, or item hotkeys (`Ctrl+I` is deliberately not used — it is
+ * indistinguishable from Tab).
+ */
+function resolveBulkIntent<V>(
+  input: string,
+  context: InputIntentContext<V>,
+  isModifiedChord: boolean
+): Intent<V> | undefined {
+  const { km, multiple } = context
+  if (!km.bulk || !multiple || !isModifiedChord) return undefined
+
+  if (input === 'a') return { type: 'select-all' }
+  if (input === 'd') return { type: 'select-none' }
+  if (input === 'r') return { type: 'invert' }
+
+  return undefined
+}
+
+/**
  * Printable characters captured as search input in searchable mode. Must be
  * resolved after navigation-key handling.
  */
@@ -591,6 +648,9 @@ export function resolveInputIntent<V>(
   if (isToggleIntent(input, context)) {
     return { type: 'toggle' }
   }
+
+  const bulk = resolveBulkIntent(input, context, isModifiedChord)
+  if (bulk) return bulk
 
   const navigate = resolveNavigateIntent(input, key, context, isModifiedChord)
   if (navigate) return navigate
@@ -664,9 +724,31 @@ export type UseEnhancedSelectInputResult<V> = {
   /**
    * Toggle the checked state of `item` (defaults to the currently highlighted
    * item). No-op outside `multiple` mode, when the item is missing, or when
-   * it is disabled. Fires `onToggle`.
+   * it is disabled. Also a no-op when checking would exceed `maxSelections`
+   * (unchecking is always allowed). Fires `onToggle`.
    */
   toggle: (item?: Item<V>) => void
+  /** Number of currently checked items. Always 0 outside `multiple` mode. */
+  selectionCount: number
+  /**
+   * True when `selectionCount` satisfies `minSelections`/`maxSelections`.
+   * Always true outside `multiple` mode (or when neither bound is set).
+   * `onConfirm` only fires when this is true.
+   */
+  isSelectionValid: boolean
+  /**
+   * Check every enabled item (respecting the active search filter, disabled
+   * items, and `maxSelections`). No-op outside `multiple` mode.
+   */
+  selectAll: () => void
+  /** Uncheck every item. No-op outside `multiple` mode. */
+  selectNone: () => void
+  /**
+   * Flip the checked state of every enabled item (respecting the active
+   * search filter, disabled items, and `maxSelections`). No-op outside
+   * `multiple` mode.
+   */
+  invertSelection: () => void
 }
 
 /**
@@ -688,6 +770,8 @@ export function useEnhancedSelectInput<V>({
   onConfirm,
   confirmScope = 'all',
   onToggle,
+  minSelections,
+  maxSelections,
   searchable = false,
   keyMap,
   typeahead = false,
@@ -701,6 +785,7 @@ export function useEnhancedSelectInput<V>({
     cancel: keyMap?.cancel ?? true,
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
+    bulk: keyMap?.bulk ?? true,
   }
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
@@ -899,14 +984,74 @@ export function useEnhancedSelectInput<V>({
     // React may defer actually invoking a functional setState updater, so a
     // same-tick Enter that reads checkedKeysReference.current must not
     // depend on that updater having run yet.
-    const next = new Set(checkedKeysReference.current)
-    const nowChecked = !next.has(k)
-    if (nowChecked) next.add(k)
+    const { current } = checkedKeysReference
+    const willCheck = !current.has(k)
+    // Unchecking is always allowed; checking a new item is refused once
+    // maxSelections is already met.
+    if (
+      willCheck &&
+      maxSelections !== undefined &&
+      current.size >= maxSelections
+    ) {
+      return
+    }
+
+    const next = new Set(current)
+    if (willCheck) next.add(k)
     else next.delete(k)
     checkedKeysReference.current = next
-    onToggle?.(item, nowChecked)
+    onToggle?.(item, willCheck)
     setCheckedKeys(next)
   }
+
+  // Bulk selection helpers — select-all/invert only add enabled items drawn
+  // from filteredItems (never disabled ones, matching defaultSelectedKeys'
+  // and toggle's behaviour) and stop adding once maxSelections is reached,
+  // in filteredItems order, so the result is deterministic. None of these
+  // fire onToggle per-item to avoid callback storms on large lists.
+  const selectAll = () => {
+    if (!multiple) return
+    const next = new Set(checkedKeysReference.current)
+    for (const item of filteredItems) {
+      if (item.disabled) continue
+      if (maxSelections !== undefined && next.size >= maxSelections) break
+      next.add(itemKey(item))
+    }
+
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const selectNone = () => {
+    if (!multiple) return
+    const next = new Set<string>()
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const invertSelection = () => {
+    if (!multiple) return
+    const { current } = checkedKeysReference
+    const next = new Set(current)
+    for (const item of filteredItems) {
+      if (item.disabled) continue
+      const k = itemKey(item)
+      if (next.has(k)) {
+        next.delete(k)
+      } else if (maxSelections === undefined || next.size < maxSelections) {
+        next.add(k)
+      }
+    }
+
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const selectionCount = multiple ? checkedKeys.size : 0
+  const isSelectionValid =
+    !multiple ||
+    ((minSelections === undefined || selectionCount >= minSelections) &&
+      (maxSelections === undefined || selectionCount <= maxSelections))
 
   const setSelectedIndexPublic = (index: number) => {
     updateSelection(resolveInitialIndex(filteredItems, index))
@@ -965,6 +1110,21 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
+        case 'select-all': {
+          selectAll()
+          break
+        }
+
+        case 'select-none': {
+          selectNone()
+          break
+        }
+
+        case 'invert': {
+          invertSelection()
+          break
+        }
+
         case 'navigate': {
           if (intent.index !== selectedIndex) {
             updateSelection(intent.index)
@@ -975,12 +1135,20 @@ export function useEnhancedSelectInput<V>({
 
         case 'submit': {
           if (multiple) {
-            // In multi-select mode Enter confirms the full selection. Default
-            // to `items` (not `filteredItems`) so checks made before/between
-            // search filters aren't silently dropped from the confirmed set.
-            // Read from the ref (not the `checkedKeys` state) since a Space
-            // toggle queued in the same tick has not been committed to state
-            // yet when this handler runs.
+            // In multi-select mode Enter confirms the full selection, gated
+            // on minSelections/maxSelections. Read the count from the ref
+            // (not the `checkedKeys` state) since a Space toggle queued in
+            // the same tick has not been committed to state yet when this
+            // handler runs.
+            const checkedCount = checkedKeysReference.current.size
+            const valid =
+              (minSelections === undefined || checkedCount >= minSelections) &&
+              (maxSelections === undefined || checkedCount <= maxSelections)
+            if (!valid) break
+
+            // Default to `items` (not `filteredItems`) so checks made
+            // before/between search filters aren't silently dropped from the
+            // confirmed set.
             const confirmSource =
               confirmScope === 'filtered' ? filteredItems : items
             const confirmed = confirmSource.filter((item) =>
@@ -1049,19 +1217,26 @@ export function useEnhancedSelectInput<V>({
     setSelectedIndex: setSelectedIndexPublic,
     setSearchQuery: setSearchQueryPublic,
     toggle,
+    selectionCount,
+    isSelectionValid,
+    selectAll,
+    selectNone,
+    invertSelection,
   }
 }
 
 export function DefaultIndicatorComponent({
   isSelected,
   isChecked,
+  checkedIndicator = '[x]',
+  uncheckedIndicator = '[ ]',
 }: IndicatorProperties) {
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
     return (
       <Box marginRight={1}>
         <Text color={isSelected ? 'green' : undefined}>
-          {isChecked ? '[x]' : '[ ]'}
+          {isChecked ? checkedIndicator : uncheckedIndicator}
         </Text>
       </Box>
     )
@@ -1106,6 +1281,9 @@ export function EnhancedSelectInput<V>({
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
   searchPlaceholder = 'Search...',
+  checkedIndicator = '[x]',
+  uncheckedIndicator = '[ ]',
+  showSelectionCount = false,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -1118,6 +1296,7 @@ export function EnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
+    selectionCount,
   } = useEnhancedSelectInput(hookProperties)
 
   const searchable = hookProperties.searchable === true
@@ -1140,11 +1319,24 @@ export function EnhancedSelectInput<V>({
     </Box>
   ) : null
 
+  const { maxSelections, minSelections } = hookProperties
+  const selectionBound = maxSelections ?? minSelections
+  const selectionCountLine =
+    showSelectionCount && isMultiple ? (
+      <Box>
+        <Text dimColor>
+          {selectionCount} selected
+          {selectionBound === undefined ? '' : `/${selectionBound}`}
+        </Text>
+      </Box>
+    ) : null
+
   if (!hasItems) {
     // Searchable mode with no matching results
     return (
       <Box flexDirection="column">
         {searchInput}
+        {selectionCountLine}
         <Box>
           <Text dimColor>No matches</Text>
         </Box>
@@ -1155,6 +1347,7 @@ export function EnhancedSelectInput<V>({
   return (
     <Box flexDirection={isVertical ? 'column' : 'row'}>
       {searchInput}
+      {selectionCountLine}
       {showScrollIndicators && itemsAbove > 0 && (
         <Box marginRight={isVertical ? 0 : 1}>
           <Text dimColor>
@@ -1206,6 +1399,8 @@ export function EnhancedSelectInput<V>({
                     isSelected={isSelected}
                     isChecked={isChecked}
                     item={item}
+                    checkedIndicator={checkedIndicator}
+                    uncheckedIndicator={uncheckedIndicator}
                   />
                 )}
                 <ItemComponent
