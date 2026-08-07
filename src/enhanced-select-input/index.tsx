@@ -62,6 +62,16 @@ export type KeyMap = {
   readonly select?: boolean
   /** Space toggle in multi-select mode. Default: true. */
   readonly toggle?: boolean
+  /**
+   * Item hotkeys (single-char item selection, e.g. `hotkey: 'q'`). Independent
+   * of `select` — disabling `select` only turns off Enter, and disabling
+   * `hotkeys` only turns off item hotkeys. Default: true.
+   */
+  readonly hotkeys?: boolean
+  /**
+   * Printable-character capture in searchable mode. Default: true.
+   */
+  readonly search?: boolean
 }
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
@@ -468,7 +478,7 @@ function resolveTypeaheadIntent<V>(
   }
 
   const isHotkeyChar =
-    km.select &&
+    km.hotkeys &&
     !multiple &&
     filteredItems.some((item) => item.hotkey === input && !item.disabled)
 
@@ -493,7 +503,7 @@ function resolveHotkeyIntent<V>(
   const { km, multiple, searchable, filteredItems } = context
 
   if (
-    !km.select ||
+    !km.hotkeys ||
     multiple ||
     searchable ||
     isActiveVimKey ||
@@ -555,7 +565,7 @@ function resolveSearchAppendIntent<V>(
   context: InputIntentContext<V>,
   isModifiedChord: boolean
 ): Intent<V> | undefined {
-  return context.searchable && input && !isModifiedChord
+  return context.searchable && context.km.search && input && !isModifiedChord
     ? { type: 'search-append', char: input }
     : undefined
 }
@@ -712,6 +722,8 @@ export function useEnhancedSelectInput<V>({
     cancel: keyMap?.cancel ?? true,
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
+    hotkeys: keyMap?.hotkeys ?? true,
+    search: keyMap?.search ?? true,
   }
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
@@ -801,27 +813,41 @@ export function useEnhancedSelectInput<V>({
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item. Keyed only
-  // to `items` so it doesn't re-run on every search keystroke.
+  // String(value) to produce "[object Object]" for every item. `items` is
+  // frequently an inline array literal from the caller, so it's a new
+  // reference every render even when its content is identical — comparing
+  // the computed duplicate set by value (via lastWarnedDuplicatesReference)
+  // and only warning when it actually changes keeps this from spamming the
+  // console on every re-render.
+  const lastWarnedDuplicatesReference = useRef<string | undefined>(undefined)
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
-    if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
-      const keys = items.map((item) => itemKey(item))
-      const seen = new Set<string>()
-      const duplicates = new Set<string>()
-      for (const k of keys) {
-        if (seen.has(k)) duplicates.add(k)
-        else seen.add(k)
-      }
+    if (process.env['NODE_ENV'] === 'production' || items.length === 0) return
 
-      if (duplicates.size > 0) {
-        console.warn(
-          `[ink-enhanced-select-input] Duplicate item keys detected: ${[
-            ...duplicates,
-          ].join(', ')}. ` +
-            'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
-        )
-      }
+    const keys = items.map((item) => itemKey(item))
+    const seen = new Set<string>()
+    const duplicates = new Set<string>()
+    for (const k of keys) {
+      if (seen.has(k)) duplicates.add(k)
+      else seen.add(k)
+    }
+
+    const signature =
+      duplicates.size > 0 ? [...duplicates].sort().join(',') : undefined
+
+    if (
+      signature !== undefined &&
+      signature !== lastWarnedDuplicatesReference.current
+    ) {
+      lastWarnedDuplicatesReference.current = signature
+      console.warn(
+        `[ink-enhanced-select-input] Duplicate item keys detected: ${[
+          ...duplicates,
+        ].join(', ')}. ` +
+          'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
+      )
+    } else if (signature === undefined) {
+      lastWarnedDuplicatesReference.current = undefined
     }
   }, [items])
 
@@ -1165,85 +1191,87 @@ export function EnhancedSelectInput<V>({
   }
 
   return (
-    <Box flexDirection={isVertical ? 'column' : 'row'}>
+    <Box flexDirection="column">
       {searchInput}
-      {showScrollIndicators && itemsAbove > 0 && (
-        <Box marginRight={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
-          </Text>
-        </Box>
-      )}
-      <Box
-        flexDirection={isVertical ? 'column' : 'row'}
-        gap={isVertical ? 0 : 2}
-      >
-        {visibleItems.map((item, index) => {
-          // A disabled item never gets a selection cursor, even if it's the
-          // resolved selectedIndex (e.g. every item is disabled, so
-          // resolveInitialIndex has nowhere valid to land). This keeps the
-          // render in agreement with the onHighlight effect, which only
-          // fires for enabled items.
-          const isSelected =
-            index + rotateIndex === selectedIndex && !item.disabled
-          const isChecked = isMultiple
-            ? checkedKeys.has(itemKey(item))
-            : undefined
+      <Box flexDirection={isVertical ? 'column' : 'row'}>
+        {showScrollIndicators && itemsAbove > 0 && (
+          <Box marginRight={isVertical ? 0 : 1}>
+            <Text dimColor>
+              {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
+            </Text>
+          </Box>
+        )}
+        <Box
+          flexDirection={isVertical ? 'column' : 'row'}
+          gap={isVertical ? 0 : 2}
+        >
+          {visibleItems.map((item, index) => {
+            // A disabled item never gets a selection cursor, even if it's the
+            // resolved selectedIndex (e.g. every item is disabled, so
+            // resolveInitialIndex has nowhere valid to land). This keeps the
+            // render in agreement with the onHighlight effect, which only
+            // fires for enabled items.
+            const isSelected =
+              index + rotateIndex === selectedIndex && !item.disabled
+            const isChecked = isMultiple
+              ? checkedKeys.has(itemKey(item))
+              : undefined
 
-          // Determine if we need to render a group header before this item.
-          // Compare against the immediately preceding visible item (adjacency check),
-          // so non-contiguous items sharing a group name each get their own header.
-          const previousVisibleItem =
-            index > 0 ? visibleItems[index - 1] : undefined
-          let groupHeader: React.ReactNode = null
-          if (item.group && item.group !== previousVisibleItem?.group) {
-            groupHeader = (
-              <GroupHeaderComponent
-                key={`group-header-${index}-${item.group}`}
-                label={item.group}
-              />
-            )
-          }
-
-          return (
-            <React.Fragment key={itemKey(item)}>
-              {groupHeader}
-              <Box>
-                {item.indicator && !isMultiple ? (
-                  <Box marginRight={1}>
-                    <Text>{isSelected ? item.indicator : ' '}</Text>
-                  </Box>
-                ) : (
-                  <IndicatorComponent
-                    isSelected={isSelected}
-                    isChecked={isChecked}
-                    item={item}
-                  />
-                )}
-                <ItemComponent
-                  isSelected={isSelected}
-                  label={item.label}
-                  isDisabled={Boolean(item.disabled)}
-                  isChecked={isChecked}
+            // Determine if we need to render a group header before this item.
+            // Compare against the immediately preceding visible item (adjacency check),
+            // so non-contiguous items sharing a group name each get their own header.
+            const previousVisibleItem =
+              index > 0 ? visibleItems[index - 1] : undefined
+            let groupHeader: React.ReactNode = null
+            if (item.group && item.group !== previousVisibleItem?.group) {
+              groupHeader = (
+                <GroupHeaderComponent
+                  key={`group-header-${index}-${item.group}`}
+                  label={item.group}
                 />
-                {item.hotkey && !isMultiple && (
-                  <Text dimColor color="gray">
-                    {' '}
-                    ({item.hotkey})
-                  </Text>
-                )}
-              </Box>
-            </React.Fragment>
-          )
-        })}
-      </Box>
-      {showScrollIndicators && itemsBelow > 0 && (
-        <Box marginLeft={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
-          </Text>
+              )
+            }
+
+            return (
+              <React.Fragment key={itemKey(item)}>
+                {groupHeader}
+                <Box>
+                  {item.indicator && !isMultiple ? (
+                    <Box marginRight={1}>
+                      <Text>{isSelected ? item.indicator : ' '}</Text>
+                    </Box>
+                  ) : (
+                    <IndicatorComponent
+                      isSelected={isSelected}
+                      isChecked={isChecked}
+                      item={item}
+                    />
+                  )}
+                  <ItemComponent
+                    isSelected={isSelected}
+                    label={item.label}
+                    isDisabled={Boolean(item.disabled)}
+                    isChecked={isChecked}
+                  />
+                  {item.hotkey && !isMultiple && (
+                    <Text dimColor color="gray">
+                      {' '}
+                      ({item.hotkey})
+                    </Text>
+                  )}
+                </Box>
+              </React.Fragment>
+            )
+          })}
         </Box>
-      )}
+        {showScrollIndicators && itemsBelow > 0 && (
+          <Box marginLeft={isVertical ? 0 : 1}>
+            <Text dimColor>
+              {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
+            </Text>
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }
