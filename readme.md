@@ -310,7 +310,7 @@ function MyItem({ isSelected, isDisabled, label }) {
 />
 ```
 
-`DefaultItemComponent` renders its label with `wrap="truncate-end"` so an overlong label (e.g. a long file path) ellipsizes onto a single row instead of wrapping, keeping `limit` a reliable row budget. A custom `itemComponent` renders its own `<Text>` and must set its own `wrap` if it needs the same guarantee — an unbounded default `wrap="wrap"` can still push a page past `limit` rows on a narrow terminal.
+`DefaultItemComponent` and `DefaultGroupHeaderComponent` both render with `wrap="truncate-end"` so an overlong label or group name (e.g. a long file path or branch name) ellipsizes onto a single row instead of wrapping, keeping `limit` a reliable row budget. A custom `itemComponent` or `groupHeaderComponent` renders its own `<Text>` and must set its own `wrap` if it needs the same guarantee — an unbounded default `wrap="wrap"` can still push a page past `limit` rows on a narrow terminal.
 
 ### Headless Hook
 
@@ -367,7 +367,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `items`                | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                             |
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                              |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
-| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count, one row each; `DefaultItemComponent` truncates overlong labels rather than wrapping them             |
+| `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count, one row each; the default components truncate overlong labels/group names rather than wrapping them  |
 | `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
 | `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |

@@ -72,11 +72,12 @@ export type UseEnhancedSelectInputProperties<V> = {
   /**
    * Max number of visible rows — items and group headers count, but each
    * counts as exactly one row regardless of label length. `limit` bounds row
-   * *count*, not terminal width: `DefaultItemComponent` truncates an
-   * overlong label with an ellipsis (`wrap="truncate-end"`) rather than
-   * letting Ink wrap it onto extra lines, so the rendered height stays
-   * `limit` rows. A custom `itemComponent` renders its own `<Text>` and is
-   * responsible for its own truncation/wrap behaviour — an unbounded
+   * *count*, not terminal width: `DefaultItemComponent` and
+   * `DefaultGroupHeaderComponent` both truncate an overlong label with an
+   * ellipsis (`wrap="truncate-end"`) rather than letting Ink wrap it onto
+   * extra lines, so the rendered height stays `limit` rows. A custom
+   * `itemComponent` or `groupHeaderComponent` renders its own `<Text>` and
+   * is responsible for its own truncation/wrap behaviour — an unbounded
    * `wrap="wrap"` there can still exceed `limit` rows on narrow terminals.
    */
   readonly limit?: number
@@ -1106,7 +1107,7 @@ export function DefaultItemComponent({
 export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
   return (
     <Box>
-      <Text dimColor>{`── ${label} ──`}</Text>
+      <Text dimColor wrap="truncate-end">{`── ${label} ──`}</Text>
     </Box>
   )
 }
