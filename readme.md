@@ -23,6 +23,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Item Groups:** Organize items under non-navigable section headers.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
+- **Theming:** Override the default component colors with a `theme` prop; automatically disabled when [`NO_COLOR`](https://no-color.org/) is set.
 
 ## Compatibility
 
@@ -310,6 +311,28 @@ function MyItem({ isSelected, isDisabled, label }) {
 />
 ```
 
+### Theming
+
+If you only need to change colors — not swap out entire components — pass a `theme` prop instead of writing custom `indicatorComponent`/`itemComponent`/`groupHeaderComponent`. Any slot you don't set keeps its default value:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  theme={{
+    selected: 'magenta', // cursor + highlighted label. Default: 'green'
+    disabled: 'red', // disabled item labels. Default: 'gray'
+    hotkey: 'cyan', // trailing "(a)" hotkey hint. Default: 'gray'
+    groupHeader: 'blue', // group header text. Default: undefined (dim only)
+    scrollIndicator: 'yellow', // ▲/▼/◀/▶ indicators. Default: undefined (dim only)
+    searchPlaceholder: 'white', // search query/placeholder text. Default: undefined (dim only)
+  }}
+/>
+```
+
+Custom `indicatorComponent`, `itemComponent`, and `groupHeaderComponent` also receive the resolved theme as a `theme` prop, so they can opt into it instead of hard-coding colors.
+
+The component automatically disables all color (and dim styling) when the [`NO_COLOR`](https://no-color.org/) environment variable is set to a non-empty value — no configuration needed.
+
 ### Headless Hook
 
 If you need a fully custom renderer while keeping the built-in navigation, hotkeys, pagination, and callbacks, import `useEnhancedSelectInput` directly — either from the main package or from the dedicated `ink-enhanced-select-input/headless` subpath (no component/render code included):
@@ -340,7 +363,7 @@ function MyCustomSelect({ items, onSelect }) {
 
 `windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, and `searchPlaceholder`. It returns:
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, and `theme` (theming is render-only). It returns:
 
 - `selectedIndex` — index of the highlighted item within `filteredItems`.
 - `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
@@ -384,6 +407,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                           |
 | `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                        |
 | `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                            |
+| `theme`                | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                     |
 
 ### Item Shape
 
