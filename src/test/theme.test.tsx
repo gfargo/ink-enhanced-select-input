@@ -61,6 +61,21 @@ function CapturingGroupHeader({ label, theme }: GroupHeaderProperties) {
   )
 }
 
+// `hotkey`, `scrollIndicator`, and `searchPlaceholder` have no dedicated
+// override component — they're painted directly by EnhancedSelectInput
+// itself. But the full resolved theme (all six slots) is still passed to
+// `itemComponent`, so a capturing itemComponent can assert on those slots'
+// resolved values too, same as the others above.
+function CapturingFullTheme({ label, theme }: ItemProperties) {
+  return (
+    <Text>
+      {`${label}|hotkey:${String(theme?.hotkey)}|scroll:${String(
+        theme?.scrollIndicator
+      )}|search:${String(theme?.searchPlaceholder)}`}
+    </Text>
+  )
+}
+
 test('theme: default (no override, no NO_COLOR) matches original hard-coded colors', async (t) => {
   const { lastFrame } = render(
     <EnhancedSelectInput
@@ -165,6 +180,82 @@ test('theme: groupHeaderComponent receives the resolved theme', async (t) => {
   await delay()
   t.true(lastFrame()?.includes('header:Fruits:blue:true'))
 })
+
+test('theme: custom hotkey color overrides only that slot', async (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      itemComponent={CapturingFullTheme}
+      theme={{ hotkey: 'yellow' }}
+    />
+  )
+  await delay()
+  t.true(
+    lastFrame()?.includes(
+      'Apple|hotkey:yellow|scroll:undefined|search:undefined'
+    )
+  )
+})
+
+test('theme: custom scrollIndicator color overrides only that slot', async (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      itemComponent={CapturingFullTheme}
+      theme={{ scrollIndicator: 'cyan' }}
+    />
+  )
+  await delay()
+  // `hotkey` keeps its default ('gray') — only `scrollIndicator` was overridden.
+  t.true(
+    lastFrame()?.includes('Apple|hotkey:gray|scroll:cyan|search:undefined')
+  )
+})
+
+test('theme: custom searchPlaceholder color overrides only that slot', async (t) => {
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      items={[{ label: 'Apple', value: 'apple' }]}
+      itemComponent={CapturingFullTheme}
+      theme={{ searchPlaceholder: 'blue' }}
+    />
+  )
+  await delay()
+  t.true(
+    lastFrame()?.includes('Apple|hotkey:gray|scroll:undefined|search:blue')
+  )
+})
+
+test.serial(
+  'theme: NO_COLOR collapses hotkey/scrollIndicator/searchPlaceholder to undefined too',
+  async (t) => {
+    // eslint-disable-next-line n/prefer-global/process
+    const original = process.env['NO_COLOR']
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NO_COLOR'] = '1'
+    try {
+      const { lastFrame } = render(
+        <EnhancedSelectInput
+          items={[{ label: 'Apple', value: 'apple' }]}
+          itemComponent={CapturingFullTheme}
+          theme={{
+            hotkey: 'yellow',
+            scrollIndicator: 'cyan',
+            searchPlaceholder: 'blue',
+          }}
+        />
+      )
+      await delay()
+      t.true(
+        lastFrame()?.includes(
+          'Apple|hotkey:undefined|scroll:undefined|search:undefined'
+        )
+      )
+    } finally {
+      restoreNoColor(original)
+    }
+  }
+)
 
 test('theme: standalone DefaultItemComponent falls back to defaults when theme prop is omitted', (t) => {
   const { lastFrame } = render(
