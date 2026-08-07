@@ -168,6 +168,35 @@ test('vim key navigation beats an identical-character item hotkey', (t) => {
   t.deepEqual(intent, { type: 'navigate', index: 1 })
 })
 
+// B14 regression: arrow keys report `input === ''`, which also equals an
+// unset `hotkey: ''` on an item. Navigation must resolve first so that
+// empty-hotkey items never fire on a bare arrow keypress.
+test('arrow-down navigation does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('home/end jump does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ end: true }),
+    context({ filteredItems: emptyHotkeyItems, selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'jump', index: 1 })
+})
+
 test('return submits when select is enabled and no earlier branch matched', (t) => {
   const intent = resolveInputIntent('', key({ return: true }), context())
   t.deepEqual(intent, { type: 'submit' })
