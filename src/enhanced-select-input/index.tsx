@@ -67,6 +67,16 @@ export type KeyMap = {
    * `Ctrl+D` select-none, `Ctrl+R` invert. Default: true.
    */
   readonly bulk?: boolean
+  /**
+   * Item hotkeys (single-char item selection, e.g. `hotkey: 'q'`). Independent
+   * of `select` — disabling `select` only turns off Enter, and disabling
+   * `hotkeys` only turns off item hotkeys. Default: true.
+   */
+  readonly hotkeys?: boolean
+  /**
+   * Printable-character capture in searchable mode. Default: true.
+   */
+  readonly search?: boolean
 }
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
@@ -74,6 +84,17 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
+  /**
+   * Max number of visible rows — items and group headers count, but each
+   * counts as exactly one row regardless of label length. `limit` bounds row
+   * *count*, not terminal width: `DefaultItemComponent` and
+   * `DefaultGroupHeaderComponent` both truncate an overlong label with an
+   * ellipsis (`wrap="truncate-end"`) rather than letting Ink wrap it onto
+   * extra lines, so the rendered height stays `limit` rows. A custom
+   * `itemComponent` or `groupHeaderComponent` renders its own `<Text>` and
+   * is responsible for its own truncation/wrap behaviour — an unbounded
+   * `wrap="wrap"` there can still exceed `limit` rows on narrow terminals.
+   */
   readonly limit?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
@@ -135,6 +156,40 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly typeaheadTimeout?: number
 }
 
+/**
+ * Colors used by the default render components. Any slot left unset falls
+ * back to the built-in default (which reproduces the component's original,
+ * pre-theming appearance). Set a slot to `undefined` explicitly to disable
+ * that color. This shape may grow over time — treat it as append-only.
+ */
+export type Theme = {
+  /** Color of the cursor/indicator and label for the highlighted item. Default: 'green'. */
+  readonly selected?: string
+  /** Color of disabled item labels. Default: 'gray'. */
+  readonly disabled?: string
+  /** Color of group header text. Default: undefined (dim only). */
+  readonly groupHeader?: string
+  /** Color of the trailing hotkey hint, e.g. "(a)". Default: 'gray'. */
+  readonly hotkey?: string
+  /** Color of the ▲/▼/◀/▶ scroll indicators. Default: undefined (dim only). */
+  readonly scrollIndicator?: string
+  /** Color of the search query/placeholder text. Default: undefined (dim only). */
+  readonly searchPlaceholder?: string
+}
+
+/** Every {@link Theme} color slot, always present (possibly `undefined`). */
+type ThemeColors = {
+  readonly selected: string | undefined
+  readonly disabled: string | undefined
+  readonly groupHeader: string | undefined
+  readonly hotkey: string | undefined
+  readonly scrollIndicator: string | undefined
+  readonly searchPlaceholder: string | undefined
+}
+
+/** Fully-resolved theme — every color slot present, plus whether dim styling is active. */
+type ResolvedTheme = ThemeColors & { readonly dim: boolean }
+
 /** Full component props — hook props plus rendering customisation. */
 export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly indicatorComponent?: FC<IndicatorProperties>
@@ -159,6 +214,12 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
    */
   // eslint-disable-next-line react/boolean-prop-naming
   readonly showSelectionCount?: boolean
+  /**
+   * Override the colors used by the default render components. Omitted
+   * slots keep their default value. Automatically disabled when the
+   * `NO_COLOR` environment variable is set. See {@link Theme}.
+   */
+  readonly theme?: Partial<Theme>
 }
 
 export type IndicatorProperties = {
@@ -171,6 +232,8 @@ export type IndicatorProperties = {
   readonly checkedIndicator?: string
   /** Glyph shown when `isChecked` is false. Falls back to `'[ ]'`. */
   readonly uncheckedIndicator?: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type ItemProperties = {
@@ -180,10 +243,14 @@ export type ItemProperties = {
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   // eslint-disable-next-line react/no-unused-prop-types
   readonly isChecked?: boolean
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type GroupHeaderProperties = {
   readonly label: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 // Vim navigation keys that take precedence over hotkeys.
@@ -492,7 +559,7 @@ function resolveTypeaheadIntent<V>(
   }
 
   const isHotkeyChar =
-    km.select &&
+    km.hotkeys &&
     !multiple &&
     filteredItems.some((item) => item.hotkey === input && !item.disabled)
 
@@ -506,7 +573,12 @@ function resolveTypeaheadIntent<V>(
 /**
  * Item hotkeys. Not active in multi-select or searchable mode, and active
  * vim nav keys or Ctrl/Alt chords (which take priority over a same-character
- * hotkey) are excluded here too.
+ * hotkey) are excluded here too. `input` is empty for arrows and other
+ * non-alphanumeric keys, which would otherwise match an unset `hotkey: ''`
+ * on an item (B14) — guarded explicitly here rather than relying solely on
+ * navigation/jump resolving first, since a key with no navigate/jump
+ * mapping (e.g. `km.arrows` disabled) can still reach this branch with an
+ * empty `input`.
  */
 function resolveHotkeyIntent<V>(
   input: string,
@@ -517,9 +589,10 @@ function resolveHotkeyIntent<V>(
   const { km, multiple, searchable, filteredItems } = context
 
   if (
-    !km.select ||
+    !km.hotkeys ||
     multiple ||
     searchable ||
+    !input ||
     isActiveVimKey ||
     isModifiedChord
   ) {
@@ -548,6 +621,8 @@ function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
     bulk: keyMap?.bulk ?? true,
+    hotkeys: keyMap?.hotkeys ?? true,
+    search: keyMap?.search ?? true,
   }
 }
 
@@ -614,7 +689,7 @@ function resolveSearchAppendIntent<V>(
   context: InputIntentContext<V>,
   isModifiedChord: boolean
 ): Intent<V> | undefined {
-  return context.searchable && input && !isModifiedChord
+  return context.searchable && context.km.search && input && !isModifiedChord
     ? { type: 'search-append', char: input }
     : undefined
 }
@@ -879,27 +954,41 @@ export function useEnhancedSelectInput<V>({
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item. Keyed only
-  // to `items` so it doesn't re-run on every search keystroke.
+  // String(value) to produce "[object Object]" for every item. `items` is
+  // frequently an inline array literal from the caller, so it's a new
+  // reference every render even when its content is identical — comparing
+  // the computed duplicate set by value (via lastWarnedDuplicatesReference)
+  // and only warning when it actually changes keeps this from spamming the
+  // console on every re-render.
+  const lastWarnedDuplicatesReference = useRef<string | undefined>(undefined)
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
-    if (process.env['NODE_ENV'] !== 'production' && items.length > 0) {
-      const keys = items.map((item) => itemKey(item))
-      const seen = new Set<string>()
-      const duplicates = new Set<string>()
-      for (const k of keys) {
-        if (seen.has(k)) duplicates.add(k)
-        else seen.add(k)
-      }
+    if (process.env['NODE_ENV'] === 'production' || items.length === 0) return
 
-      if (duplicates.size > 0) {
-        console.warn(
-          `[ink-enhanced-select-input] Duplicate item keys detected: ${[
-            ...duplicates,
-          ].join(', ')}. ` +
-            'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
-        )
-      }
+    const keys = items.map((item) => itemKey(item))
+    const seen = new Set<string>()
+    const duplicates = new Set<string>()
+    for (const k of keys) {
+      if (seen.has(k)) duplicates.add(k)
+      else seen.add(k)
+    }
+
+    const signature =
+      duplicates.size > 0 ? [...duplicates].sort().join(',') : undefined
+
+    if (
+      signature !== undefined &&
+      signature !== lastWarnedDuplicatesReference.current
+    ) {
+      lastWarnedDuplicatesReference.current = signature
+      console.warn(
+        `[ink-enhanced-select-input] Duplicate item keys detected: ${[
+          ...duplicates,
+        ].join(', ')}. ` +
+          'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
+      )
+    } else if (signature === undefined) {
+      lastWarnedDuplicatesReference.current = undefined
     }
   }, [items])
 
@@ -1234,17 +1323,62 @@ export function useEnhancedSelectInput<V>({
   }
 }
 
+/** Default colors, reproducing the component's original (pre-theming) appearance. */
+const DEFAULT_THEME: ThemeColors = {
+  selected: 'green',
+  disabled: 'gray',
+  groupHeader: undefined,
+  hotkey: 'gray',
+  scrollIndicator: undefined,
+  searchPlaceholder: undefined,
+}
+
+/**
+ * Whether color output should be suppressed, per the NO_COLOR spec
+ * (https://no-color.org/): presence of the variable disables color,
+ * *unless* its value is the empty string. Read live (not cached) so tests
+ * can toggle it between renders.
+ */
+function isNoColor(): boolean {
+  // eslint-disable-next-line n/prefer-global/process
+  return Boolean(process.env['NO_COLOR'])
+}
+
+/**
+ * Merges a partial theme over {@link DEFAULT_THEME}, then — when `NO_COLOR`
+ * is set — collapses every color to `undefined` and disables dim styling
+ * (dim is an ANSI SGR effect, which NO_COLOR is understood to suppress too).
+ */
+function resolveTheme(theme?: Partial<Theme>): ResolvedTheme {
+  const merged = { ...DEFAULT_THEME, ...theme }
+  if (isNoColor()) {
+    return {
+      selected: undefined,
+      disabled: undefined,
+      groupHeader: undefined,
+      hotkey: undefined,
+      scrollIndicator: undefined,
+      searchPlaceholder: undefined,
+      dim: false,
+    }
+  }
+
+  return { ...merged, dim: true }
+}
+
 export function DefaultIndicatorComponent({
   isSelected,
   isChecked,
   checkedIndicator = '[x]',
   uncheckedIndicator = '[ ]',
+  theme,
 }: IndicatorProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
     return (
       <Box marginRight={1}>
-        <Text color={isSelected ? 'green' : undefined}>
+        <Text color={isSelected ? resolvedTheme.selected : undefined}>
           {isChecked ? checkedIndicator : uncheckedIndicator}
         </Text>
       </Box>
@@ -1254,7 +1388,7 @@ export function DefaultIndicatorComponent({
   // Single-select mode: classic arrow cursor
   return (
     <Box marginRight={1}>
-      <Text color={isSelected ? 'green' : undefined}>
+      <Text color={isSelected ? resolvedTheme.selected : undefined}>
         {isSelected ? '>' : ' '}
       </Text>
     </Box>
@@ -1265,21 +1399,39 @@ export function DefaultItemComponent({
   isSelected,
   label,
   isDisabled,
+  theme,
 }: ItemProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
+  let color: string | undefined
+  if (isDisabled) {
+    color = resolvedTheme.disabled
+  } else if (isSelected) {
+    color = resolvedTheme.selected
+  }
+
   return (
     <Text
-      color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
-      dimColor={isDisabled}
+      color={color}
+      dimColor={isDisabled && resolvedTheme.dim}
+      wrap="truncate-end"
     >
       {label}
     </Text>
   )
 }
 
-export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
+export function DefaultGroupHeaderComponent({
+  label,
+  theme,
+}: GroupHeaderProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   return (
     <Box>
-      <Text dimColor>{`── ${label} ──`}</Text>
+      <Text
+        color={resolvedTheme.groupHeader}
+        dimColor={resolvedTheme.dim}
+        wrap="truncate-end"
+      >{`── ${label} ──`}</Text>
     </Box>
   )
 }
@@ -1310,6 +1462,7 @@ export function EnhancedSelectInput<V>({
   checkedIndicator = '[x]',
   uncheckedIndicator = '[ ]',
   showSelectionCount = false,
+  theme,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -1325,6 +1478,7 @@ export function EnhancedSelectInput<V>({
     selectionCount,
   } = useEnhancedSelectInput(hookProperties)
 
+  const resolvedTheme = resolveTheme(theme)
   const searchable = hookProperties.searchable === true
 
   if (!hasItems && !searchable) {
@@ -1339,7 +1493,10 @@ export function EnhancedSelectInput<V>({
 
   const searchInput = searchable ? (
     <Box>
-      <Text dimColor>
+      <Text
+        color={resolvedTheme.searchPlaceholder}
+        dimColor={resolvedTheme.dim}
+      >
         {searchQuery ? `/ ${searchQuery}` : `/ ${searchPlaceholder}`}
       </Text>
     </Box>
@@ -1360,95 +1517,109 @@ export function EnhancedSelectInput<V>({
         {searchInput}
         {selectionCountLine}
         <Box>
-          <Text dimColor>No matches</Text>
+          <Text dimColor={resolvedTheme.dim}>No matches</Text>
         </Box>
       </Box>
     )
   }
 
   return (
-    <Box flexDirection={isVertical ? 'column' : 'row'}>
+    <Box flexDirection="column">
       {searchInput}
       {selectionCountLine}
-      {showScrollIndicators && itemsAbove > 0 && (
-        <Box marginRight={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
-          </Text>
-        </Box>
-      )}
-      <Box
-        flexDirection={isVertical ? 'column' : 'row'}
-        gap={isVertical ? 0 : 2}
-      >
-        {visibleItems.map((item, index) => {
-          // A disabled item never gets a selection cursor, even if it's the
-          // resolved selectedIndex (e.g. every item is disabled, so
-          // resolveInitialIndex has nowhere valid to land). This keeps the
-          // render in agreement with the onHighlight effect, which only
-          // fires for enabled items.
-          const isSelected =
-            index + rotateIndex === selectedIndex && !item.disabled
-          const isChecked = isMultiple
-            ? checkedKeys.has(itemKey(item))
-            : undefined
+      <Box flexDirection={isVertical ? 'column' : 'row'}>
+        {showScrollIndicators && itemsAbove > 0 && (
+          <Box marginRight={isVertical ? 0 : 1}>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
+              {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
+            </Text>
+          </Box>
+        )}
+        <Box
+          flexDirection={isVertical ? 'column' : 'row'}
+          gap={isVertical ? 0 : 2}
+        >
+          {visibleItems.map((item, index) => {
+            // A disabled item never gets a selection cursor, even if it's the
+            // resolved selectedIndex (e.g. every item is disabled, so
+            // resolveInitialIndex has nowhere valid to land). This keeps the
+            // render in agreement with the onHighlight effect, which only
+            // fires for enabled items.
+            const isSelected =
+              index + rotateIndex === selectedIndex && !item.disabled
+            const isChecked = isMultiple
+              ? checkedKeys.has(itemKey(item))
+              : undefined
 
-          // Determine if we need to render a group header before this item.
-          // Compare against the immediately preceding visible item (adjacency check),
-          // so non-contiguous items sharing a group name each get their own header.
-          const previousVisibleItem =
-            index > 0 ? visibleItems[index - 1] : undefined
-          let groupHeader: React.ReactNode = null
-          if (item.group && item.group !== previousVisibleItem?.group) {
-            groupHeader = (
-              <GroupHeaderComponent
-                key={`group-header-${index}-${item.group}`}
-                label={item.group}
-              />
-            )
-          }
-
-          return (
-            <React.Fragment key={itemKey(item)}>
-              {groupHeader}
-              <Box>
-                {item.indicator && !isMultiple ? (
-                  <Box marginRight={1}>
-                    <Text>{isSelected ? item.indicator : ' '}</Text>
-                  </Box>
-                ) : (
-                  <IndicatorComponent
-                    isSelected={isSelected}
-                    isChecked={isChecked}
-                    item={item}
-                    checkedIndicator={checkedIndicator}
-                    uncheckedIndicator={uncheckedIndicator}
-                  />
-                )}
-                <ItemComponent
-                  isSelected={isSelected}
-                  label={item.label}
-                  isDisabled={Boolean(item.disabled)}
-                  isChecked={isChecked}
+            // Determine if we need to render a group header before this item.
+            // Compare against the immediately preceding visible item (adjacency check),
+            // so non-contiguous items sharing a group name each get their own header.
+            const previousVisibleItem =
+              index > 0 ? visibleItems[index - 1] : undefined
+            let groupHeader: React.ReactNode = null
+            if (item.group && item.group !== previousVisibleItem?.group) {
+              groupHeader = (
+                <GroupHeaderComponent
+                  key={`group-header-${index}-${item.group}`}
+                  label={item.group}
+                  theme={resolvedTheme}
                 />
-                {item.hotkey && !isMultiple && (
-                  <Text dimColor color="gray">
-                    {' '}
-                    ({item.hotkey})
-                  </Text>
-                )}
-              </Box>
-            </React.Fragment>
-          )
-        })}
-      </Box>
-      {showScrollIndicators && itemsBelow > 0 && (
-        <Box marginLeft={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
-          </Text>
+              )
+            }
+
+            return (
+              <React.Fragment key={itemKey(item)}>
+                {groupHeader}
+                <Box>
+                  {item.indicator && !isMultiple ? (
+                    <Box marginRight={1}>
+                      <Text>{isSelected ? item.indicator : ' '}</Text>
+                    </Box>
+                  ) : (
+                    <IndicatorComponent
+                      isSelected={isSelected}
+                      isChecked={isChecked}
+                      item={item}
+                      checkedIndicator={checkedIndicator}
+                      uncheckedIndicator={uncheckedIndicator}
+                      theme={resolvedTheme}
+                    />
+                  )}
+                  <ItemComponent
+                    isSelected={isSelected}
+                    label={item.label}
+                    isDisabled={Boolean(item.disabled)}
+                    isChecked={isChecked}
+                    theme={resolvedTheme}
+                  />
+                  {item.hotkey && !isMultiple && (
+                    <Text
+                      dimColor={resolvedTheme.dim}
+                      color={resolvedTheme.hotkey}
+                    >
+                      {' '}
+                      ({item.hotkey})
+                    </Text>
+                  )}
+                </Box>
+              </React.Fragment>
+            )
+          })}
         </Box>
-      )}
+        {showScrollIndicators && itemsBelow > 0 && (
+          <Box marginLeft={isVertical ? 0 : 1}>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
+              {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
+            </Text>
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }

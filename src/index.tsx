@@ -14,6 +14,7 @@ export type {
   Item,
   KeyMap,
   Properties,
+  Theme,
   UseEnhancedSelectInputProperties,
   UseEnhancedSelectInputResult,
   IndicatorProperties,
