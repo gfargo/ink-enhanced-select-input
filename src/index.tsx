@@ -5,6 +5,7 @@ export {
   DefaultItemComponent,
   DefaultGroupHeaderComponent,
   resolveInitialIndex,
+  resolveInitialSelection,
   findNextValidIndex,
   findFirstValidIndex,
   findLastValidIndex,

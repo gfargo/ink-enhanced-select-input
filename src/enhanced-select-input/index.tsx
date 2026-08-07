@@ -68,7 +68,35 @@ export type KeyMap = {
 export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
+  /**
+   * Index of the item to highlight at mount. Ignored after mount — like
+   * `initialValue`/`initialKey`, this is an initial-only prop, not a
+   * controlled one. When several of `initialKey`, `initialValue`, and
+   * `initialIndex` are supplied, `initialKey` wins, then `initialValue`,
+   * then `initialIndex`.
+   */
   readonly initialIndex?: number
+  /**
+   * Highlight the item whose `key` (or `String(value)` fallback) equals this
+   * string at mount. Takes precedence over `initialValue` and `initialIndex`.
+   * Initial-only — see {@link initialIndex}.
+   */
+  readonly initialKey?: string
+  /**
+   * Highlight the first item whose `value` matches this at mount, using `===`
+   * (reference equality — for object values, prefer `initialKey`). Takes
+   * precedence over `initialIndex` but not `initialKey`. Initial-only — see
+   * {@link initialIndex}.
+   */
+  readonly initialValue?: V
+  /**
+   * When none of `initialKey`/`initialValue`/`initialIndex` resolve to an
+   * item (or none are supplied), fall back to highlighting the first enabled
+   * item. Set to `false` to start with no highlight instead — `selectedItem`
+   * is `undefined`, `onHighlight` does not fire, and no cursor is rendered,
+   * until the user navigates. Default: true.
+   */
+  readonly autoSelectFirstEnabled?: boolean
   readonly limit?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
@@ -174,6 +202,45 @@ export function resolveInitialIndex<V>(
   }
 
   return clamped
+}
+
+/**
+ * Resolves the index to highlight at mount from `initialKey`, `initialValue`,
+ * `initialIndex`, and `autoSelectFirstEnabled`, in that precedence order.
+ * Returns `-1` (no selection) only when no target resolves and
+ * `autoSelectFirstEnabled` is explicitly `false`.
+ */
+export function resolveInitialSelection<V>(
+  items: Array<Item<V>>,
+  options: {
+    initialKey?: string
+    initialValue?: V
+    initialIndex?: number
+    autoSelectFirstEnabled?: boolean
+  }
+): number {
+  const { initialKey, initialValue, initialIndex, autoSelectFirstEnabled } =
+    options
+
+  if (items.length === 0) {
+    return autoSelectFirstEnabled === false ? -1 : 0
+  }
+
+  if (initialKey !== undefined) {
+    const index = items.findIndex((item) => itemKey(item) === initialKey)
+    if (index !== -1) return resolveInitialIndex(items, index)
+  }
+
+  if (initialValue !== undefined) {
+    const index = items.findIndex((item) => item.value === initialValue)
+    if (index !== -1) return resolveInitialIndex(items, index)
+  }
+
+  if (initialIndex !== undefined) {
+    return resolveInitialIndex(items, initialIndex)
+  }
+
+  return autoSelectFirstEnabled === false ? -1 : resolveInitialIndex(items, 0)
 }
 
 export function findNextValidIndex<V>(
@@ -421,6 +488,18 @@ function resolveNavigateIntent<V>(
 ): Intent<V> | undefined {
   const step = resolveNavigateStep(input, key, context, isModifiedChord)
   if (step === undefined) return undefined
+
+  // No item is highlighted yet (autoSelectFirstEnabled: false and nothing
+  // resolved at mount) — seed the selection at the boundary the step points
+  // toward instead of stepping relative to a nonexistent -1 position.
+  if (context.selectedIndex === -1) {
+    const seeded =
+      step === 1
+        ? findFirstValidIndex(context.filteredItems)
+        : findLastValidIndex(context.filteredItems)
+    return { type: 'navigate', index: seeded }
+  }
+
   return {
     type: 'navigate',
     index: findNextValidIndex(
@@ -677,7 +756,10 @@ export type UseEnhancedSelectInputResult<V> = {
 export function useEnhancedSelectInput<V>({
   items,
   isFocused = true,
-  initialIndex = 0,
+  initialIndex,
+  initialKey,
+  initialValue,
+  autoSelectFirstEnabled = true,
   limit,
   onSelect,
   onHighlight,
@@ -734,7 +816,12 @@ export function useEnhancedSelectInput<V>({
     [filteredItems, limit]
   )
 
-  const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
+  const safeInitialIndex = resolveInitialSelection(filteredItems, {
+    initialKey,
+    initialValue,
+    initialIndex,
+    autoSelectFirstEnabled,
+  })
   // eslint-disable-next-line react/hook-use-state -- public API name (setSelectedIndex) is reserved for the wrapper below
   const [selectedIndex, setSelectedIndexState] = useState(safeInitialIndex)
   // Latest-value ref so the revalidation effect can read the current
@@ -821,6 +908,11 @@ export function useEnhancedSelectInput<V>({
   // user left off. `filteredItems` is memoized above, so this only re-runs
   // when items/searchQuery actually change content — not on every render.
   useEffect(() => {
+    // The "no selection" state (autoSelectFirstEnabled: false, nothing
+    // resolved yet) must survive item/filter changes rather than snapping to
+    // an item the user never asked for — only navigation should leave it.
+    if (selectedIndexReference.current === -1) return
+
     if (filteredItems.length === 0) {
       setSelectedIndexState(0)
       return

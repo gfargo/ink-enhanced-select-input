@@ -7,6 +7,7 @@ import {
   pageIndexOfStart,
   pageStartFor,
   resolveInitialIndex,
+  resolveInitialSelection,
   type Item,
 } from '../enhanced-select-input/index.js'
 
@@ -67,6 +68,116 @@ test('resolveInitialIndex: wraps around when forward search reaches end', (t) =>
 test('resolveInitialIndex: all disabled returns clamped index', (t) => {
   const items = [mkItem('a', true), mkItem('b', true), mkItem('c', true)]
   t.is(resolveInitialIndex(items, 1), 1)
+})
+
+// ── resolveInitialSelection ─────────────────────────────────────────────────────
+
+test('resolveInitialSelection: initialKey matches by key', (t) => {
+  const items = [
+    { label: 'a', value: 'a', key: 'k-a' },
+    { label: 'b', value: 'b', key: 'k-b' },
+  ]
+  t.is(resolveInitialSelection(items, { initialKey: 'k-b' }), 1)
+})
+
+test('resolveInitialSelection: initialKey falls back to String(value) when no key', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(resolveInitialSelection(items, { initialKey: 'b' }), 1)
+})
+
+test('resolveInitialSelection: initialValue matches by value', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(resolveInitialSelection(items, { initialValue: 'c' }), 2)
+})
+
+test('resolveInitialSelection: initialValue uses reference equality for objects', (t) => {
+  const target = { id: 2 }
+  const items: Array<Item<{ id: number }>> = [
+    { label: 'a', value: { id: 1 }, key: 'a' },
+    { label: 'b', value: target, key: 'b' },
+  ]
+  t.is(resolveInitialSelection(items, { initialValue: target }), 1)
+  t.is(
+    resolveInitialSelection(items, { initialValue: { id: 2 } }),
+    0 // No reference match — falls through to default first-enabled
+  )
+})
+
+test('resolveInitialSelection: initialKey wins over initialValue and initialIndex', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(
+    resolveInitialSelection(items, {
+      initialKey: 'c',
+      initialValue: 'a',
+      initialIndex: 1,
+    }),
+    2
+  )
+})
+
+test('resolveInitialSelection: initialValue wins over initialIndex', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(
+    resolveInitialSelection(items, { initialValue: 'c', initialIndex: 1 }),
+    2
+  )
+})
+
+test('resolveInitialSelection: falls back to initialIndex when key/value unset', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(resolveInitialSelection(items, { initialIndex: 1 }), 1)
+})
+
+test('resolveInitialSelection: matched key on a disabled item skips forward to nearest enabled', (t) => {
+  const items = [mkItem('a'), mkItem('b', true), mkItem('c')]
+  t.is(resolveInitialSelection(items, { initialKey: 'b' }), 2)
+})
+
+test('resolveInitialSelection: no match and no initialIndex falls back to first enabled', (t) => {
+  const items = [mkItem('a', true), mkItem('b'), mkItem('c')]
+  t.is(resolveInitialSelection(items, { initialKey: 'nope' }), 1)
+})
+
+test('resolveInitialSelection: no match + autoSelectFirstEnabled false returns -1', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(
+    resolveInitialSelection(items, {
+      initialKey: 'nope',
+      autoSelectFirstEnabled: false,
+    }),
+    -1
+  )
+})
+
+test('resolveInitialSelection: nothing supplied + autoSelectFirstEnabled false returns -1', (t) => {
+  const items = [mkItem('a'), mkItem('b')]
+  t.is(resolveInitialSelection(items, { autoSelectFirstEnabled: false }), -1)
+})
+
+test('resolveInitialSelection: nothing supplied defaults to first enabled', (t) => {
+  const items = [mkItem('a', true), mkItem('b')]
+  t.is(resolveInitialSelection(items, {}), 1)
+})
+
+test('resolveInitialSelection: empty list returns 0 by default', (t) => {
+  t.is(resolveInitialSelection<string>([], {}), 0)
+})
+
+test('resolveInitialSelection: empty list + autoSelectFirstEnabled false returns -1', (t) => {
+  t.is(
+    resolveInitialSelection<string>([], { autoSelectFirstEnabled: false }),
+    -1
+  )
+})
+
+test('resolveInitialSelection: all-disabled with autoSelectFirstEnabled true returns clamped index', (t) => {
+  const items = [mkItem('a', true), mkItem('b', true)]
+  t.is(resolveInitialSelection(items, {}), 0)
+})
+
+test('resolveInitialSelection: all-disabled with autoSelectFirstEnabled false returns -1', (t) => {
+  const items = [mkItem('a', true), mkItem('b', true)]
+  t.is(resolveInitialSelection(items, { autoSelectFirstEnabled: false }), -1)
 })
 
 // ── findNextValidIndex ─────────────────────────────────────────────────────────
