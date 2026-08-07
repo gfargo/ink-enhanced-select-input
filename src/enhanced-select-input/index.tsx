@@ -1153,85 +1153,87 @@ export function EnhancedSelectInput<V>({
   }
 
   return (
-    <Box flexDirection={isVertical ? 'column' : 'row'}>
+    <Box flexDirection="column">
       {searchInput}
-      {showScrollIndicators && itemsAbove > 0 && (
-        <Box marginRight={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
-          </Text>
-        </Box>
-      )}
-      <Box
-        flexDirection={isVertical ? 'column' : 'row'}
-        gap={isVertical ? 0 : 2}
-      >
-        {visibleItems.map((item, index) => {
-          // A disabled item never gets a selection cursor, even if it's the
-          // resolved selectedIndex (e.g. every item is disabled, so
-          // resolveInitialIndex has nowhere valid to land). This keeps the
-          // render in agreement with the onHighlight effect, which only
-          // fires for enabled items.
-          const isSelected =
-            index + rotateIndex === selectedIndex && !item.disabled
-          const isChecked = isMultiple
-            ? checkedKeys.has(itemKey(item))
-            : undefined
+      <Box flexDirection={isVertical ? 'column' : 'row'}>
+        {showScrollIndicators && itemsAbove > 0 && (
+          <Box marginRight={isVertical ? 0 : 1}>
+            <Text dimColor>
+              {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
+            </Text>
+          </Box>
+        )}
+        <Box
+          flexDirection={isVertical ? 'column' : 'row'}
+          gap={isVertical ? 0 : 2}
+        >
+          {visibleItems.map((item, index) => {
+            // A disabled item never gets a selection cursor, even if it's the
+            // resolved selectedIndex (e.g. every item is disabled, so
+            // resolveInitialIndex has nowhere valid to land). This keeps the
+            // render in agreement with the onHighlight effect, which only
+            // fires for enabled items.
+            const isSelected =
+              index + rotateIndex === selectedIndex && !item.disabled
+            const isChecked = isMultiple
+              ? checkedKeys.has(itemKey(item))
+              : undefined
 
-          // Determine if we need to render a group header before this item.
-          // Compare against the immediately preceding visible item (adjacency check),
-          // so non-contiguous items sharing a group name each get their own header.
-          const previousVisibleItem =
-            index > 0 ? visibleItems[index - 1] : undefined
-          let groupHeader: React.ReactNode = null
-          if (item.group && item.group !== previousVisibleItem?.group) {
-            groupHeader = (
-              <GroupHeaderComponent
-                key={`group-header-${index}-${item.group}`}
-                label={item.group}
-              />
-            )
-          }
-
-          return (
-            <React.Fragment key={itemKey(item)}>
-              {groupHeader}
-              <Box>
-                {item.indicator && !isMultiple ? (
-                  <Box marginRight={1}>
-                    <Text>{isSelected ? item.indicator : ' '}</Text>
-                  </Box>
-                ) : (
-                  <IndicatorComponent
-                    isSelected={isSelected}
-                    isChecked={isChecked}
-                    item={item}
-                  />
-                )}
-                <ItemComponent
-                  isSelected={isSelected}
-                  label={item.label}
-                  isDisabled={Boolean(item.disabled)}
-                  isChecked={isChecked}
+            // Determine if we need to render a group header before this item.
+            // Compare against the immediately preceding visible item (adjacency check),
+            // so non-contiguous items sharing a group name each get their own header.
+            const previousVisibleItem =
+              index > 0 ? visibleItems[index - 1] : undefined
+            let groupHeader: React.ReactNode = null
+            if (item.group && item.group !== previousVisibleItem?.group) {
+              groupHeader = (
+                <GroupHeaderComponent
+                  key={`group-header-${index}-${item.group}`}
+                  label={item.group}
                 />
-                {item.hotkey && !isMultiple && (
-                  <Text dimColor color="gray">
-                    {' '}
-                    ({item.hotkey})
-                  </Text>
-                )}
-              </Box>
-            </React.Fragment>
-          )
-        })}
-      </Box>
-      {showScrollIndicators && itemsBelow > 0 && (
-        <Box marginLeft={isVertical ? 0 : 1}>
-          <Text dimColor>
-            {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
-          </Text>
+              )
+            }
+
+            return (
+              <React.Fragment key={itemKey(item)}>
+                {groupHeader}
+                <Box>
+                  {item.indicator && !isMultiple ? (
+                    <Box marginRight={1}>
+                      <Text>{isSelected ? item.indicator : ' '}</Text>
+                    </Box>
+                  ) : (
+                    <IndicatorComponent
+                      isSelected={isSelected}
+                      isChecked={isChecked}
+                      item={item}
+                    />
+                  )}
+                  <ItemComponent
+                    isSelected={isSelected}
+                    label={item.label}
+                    isDisabled={Boolean(item.disabled)}
+                    isChecked={isChecked}
+                  />
+                  {item.hotkey && !isMultiple && (
+                    <Text dimColor color="gray">
+                      {' '}
+                      ({item.hotkey})
+                    </Text>
+                  )}
+                </Box>
+              </React.Fragment>
+            )
+          })}
         </Box>
-      )}
+        {showScrollIndicators && itemsBelow > 0 && (
+          <Box marginLeft={isVertical ? 0 : 1}>
+            <Text dimColor>
+              {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
+            </Text>
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }
