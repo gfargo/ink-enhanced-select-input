@@ -201,6 +201,23 @@ test('home/end jump does not fire an empty-string item hotkey (B14)', (t) => {
   t.deepEqual(intent, { type: 'jump', index: 1 })
 })
 
+// B14 regression: with km.arrows disabled, a physical arrow keypress still
+// reports `input === ''` but resolveNavigateIntent no longer intercepts it
+// (no mapped step), so execution reaches hotkey resolution directly. An
+// empty-string item hotkey must not match here either.
+test('empty-string item hotkey never fires when arrow navigation is disabled (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems, km: { arrows: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
 test('return submits when select is enabled and no earlier branch matched', (t) => {
   const intent = resolveInputIntent('', key({ return: true }), context())
   t.deepEqual(intent, { type: 'submit' })
