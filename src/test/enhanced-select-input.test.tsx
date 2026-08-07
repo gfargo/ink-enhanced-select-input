@@ -20,6 +20,8 @@ const ENTER = '\r'
 const ESCAPE = '\u001B'
 const HOME = '\u001B[H'
 const END = '\u001B[F'
+const PAGE_UP = '\u001B[5~'
+const PAGE_DOWN = '\u001B[6~'
 const SPACE = ' '
 const CTRL_X = '\u0018' // Ctrl+X
 const ALT_X = '\u001Bx' // Alt+X
@@ -5009,6 +5011,80 @@ test.serial('keyMap.homeEnd=false disables Home/End keys', async (t) => {
   t.is(highlighted, 'B') // Must not jump to C
 })
 
+test.serial(
+  'PageDown moves the highlight forward by a page of items',
+  async (t) => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      label: `Item ${i}`,
+      value: `item-${i}`,
+    }))
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'Item 0')
+    stdin.write(PAGE_DOWN)
+    await waitFor(() => highlighted === 'Item 3')
+    t.is(highlighted, 'Item 3')
+  }
+)
+
+test.serial(
+  'PageUp moves the highlight backward by a page of items',
+  async (t) => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      label: `Item ${i}`,
+      value: `item-${i}`,
+    }))
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        initialIndex={6}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'Item 6')
+    stdin.write(PAGE_UP)
+    await waitFor(() => highlighted === 'Item 3')
+    t.is(highlighted, 'Item 3')
+  }
+)
+
+test.serial('keyMap.pageKeys=false disables PageUp/PageDown', async (t) => {
+  const items = Array.from({ length: 10 }, (_, i) => ({
+    label: `Item ${i}`,
+    value: `item-${i}`,
+  }))
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={3}
+      keyMap={{ pageKeys: false }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'Item 0')
+  stdin.write(PAGE_DOWN)
+  await delay()
+  t.is(highlighted, 'Item 0') // Must not move
+})
+
 test.serial('keyMap.cancel=false disables Escape → onCancel', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   let cancelled = false
@@ -5092,6 +5168,108 @@ test.serial('keyMap defaults to all enabled when not provided', async (t) => {
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'B')
+})
+
+// --- loop ---
+
+test.serial(
+  'loop=false clamps arrow-down navigation at the last item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        loop={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => highlighted === 'B')
+    t.is(highlighted, 'B')
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B') // Must not wrap back to A
+  }
+)
+
+test.serial(
+  'loop=false clamps arrow-up navigation at the first item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        loop={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'A')
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(highlighted, 'A') // Must not wrap to B
+  }
+)
+
+test.serial('loop defaults to true (wraps around)', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'A')
+  stdin.write(ARROW_UP)
+  await waitFor(() => highlighted === 'B')
+  t.is(highlighted, 'B') // Wraps to the last item
+})
+
+test.serial('loop=false also clamps PageDown at the last item', async (t) => {
+  const items = Array.from({ length: 5 }, (_, i) => ({
+    label: `Item ${i}`,
+    value: `item-${i}`,
+  }))
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={2}
+      loop={false}
+      initialIndex={3}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'Item 3')
+  stdin.write(PAGE_DOWN)
+  await waitFor(() => highlighted === 'Item 4')
+  t.is(highlighted, 'Item 4')
+  stdin.write(PAGE_DOWN)
+  await delay()
+  t.is(highlighted, 'Item 4') // Must not wrap back to Item 0
 })
 
 // --- typeahead ---
