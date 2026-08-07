@@ -8,6 +8,7 @@ export {
   findNextValidIndex,
   findFirstValidIndex,
   findLastValidIndex,
+  truncateLabel,
 } from './enhanced-select-input/index.js'
 
 export type {
@@ -19,4 +20,5 @@ export type {
   IndicatorProperties,
   ItemProperties,
   GroupHeaderProperties,
+  TruncateMode,
 } from './enhanced-select-input/index.js'

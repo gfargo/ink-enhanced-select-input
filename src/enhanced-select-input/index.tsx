@@ -131,6 +131,21 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly showScrollIndicators?: boolean
   /** Placeholder text shown in the search input when the query is empty. */
   readonly searchPlaceholder?: string
+  /**
+   * Maximum display width (in characters) for an item's label. Labels longer
+   * than this are ellipsized so each item stays on a single row, making
+   * `limit` a trustworthy height budget. Display-only — search filtering,
+   * `onSelect`/`onHighlight`/`onConfirm`, and hotkeys still use the item's
+   * original `label`. Unset or `<= 0` disables truncation (default).
+   */
+  readonly maxWidth?: number
+  /**
+   * Where the ellipsis lands when a label exceeds `maxWidth`. `'end'` keeps
+   * the start (`somelongla…`), `'start'` keeps the end (`…onglabelxyz`), and
+   * `'middle'` keeps both ends (`some…lxyz`) — useful for file paths.
+   * Only used when `maxWidth` is set. Default: `'end'`.
+   */
+  readonly truncate?: TruncateMode
 }
 
 export type IndicatorProperties = {
@@ -211,6 +226,41 @@ export function findLastValidIndex<V>(items: Array<Item<V>>): number {
   }
 
   return -1
+}
+
+/** Where the ellipsis lands when a label exceeds `maxWidth`. */
+export type TruncateMode = 'end' | 'middle' | 'start'
+
+/**
+ * Ellipsizes `label` down to exactly `maxWidth` characters when it exceeds
+ * that width; shorter labels are returned unchanged. Character-length based
+ * (UTF-16 code units), not terminal-column aware — fine for ASCII/file-path
+ * labels, but wide/CJK/emoji labels won't be column-perfect.
+ */
+export function truncateLabel(
+  label: string,
+  maxWidth: number,
+  mode: TruncateMode = 'end'
+): string {
+  if (!maxWidth || maxWidth <= 0 || label.length <= maxWidth) return label
+
+  const ellipsis = '…'
+  if (maxWidth === 1) return ellipsis
+
+  const room = maxWidth - 1
+  if (mode === 'start') return ellipsis + label.slice(label.length - room)
+
+  if (mode === 'middle') {
+    const left = Math.ceil(room / 2)
+    const right = room - left
+    return (
+      label.slice(0, left) +
+      ellipsis +
+      (right > 0 ? label.slice(label.length - right) : '')
+    )
+  }
+
+  return label.slice(0, room) + ellipsis
 }
 
 /**
@@ -1106,6 +1156,8 @@ export function EnhancedSelectInput<V>({
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
   searchPlaceholder = 'Search...',
+  maxWidth,
+  truncate = 'end',
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -1210,7 +1262,11 @@ export function EnhancedSelectInput<V>({
                 )}
                 <ItemComponent
                   isSelected={isSelected}
-                  label={item.label}
+                  label={
+                    maxWidth
+                      ? truncateLabel(item.label, maxWidth, truncate)
+                      : item.label
+                  }
                   isDisabled={Boolean(item.disabled)}
                   isChecked={isChecked}
                 />
