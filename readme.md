@@ -268,18 +268,30 @@ Because Ink does not support event propagation stopping, every `useInput` handle
   keyMap={{ vimKeys: false, homeEnd: false, toggle: false }}
   onConfirm={onConfirm}
 />
+
+// Item hotkeys conflict with a parent-level 'q' binding — disable hotkeys only,
+// Enter still works
+<EnhancedSelectInput
+  items={items}
+  keyMap={{ hotkeys: false }}
+  onSelect={onSelect}
+/>
 ```
 
-| `keyMap` field | Keys it controls                          | Default |
-| -------------- | ----------------------------------------- | ------- |
-| `arrows`       | `↑` `↓` `←` `→`                           | `true`  |
-| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal) | `true`  |
-| `homeEnd`      | `Home` · `End`                            | `true`  |
-| `cancel`       | `Escape` → `onCancel`                     | `true`  |
-| `select`       | `Enter` → `onSelect` / `onConfirm`        | `true`  |
-| `toggle`       | `Space` toggle in multi-select mode       | `true`  |
+| `keyMap` field | Keys it controls                               | Default |
+| -------------- | ---------------------------------------------- | ------- |
+| `arrows`       | `↑` `↓` `←` `→`                                | `true`  |
+| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)      | `true`  |
+| `homeEnd`      | `Home` · `End`                                 | `true`  |
+| `cancel`       | `Escape` → `onCancel`                          | `true`  |
+| `select`       | `Enter` → `onSelect` / `onConfirm`             | `true`  |
+| `toggle`       | `Space` toggle in multi-select mode            | `true`  |
+| `hotkeys`      | Item `hotkey` chars (independent of `select`)  | `true`  |
+| `search`       | Printable-character capture in searchable mode | `true`  |
 
 Any field not supplied stays enabled. `isFocused={false}` remains the way to disable all input at once.
+
+`hotkeys` and `select` are independent: `keyMap={{ hotkeys: false }}` disables item hotkeys but leaves `Enter` working, and `keyMap={{ select: false }}` disables `Enter` but leaves item hotkeys working.
 
 ### Custom Components
 
