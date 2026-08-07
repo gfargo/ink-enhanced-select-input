@@ -2286,6 +2286,50 @@ test.serial(
   }
 )
 
+test.serial(
+  'warns exactly once per distinct duplicate-key set across re-renders with a new-but-equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    // A fresh inline array literal every call — same content, new reference —
+    // mirrors a caller re-rendering with `items={[...]}` inline.
+    const makeItems = () => [
+      { label: 'A', value: { id: 1 } },
+      { label: 'B', value: { id: 2 } },
+    ]
+
+    try {
+      const { rerender } = render(<EnhancedSelectInput items={makeItems()} />)
+      await delay()
+
+      for (let index = 0; index < 4; index++) {
+        rerender(<EnhancedSelectInput items={makeItems()} />)
+        // eslint-disable-next-line no-await-in-loop
+        await delay()
+      }
+
+      const duplicateWarnings = warnings.filter((w) =>
+        w.includes('Duplicate item keys')
+      )
+      t.is(duplicateWarnings.length, 1)
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
 // --- #44: item.indicator + multiple warning ---
 
 // These two tests stub the global console.warn — run them serially so they
@@ -4086,6 +4130,71 @@ test.serial('searchable: renders custom placeholder', (t) => {
   t.true(frame.includes('/ Type to filter'))
 })
 
+test.serial(
+  'searchable: search prompt renders on its own line above items in horizontal orientation',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    )
+
+    const lines = lastFrame()!.split('\n')
+    const searchLineIndex = lines.findIndex((line) =>
+      line.includes('/ Search...')
+    )
+    const itemsLineIndex = lines.findIndex(
+      (line) => line.includes('Apple') && line.includes('Banana')
+    )
+
+    t.true(searchLineIndex !== -1)
+    t.true(itemsLineIndex !== -1)
+    t.true(searchLineIndex < itemsLineIndex)
+    // The search prompt must not share a line with the items.
+    t.false(lines[searchLineIndex]!.includes('Apple'))
+  }
+)
+
+test.serial(
+  'searchable: horizontal orientation item row layout matches vertical (unaffected by the search-line wrapper)',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const horizontal = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    ).lastFrame()!
+
+    const vertical = render(
+      <EnhancedSelectInput searchable items={items} orientation="vertical" />
+    ).lastFrame()!
+
+    const horizontalLines = horizontal.split('\n')
+    const verticalLines = vertical.split('\n')
+
+    // Vertical mode still stacks each item on its own line.
+    t.true(verticalLines.some((line) => line.includes('Apple')))
+    t.true(verticalLines.some((line) => line.includes('Banana')))
+    t.false(
+      verticalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+
+    // Horizontal mode still puts both items on the same row.
+    t.true(
+      horizontalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+  }
+)
+
 test.serial('searchable: typing filters items by label', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
@@ -5519,5 +5628,78 @@ test.serial(
     t.is((frame.match(/\[x]/g) ?? []).length, 1)
     const cherryLine = frame.split('\n').find((line) => line.includes('Cherry'))
     t.true(cherryLine?.includes('[x]'))
+  }
+)
+
+// --- B19: long labels must not wrap and inflate rendered row count past limit ---
+
+test.serial(
+  'limit stays a reliable row budget when a label is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A'.repeat(200), value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Without truncation, the 200-char label alone would wrap across
+    // multiple lines at the 100-column test width, pushing the frame past
+    // the 2-row budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+  }
+)
+
+test.serial(
+  'a long label is truncated with an ellipsis rather than wrapped onto extra lines',
+  (t) => {
+    const items = [{ label: 'A'.repeat(200), value: 'a' }]
+
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A'.repeat(200)))
+  }
+)
+
+test.serial(
+  'limit stays a reliable row budget when a group name is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G'.repeat(200) },
+      { label: 'B', value: 'b', group: 'G'.repeat(200) },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Pagination charges the group header exactly one row; without
+    // truncation the 200-char group name would wrap across multiple lines
+    // at the 100-column test width, pushing the frame past the 2-row
+    // budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
+  }
+)
+
+test.serial(
+  'DefaultGroupHeaderComponent truncates an overlong label with an ellipsis rather than wrapping',
+  (t) => {
+    const { lastFrame } = render(
+      <DefaultGroupHeaderComponent label={'G'.repeat(200)} />
+    )
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
   }
 )
