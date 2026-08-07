@@ -138,6 +138,40 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly typeaheadTimeout?: number
 }
 
+/**
+ * Colors used by the default render components. Any slot left unset falls
+ * back to the built-in default (which reproduces the component's original,
+ * pre-theming appearance). Set a slot to `undefined` explicitly to disable
+ * that color. This shape may grow over time — treat it as append-only.
+ */
+export type Theme = {
+  /** Color of the cursor/indicator and label for the highlighted item. Default: 'green'. */
+  readonly selected?: string
+  /** Color of disabled item labels. Default: 'gray'. */
+  readonly disabled?: string
+  /** Color of group header text. Default: undefined (dim only). */
+  readonly groupHeader?: string
+  /** Color of the trailing hotkey hint, e.g. "(a)". Default: 'gray'. */
+  readonly hotkey?: string
+  /** Color of the ▲/▼/◀/▶ scroll indicators. Default: undefined (dim only). */
+  readonly scrollIndicator?: string
+  /** Color of the search query/placeholder text. Default: undefined (dim only). */
+  readonly searchPlaceholder?: string
+}
+
+/** Every {@link Theme} color slot, always present (possibly `undefined`). */
+type ThemeColors = {
+  readonly selected: string | undefined
+  readonly disabled: string | undefined
+  readonly groupHeader: string | undefined
+  readonly hotkey: string | undefined
+  readonly scrollIndicator: string | undefined
+  readonly searchPlaceholder: string | undefined
+}
+
+/** Fully-resolved theme — every color slot present, plus whether dim styling is active. */
+type ResolvedTheme = ThemeColors & { readonly dim: boolean }
+
 /** Full component props — hook props plus rendering customisation. */
 export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly indicatorComponent?: FC<IndicatorProperties>
@@ -152,6 +186,12 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly showScrollIndicators?: boolean
   /** Placeholder text shown in the search input when the query is empty. */
   readonly searchPlaceholder?: string
+  /**
+   * Override the colors used by the default render components. Omitted
+   * slots keep their default value. Automatically disabled when the
+   * `NO_COLOR` environment variable is set. See {@link Theme}.
+   */
+  readonly theme?: Partial<Theme>
 }
 
 export type IndicatorProperties = {
@@ -160,6 +200,8 @@ export type IndicatorProperties = {
   readonly isChecked?: boolean
   // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type ItemProperties = {
@@ -169,10 +211,14 @@ export type ItemProperties = {
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   // eslint-disable-next-line react/no-unused-prop-types
   readonly isChecked?: boolean
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type GroupHeaderProperties = {
   readonly label: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 // Vim navigation keys that take precedence over hotkeys.
@@ -1095,15 +1141,60 @@ export function useEnhancedSelectInput<V>({
   }
 }
 
+/** Default colors, reproducing the component's original (pre-theming) appearance. */
+const DEFAULT_THEME: ThemeColors = {
+  selected: 'green',
+  disabled: 'gray',
+  groupHeader: undefined,
+  hotkey: 'gray',
+  scrollIndicator: undefined,
+  searchPlaceholder: undefined,
+}
+
+/**
+ * Whether color output should be suppressed, per the NO_COLOR spec
+ * (https://no-color.org/): presence of the variable disables color,
+ * *unless* its value is the empty string. Read live (not cached) so tests
+ * can toggle it between renders.
+ */
+function isNoColor(): boolean {
+  // eslint-disable-next-line n/prefer-global/process
+  return Boolean(process.env['NO_COLOR'])
+}
+
+/**
+ * Merges a partial theme over {@link DEFAULT_THEME}, then — when `NO_COLOR`
+ * is set — collapses every color to `undefined` and disables dim styling
+ * (dim is an ANSI SGR effect, which NO_COLOR is understood to suppress too).
+ */
+function resolveTheme(theme?: Partial<Theme>): ResolvedTheme {
+  const merged = { ...DEFAULT_THEME, ...theme }
+  if (isNoColor()) {
+    return {
+      selected: undefined,
+      disabled: undefined,
+      groupHeader: undefined,
+      hotkey: undefined,
+      scrollIndicator: undefined,
+      searchPlaceholder: undefined,
+      dim: false,
+    }
+  }
+
+  return { ...merged, dim: true }
+}
+
 export function DefaultIndicatorComponent({
   isSelected,
   isChecked,
+  theme,
 }: IndicatorProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
     return (
       <Box marginRight={1}>
-        <Text color={isSelected ? 'green' : undefined}>
+        <Text color={isSelected ? resolvedTheme.selected : undefined}>
           {isChecked ? '[x]' : '[ ]'}
         </Text>
       </Box>
@@ -1113,7 +1204,7 @@ export function DefaultIndicatorComponent({
   // Single-select mode: classic arrow cursor
   return (
     <Box marginRight={1}>
-      <Text color={isSelected ? 'green' : undefined}>
+      <Text color={isSelected ? resolvedTheme.selected : undefined}>
         {isSelected ? '>' : ' '}
       </Text>
     </Box>
@@ -1124,11 +1215,20 @@ export function DefaultItemComponent({
   isSelected,
   label,
   isDisabled,
+  theme,
 }: ItemProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
+  let color: string | undefined
+  if (isDisabled) {
+    color = resolvedTheme.disabled
+  } else if (isSelected) {
+    color = resolvedTheme.selected
+  }
+
   return (
     <Text
-      color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
-      dimColor={isDisabled}
+      color={color}
+      dimColor={isDisabled && resolvedTheme.dim}
       wrap="truncate-end"
     >
       {label}
@@ -1136,10 +1236,18 @@ export function DefaultItemComponent({
   )
 }
 
-export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
+export function DefaultGroupHeaderComponent({
+  label,
+  theme,
+}: GroupHeaderProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   return (
     <Box>
-      <Text dimColor wrap="truncate-end">{`── ${label} ──`}</Text>
+      <Text
+        color={resolvedTheme.groupHeader}
+        dimColor={resolvedTheme.dim}
+        wrap="truncate-end"
+      >{`── ${label} ──`}</Text>
     </Box>
   )
 }
@@ -1150,6 +1258,7 @@ export function EnhancedSelectInput<V>({
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
   searchPlaceholder = 'Search...',
+  theme,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -1164,6 +1273,7 @@ export function EnhancedSelectInput<V>({
     searchQuery,
   } = useEnhancedSelectInput(hookProperties)
 
+  const resolvedTheme = resolveTheme(theme)
   const searchable = hookProperties.searchable === true
 
   if (!hasItems && !searchable) {
@@ -1178,7 +1288,10 @@ export function EnhancedSelectInput<V>({
 
   const searchInput = searchable ? (
     <Box>
-      <Text dimColor>
+      <Text
+        color={resolvedTheme.searchPlaceholder}
+        dimColor={resolvedTheme.dim}
+      >
         {searchQuery ? `/ ${searchQuery}` : `/ ${searchPlaceholder}`}
       </Text>
     </Box>
@@ -1190,7 +1303,7 @@ export function EnhancedSelectInput<V>({
       <Box flexDirection="column">
         {searchInput}
         <Box>
-          <Text dimColor>No matches</Text>
+          <Text dimColor={resolvedTheme.dim}>No matches</Text>
         </Box>
       </Box>
     )
@@ -1202,7 +1315,10 @@ export function EnhancedSelectInput<V>({
       <Box flexDirection={isVertical ? 'column' : 'row'}>
         {showScrollIndicators && itemsAbove > 0 && (
           <Box marginRight={isVertical ? 0 : 1}>
-            <Text dimColor>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
               {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
             </Text>
           </Box>
@@ -1234,6 +1350,7 @@ export function EnhancedSelectInput<V>({
                 <GroupHeaderComponent
                   key={`group-header-${index}-${item.group}`}
                   label={item.group}
+                  theme={resolvedTheme}
                 />
               )
             }
@@ -1251,6 +1368,7 @@ export function EnhancedSelectInput<V>({
                       isSelected={isSelected}
                       isChecked={isChecked}
                       item={item}
+                      theme={resolvedTheme}
                     />
                   )}
                   <ItemComponent
@@ -1258,9 +1376,13 @@ export function EnhancedSelectInput<V>({
                     label={item.label}
                     isDisabled={Boolean(item.disabled)}
                     isChecked={isChecked}
+                    theme={resolvedTheme}
                   />
                   {item.hotkey && !isMultiple && (
-                    <Text dimColor color="gray">
+                    <Text
+                      dimColor={resolvedTheme.dim}
+                      color={resolvedTheme.hotkey}
+                    >
                       {' '}
                       ({item.hotkey})
                     </Text>
@@ -1272,7 +1394,10 @@ export function EnhancedSelectInput<V>({
         </Box>
         {showScrollIndicators && itemsBelow > 0 && (
           <Box marginLeft={isVertical ? 0 : 1}>
-            <Text dimColor>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
               {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
             </Text>
           </Box>
