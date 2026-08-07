@@ -88,6 +88,17 @@ Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter 
 
 > **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
 
+> **`defaultSelectedKeys` is mount-only.** Like any `default*` prop, it seeds the initial checked set once and is not read again — passing a new array on a later render does not change the current selection. There is no controlled `selectedKeys` prop (yet); to force a fresh selection (e.g. "select all", "restore saved selection", "reset"), remount the component with a new `key`:
+>
+> ```tsx
+> <EnhancedSelectInput
+>   key={selectionResetToken} // bump this to force a remount with new defaults
+>   items={options}
+>   multiple
+>   defaultSelectedKeys={savedSelection}
+> />
+> ```
+
 ```tsx
 import React, { useState } from 'react'
 import { render, Text } from 'ink'
@@ -374,7 +385,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `orientation`          | `'vertical' \| 'horizontal'`                | `'vertical'`                  | Layout direction                                                                                                                                                     |
 | `showScrollIndicators` | `boolean`                                   | `false`                       | Show ▲/▼ or ◀/▶ counts when `limit` clips the list                                                                                                                   |
 | `multiple`             | `boolean`                                   | `false`                       | Enable multi-select mode (Space toggles, Enter confirms)                                                                                                             |
-| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select. Keys belonging to `disabled` items are ignored — a disabled item can never be checked or seeded into `onConfirm`             |
+| `defaultSelectedKeys`  | `string[]`                                  | —                             | Pre-checked item keys for multi-select, read once on mount (see [Multi-select](#multi-select) note below). Keys belonging to `disabled` items are ignored — a disabled item can never be checked or seeded into `onConfirm` |
 | `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items, unaffected by the active search filter                                                                  |
 | `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query |
 | `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                             |
