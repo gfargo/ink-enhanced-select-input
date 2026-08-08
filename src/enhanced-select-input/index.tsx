@@ -1349,7 +1349,7 @@ export function useEnhancedSelectInput<V>({
   // Both lookups are binary searches — pageStarts is strictly ascending — so
   // per-render cost is O(log pages) rather than O(pages).
   let effectiveRotateIndex: number
-  let visibleItems: Array<Item<V>>
+  let visibleItems: Array<ItemOrSeparator<V>>
   if (limit && paginationMode === 'scroll') {
     const windowStart = scrollWindowStart(
       windowStartReference.current,
