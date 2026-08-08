@@ -36,6 +36,7 @@ const allKeyMapEnabled: Required<KeyMap> = {
   arrows: true,
   vimKeys: true,
   homeEnd: true,
+  pageKeys: true,
   cancel: true,
   select: true,
   toggle: true,
@@ -66,6 +67,8 @@ const context = (
   orientation: overrides.orientation ?? ('vertical' as const),
   selectedIndex: overrides.selectedIndex ?? 0,
   filteredItems: overrides.filteredItems ?? items,
+  loop: overrides.loop,
+  pageSize: overrides.pageSize,
   typeahead: overrides.typeahead ?? false,
   typeaheadActive: overrides.typeaheadActive ?? false,
 })
@@ -264,6 +267,98 @@ test('hotkeys are disabled in multi-select mode', (t) => {
     context({ km: { vimKeys: false }, multiple: true })
   )
   t.deepEqual(intent, { type: 'none' })
+})
+
+// ── Page Up/Down ────────────────────────────────────────────────────────────
+
+const fiveItems: Array<Item<string>> = [
+  { key: '0', label: 'Zero', value: '0' },
+  { key: '1', label: 'One', value: '1' },
+  { key: '2', label: 'Two', value: '2' },
+  { key: '3', label: 'Three', value: '3' },
+  { key: '4', label: 'Four', value: '4' },
+]
+
+test('page down navigates forward by pageSize items', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 0, pageSize: 2 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 2 })
+})
+
+test('page up navigates backward by pageSize items', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageUp: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 3, pageSize: 2 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('page down wraps around by default (loop defaults to true)', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 3, pageSize: 3 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('page down clamps at the last item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({
+      filteredItems: fiveItems,
+      selectedIndex: 3,
+      pageSize: 3,
+      loop: false,
+    })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
+})
+
+test('page up clamps at the first item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageUp: true }),
+    context({
+      filteredItems: fiveItems,
+      selectedIndex: 1,
+      pageSize: 3,
+      loop: false,
+    })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 0 })
+})
+
+test('page keys are no-ops when km.pageKeys is disabled', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ km: { pageKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('arrow-down navigation clamps at the last item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 4, loop: false })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
+})
+
+test('arrow-up navigation wraps by default even when a page-key context field is set', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ upArrow: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
 })
 
 test('hotkeys are disabled in searchable mode', (t) => {
