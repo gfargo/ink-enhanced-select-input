@@ -22,6 +22,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Searchable Mode:** Type to filter items inline with case-insensitive matching, opt-in fuzzy matching, custom filter predicates, and matched-character highlighting.
 - **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
+- **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
 - **Theming:** Override the default component colors with a `theme` prop; automatically disabled when [`NO_COLOR`](https://no-color.org/) is set.
@@ -247,6 +248,57 @@ You can provide a custom header renderer via `groupHeaderComponent`:
 />
 ```
 
+### Descriptions, Hints & Disabled Reasons
+
+Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    {
+      label: 'Deploy to production',
+      value: 'deploy',
+      description: 'Pushes the current branch live. This cannot be undone.',
+    },
+    { label: 'Open file', value: 'open', hint: 'Ctrl+O' },
+    {
+      label: 'Premium feature',
+      value: 'premium',
+      disabled: true,
+      disabledReason: 'Upgrade to unlock',
+    },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+> **Pagination note:** `limit` budgets one visual row per item (see [Grouped Items](#grouped-items) above). A rendered `description` adds an extra line that isn't counted toward that budget, so windows containing descriptions can render taller than `limit` rows.
+
+### Separator Items
+
+Insert a non-navigable visual rule between items with `{ type: 'separator' }` — useful for grouping without a header label. Separators are skipped by all navigation (arrows, vim keys, Home/End, type-ahead, hotkeys) and are never passed to `onSelect`, `onHighlight`, or `onConfirm`.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    { label: 'Copy', value: 'copy' },
+    { label: 'Paste', value: 'paste' },
+    { type: 'separator' },
+    { label: 'Delete', value: 'delete' },
+  ]}
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+Provide a custom separator renderer via `separatorComponent`:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  separatorComponent={() => <Text dimColor>{'· '.repeat(10)}</Text>}
+/>
+```
+
 ### Searchable Mode
 
 Enable inline filtering with the `searchable` prop. Printable characters build a search query that filters items by label (case-insensitive substring match). A search input line renders above the item list.
@@ -418,13 +470,23 @@ function MyIndicator({ isSelected }) {
   )
 }
 
-function MyItem({ isSelected, isDisabled, label }) {
+function MyItem({
+  isSelected,
+  isDisabled,
+  label,
+  description,
+  hint,
+  disabledReason,
+}) {
   return (
     <Text
       color={isDisabled ? 'gray' : isSelected ? 'yellow' : 'white'}
       dimColor={isDisabled}
     >
       {label}
+      {hint ? ` ${hint}` : ''}
+      {isDisabled && disabledReason ? ` — ${disabledReason}` : ''}
+      {description ? ` (${description})` : ''}
     </Text>
   )
 }
@@ -435,6 +497,8 @@ function MyItem({ isSelected, isDisabled, label }) {
   itemComponent={MyItem}
 />
 ```
+
+`ItemProperties` includes `description`, `hint`, and `disabledReason` so a custom `itemComponent` can render them however it likes. The built-in `DefaultItemComponent` is the only renderer the library draws these for automatically — once you supply your own `itemComponent`, you own rendering that text; the library won't render it a second time.
 
 `DefaultItemComponent` and `DefaultGroupHeaderComponent` both render with `wrap="truncate-end"` so an overlong label or group name (e.g. a long file path or branch name) ellipsizes onto a single row instead of wrapping, keeping `limit` a reliable row budget. A custom `itemComponent` or `groupHeaderComponent` renders its own `<Text>` and must set its own `wrap` if it needs the same guarantee — an unbounded default `wrap="wrap"` can still push a page past `limit` rows on a narrow terminal.
 
@@ -515,7 +579,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 
 | Prop                     | Type                                        | Default                       | Description                                                                                                                                                                                                                 |
 | ------------------------ | ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `items`                  | `Array<Item<V>>`                            | _required_                    | List of selectable items                                                                                                                                                                                                    |
+| `items`                  | `Array<ItemOrSeparator<V>>`                 | _required_                    | List of selectable items, optionally interspersed with `{ type: 'separator' }` rows                                                                                                                                         |
 | `isFocused`              | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                                                                                     |
 | `initialIndex`           | `number`                                    | —                             | Index of the initially highlighted item. Initial-only — has no effect after mount                                                                                                                                           |
 | `initialKey`             | `string`                                    | —                             | Highlight the item whose `key` (or `String(value)` fallback) matches at mount. Wins over `initialValue` and `initialIndex`. Initial-only                                                                                    |
@@ -542,6 +606,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `checkedIndicator`       | `string`                                    | `'[x]'`                       | Glyph shown for a checked item in multi-select mode                                                                                                                                                                         |
 | `uncheckedIndicator`     | `string`                                    | `'[ ]'`                       | Glyph shown for an unchecked item in multi-select mode                                                                                                                                                                      |
 | `groupHeaderComponent`   | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                                                                                |
+| `separatorComponent`     | `FC<SeparatorProperties>`                   | `DefaultSeparatorComponent`   | Custom renderer for `{ type: 'separator' }` rows                                                                                                                                                                            |
 | `searchable`             | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                                                                            |
 | `searchPlaceholder`      | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                                                                           |
 | `matchMode`              | `'includes' \| 'fuzzy'`                     | `'includes'`                  | Built-in search matcher; `'fuzzy'` matches an ordered, non-contiguous subsequence. Ignored when `filter` is supplied                                                                                                        |
@@ -564,7 +629,17 @@ type Item<V> = {
   indicator?: React.ReactNode // Single-select only — ignored (with a dev warning) when `multiple` is true
   disabled?: boolean
   group?: string // Items with the same group are rendered under a shared header
+  description?: string // Rendered dimmed on its own line beneath the label
+  hint?: string // Rendered dimmed to the right of the label
+  disabledReason?: string // Rendered dimmed beside the label when `disabled` is true
 }
+
+type SeparatorItem = {
+  type: 'separator'
+  key?: string
+}
+
+type ItemOrSeparator<V> = Item<V> | SeparatorItem
 ```
 
 > **`key` field:** React uses `key` (or `String(value)` as a fallback) to track
