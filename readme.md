@@ -178,6 +178,33 @@ Customize the checkbox glyphs with `checkedIndicator` / `uncheckedIndicator` (de
 
 `item.indicator` only applies in single-select mode — see the [Multi-select](#multi-select) note above for the multi-select behaviour.
 
+### Pagination (`limit`)
+
+Set `limit` to cap how many rows are visible at once. By default (`paginationMode: 'page'`), the viewport snaps to fixed page boundaries — moving past the last visible row jumps the whole window to the next page.
+
+Set `paginationMode="scroll"` for a cursor-following viewport instead: the window advances one row at a time as the cursor reaches its edge, keeping the highlight where the eye already is — matching `ink-select-input`, `fzf`, and `gum`.
+
+```tsx
+<EnhancedSelectInput items={items} limit={5} paginationMode="scroll" />
+```
+
+Use `scrollOffset` (only meaningful in `'scroll'` mode) to keep a margin of context rows above/below the cursor before the window scrolls:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  limit={5}
+  paginationMode="scroll"
+  scrollOffset={2}
+/>
+```
+
+`scrollOffset` is clamped internally to `floor((limit - 1) / 2)` — larger values would leave no stable cursor range between the "scroll up" and "scroll down" margins, so the window would jitter instead of scrolling one row at a time.
+
+Home/End always land on a sane window — Home scrolls to the start of the list, End scrolls so the last item is on the bottom row.
+
+`'scroll'` mode windows are sized by item count. `'page'` mode charges group headers against `limit` too (see [Grouped Items](#grouped-items)) so its rendered height never exceeds `limit`; in `'scroll'` mode a window can render up to `limit` items **plus** any group headers in view, so the visible row count may exceed `limit` when `group` is used together with `paginationMode="scroll"`.
+
 ### Grouped Items
 
 Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
@@ -492,6 +519,8 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                                                                                     |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                                                                                     |
 | `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count, one row each; the default components truncate overlong labels/group names rather than wrapping them                                                         |
+| `paginationMode`       | `'page' \| 'scroll'`                        | `'page'`                      | How the `limit` window advances: `'page'` snaps to fixed page boundaries; `'scroll'` follows the cursor one row at a time                                                                                                   |
+| `scrollOffset`         | `number`                                    | `0`                           | Rows of context to keep above/below the cursor before scrolling. Only used when `paginationMode` is `'scroll'`. Clamped internally to `floor((limit - 1) / 2)`                                                              |
 | `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                                                                                  |
 | `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                                                                        |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                                                                                  |
