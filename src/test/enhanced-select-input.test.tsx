@@ -5866,6 +5866,78 @@ test.serial(
 )
 
 test.serial(
+  'dev warning: selectedIndex combined with an explicit initialIndex={0} still logs a warning',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput items={items} selectedIndex={1} initialIndex={0} />
+      )
+      await delay()
+      t.true(
+        warnings.some((message) =>
+          message.includes('selectedIndex and initialIndex')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: selectedIndex without initialIndex does not log a warning',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput items={items} selectedIndex={1} />)
+      await delay()
+      t.false(
+        warnings.some((message) =>
+          message.includes('selectedIndex and initialIndex')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
   'dev warning: selectedKeys combined with defaultSelectedKeys logs a warning',
   async (t) => {
     const items = [{ label: 'A', value: 'a', key: 'a' }]

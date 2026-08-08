@@ -707,7 +707,7 @@ export type UseEnhancedSelectInputResult<V> = {
 export function useEnhancedSelectInput<V>({
   items,
   isFocused = true,
-  initialIndex = 0,
+  initialIndex: rawInitialIndex,
   selectedIndex: controlledIndex,
   onIndexChange,
   limit,
@@ -727,6 +727,9 @@ export function useEnhancedSelectInput<V>({
   typeahead = false,
   typeaheadTimeout = 500,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
+  // Kept distinct from the defaulted `initialIndex` below so the dev warning
+  // can tell "not passed" apart from "explicitly passed as 0".
+  const initialIndex = rawInitialIndex ?? 0
   // Resolve full key map — any flag not supplied defaults to enabled (true).
   const km = {
     arrows: keyMap?.arrows ?? true,
@@ -928,13 +931,13 @@ export function useEnhancedSelectInput<V>({
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] === 'production') return
-    if (isIndexControlled && initialIndex !== 0) {
+    if (isIndexControlled && rawInitialIndex !== undefined) {
       console.warn(
         '[ink-enhanced-select-input] selectedIndex and initialIndex were both provided — ' +
           'initialIndex is ignored once selectedIndex (controlled mode) is set.'
       )
     }
-  }, [isIndexControlled, initialIndex])
+  }, [isIndexControlled, rawInitialIndex])
 
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
