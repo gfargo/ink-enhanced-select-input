@@ -36,9 +36,13 @@ const allKeyMapEnabled: Required<KeyMap> = {
   arrows: true,
   vimKeys: true,
   homeEnd: true,
+  pageKeys: true,
   cancel: true,
   select: true,
   toggle: true,
+  bulk: true,
+  hotkeys: true,
+  search: true,
 }
 
 const items: Array<Item<string>> = [
@@ -62,6 +66,10 @@ const context = (
   orientation: overrides.orientation ?? ('vertical' as const),
   selectedIndex: overrides.selectedIndex ?? 0,
   filteredItems: overrides.filteredItems ?? items,
+  loop: overrides.loop,
+  pageSize: overrides.pageSize,
+  typeahead: overrides.typeahead ?? false,
+  typeaheadActive: overrides.typeaheadActive ?? false,
 })
 
 // Search-edit keys (backspace/delete/clear-escape) win over everything else,
@@ -168,6 +176,52 @@ test('vim key navigation beats an identical-character item hotkey', (t) => {
   t.deepEqual(intent, { type: 'navigate', index: 1 })
 })
 
+// B14 regression: arrow keys report `input === ''`, which also equals an
+// unset `hotkey: ''` on an item. Navigation must resolve first so that
+// empty-hotkey items never fire on a bare arrow keypress.
+test('arrow-down navigation does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('home/end jump does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ end: true }),
+    context({ filteredItems: emptyHotkeyItems, selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'jump', index: 1 })
+})
+
+// B14 regression: with km.arrows disabled, a physical arrow keypress still
+// reports `input === ''` but resolveNavigateIntent no longer intercepts it
+// (no mapped step), so execution reaches hotkey resolution directly. An
+// empty-string item hotkey must not match here either.
+test('empty-string item hotkey never fires when arrow navigation is disabled (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems, km: { arrows: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
 test('return submits when select is enabled and no earlier branch matched', (t) => {
   const intent = resolveInputIntent('', key({ return: true }), context())
   t.deepEqual(intent, { type: 'submit' })
@@ -214,6 +268,98 @@ test('hotkeys are disabled in multi-select mode', (t) => {
   t.deepEqual(intent, { type: 'none' })
 })
 
+// ── Page Up/Down ────────────────────────────────────────────────────────────
+
+const fiveItems: Array<Item<string>> = [
+  { key: '0', label: 'Zero', value: '0' },
+  { key: '1', label: 'One', value: '1' },
+  { key: '2', label: 'Two', value: '2' },
+  { key: '3', label: 'Three', value: '3' },
+  { key: '4', label: 'Four', value: '4' },
+]
+
+test('page down navigates forward by pageSize items', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 0, pageSize: 2 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 2 })
+})
+
+test('page up navigates backward by pageSize items', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageUp: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 3, pageSize: 2 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('page down wraps around by default (loop defaults to true)', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 3, pageSize: 3 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('page down clamps at the last item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({
+      filteredItems: fiveItems,
+      selectedIndex: 3,
+      pageSize: 3,
+      loop: false,
+    })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
+})
+
+test('page up clamps at the first item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageUp: true }),
+    context({
+      filteredItems: fiveItems,
+      selectedIndex: 1,
+      pageSize: 3,
+      loop: false,
+    })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 0 })
+})
+
+test('page keys are no-ops when km.pageKeys is disabled', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ pageDown: true }),
+    context({ km: { pageKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('arrow-down navigation clamps at the last item when loop is false', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 4, loop: false })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
+})
+
+test('arrow-up navigation wraps by default even when a page-key context field is set', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ upArrow: true }),
+    context({ filteredItems: fiveItems, selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 4 })
+})
+
 test('hotkeys are disabled in searchable mode', (t) => {
   const intent = resolveInputIntent(
     'j',
@@ -221,4 +367,153 @@ test('hotkeys are disabled in searchable mode', (t) => {
     context({ km: { vimKeys: false }, searchable: true })
   )
   t.deepEqual(intent, { type: 'search-append', char: 'j' })
+})
+
+// --- F7: bulk selection chords (Ctrl+A / Ctrl+D / Ctrl+R) ---
+
+test('ctrl+a resolves to select-all in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'select-all' })
+})
+
+test('ctrl+d resolves to select-none in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'd',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'select-none' })
+})
+
+test('ctrl+r resolves to invert in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'r',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'invert' })
+})
+
+test('bulk chords are no-ops outside multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: false })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('bulk chords are no-ops when km.bulk is disabled', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true, km: { bulk: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('bulk chords still resolve in searchable multi-select mode (chords are excluded from search-append)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'select-all' })
+})
+
+test('an unmodified "a" is not treated as a bulk chord', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key(),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'search-append', char: 'a' })
+})
+
+test('alt+a is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+d is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'd',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+r is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'r',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+a in searchable multi-select mode is not a bulk chord and is not appended to search (still excluded as a modified chord)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('km.hotkeys disabled leaves Enter/select working', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({ km: { hotkeys: false } })
+  )
+  t.deepEqual(intent, { type: 'submit' })
+})
+
+test('km.hotkeys disabled turns a hotkey char into a no-op', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { hotkeys: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('km.select disabled leaves item hotkeys working', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { select: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'hotkey', item: items[0], index: 0 })
+})
+
+test('km.hotkeys disabled with typeahead lets a hotkey char be captured as typeahead', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({
+      km: { hotkeys: false, vimKeys: false },
+      typeahead: true,
+    })
+  )
+  t.deepEqual(intent, { type: 'typeahead', char: 'j' })
+})
+
+test('km.search disabled stops printable characters from being captured in searchable mode', (t) => {
+  const intent = resolveInputIntent(
+    'z',
+    key(),
+    context({ searchable: true, km: { search: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
 })
