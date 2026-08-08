@@ -11,6 +11,8 @@ export {
   findLastValidIndex,
   isSeparator,
   isSelectable,
+  matchesQuery,
+  computeMatchRanges,
 } from './enhanced-select-input/index.js'
 
 export type {
@@ -18,6 +20,7 @@ export type {
   SeparatorItem,
   ItemOrSeparator,
   KeyMap,
+  MatchMode,
   Properties,
   Theme,
   UseEnhancedSelectInputProperties,

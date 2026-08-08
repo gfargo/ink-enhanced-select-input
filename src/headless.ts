@@ -2,6 +2,8 @@ export {
   useEnhancedSelectInput,
   isSeparator,
   isSelectable,
+  matchesQuery,
+  computeMatchRanges,
 } from './enhanced-select-input/index.js'
 
 export type {
@@ -9,6 +11,7 @@ export type {
   SeparatorItem,
   ItemOrSeparator,
   KeyMap,
+  MatchMode,
   UseEnhancedSelectInputProperties,
   UseEnhancedSelectInputResult,
 } from './enhanced-select-input/index.js'

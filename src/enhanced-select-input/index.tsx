@@ -98,6 +98,8 @@ export type KeyMap = {
   readonly vimKeys?: boolean
   /** Home / End jump-to-boundary keys. Default: true. */
   readonly homeEnd?: boolean
+  /** Page Up / Page Down keys — jump by a page of items. Default: true. */
+  readonly pageKeys?: boolean
   /** Escape → onCancel. Default: true. */
   readonly cancel?: boolean
   /** Enter → onSelect / onConfirm. Default: true. */
@@ -120,6 +122,14 @@ export type KeyMap = {
    */
   readonly search?: boolean
 }
+
+/**
+ * Controls the built-in search matcher used when `filter` is not supplied.
+ * `'includes'` is a case-insensitive substring match (the historical
+ * behaviour). `'fuzzy'` is a case-insensitive ordered subsequence match —
+ * the query's characters must appear in order, not necessarily contiguously.
+ */
+export type MatchMode = 'includes' | 'fuzzy'
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
 export type UseEnhancedSelectInputProperties<V> = {
@@ -187,6 +197,24 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly searchable?: boolean
   /**
+   * Fully overrides the built-in search matching. When provided, an item is
+   * included whenever `filter(item, query)` returns true — `matchMode` and
+   * `searchFields` are ignored. Only used when `searchable` is true.
+   */
+  readonly filter?: (item: Item<V>, query: string) => boolean
+  /**
+   * Controls the built-in matcher used when `filter` is not supplied.
+   * See {@link MatchMode}. Defaults to `'includes'`.
+   */
+  readonly matchMode?: MatchMode
+  /**
+   * Selects which text field(s) of an item the built-in matcher searches.
+   * Defaults to searching `item.label` only. Return a single string or an
+   * array of strings to search multiple fields — an item matches if any
+   * field matches. Ignored when `filter` is supplied.
+   */
+  readonly searchFields?: (item: Item<V>) => string | string[]
+  /**
    * Selectively disable built-in key groups to avoid conflicts with
    * keybindings registered elsewhere in your application.
    * See {@link KeyMap} for available groups and defaults.
@@ -196,6 +224,14 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly typeahead?: boolean
   /** Idle window (ms) after which the type-ahead buffer resets. Default: 500. */
   readonly typeaheadTimeout?: number
+  /**
+   * Whether navigation (arrows, vim keys, Page Up/Down) wraps around at the
+   * first/last item. When `false`, navigation clamps at the boundary instead
+   * — pressing "down" on the last item keeps the highlight there rather than
+   * jumping back to the top. Home/End are unaffected; they always jump to
+   * the absolute boundary. Default: true.
+   */
+  readonly loop?: boolean
 }
 
 /**
@@ -293,6 +329,14 @@ export type ItemProperties = {
   readonly hint?: string
   // eslint-disable-next-line react/no-unused-prop-types
   readonly disabledReason?: string
+  /**
+   * Matched character ranges (`[start, end)`, ascending, non-overlapping)
+   * within `label` for the active search query, computed with the active
+   * `matchMode`. Undefined outside searchable mode or when the query is
+   * empty; an empty array when the query doesn't match the label (e.g. a
+   * custom `filter` matched on a different field).
+   */
+  readonly matches?: ReadonlyArray<readonly [number, number]>
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
@@ -330,22 +374,68 @@ export function resolveInitialIndex<V>(
 export function findNextValidIndex<V>(
   items: Array<ItemOrSeparator<V>>,
   currentIndex: number,
-  step: number
+  step: number,
+  loop = true
 ): number {
   const itemCount = items.length
   if (itemCount === 0) return 0
 
-  let nextIndex = currentIndex
+  if (loop) {
+    let nextIndex = currentIndex
+    for (let i = 0; i < itemCount; i++) {
+      nextIndex = (nextIndex + step + itemCount) % itemCount
+      if (isSelectable(items[nextIndex])) {
+        return nextIndex
+      }
+    }
 
+    // No selectable item — stay put
+    return currentIndex
+  }
+
+  // Clamp mode: step without wrapping, skipping non-selectable items along
+  // the way. Stops (stays put) once stepping again would run past the boundary.
+  let nextIndex = currentIndex
   for (let i = 0; i < itemCount; i++) {
-    nextIndex = (nextIndex + step + itemCount) % itemCount
+    const candidate = nextIndex + step
+    if (candidate < 0 || candidate >= itemCount) break
+    nextIndex = candidate
     if (isSelectable(items[nextIndex])) {
       return nextIndex
     }
   }
 
-  // No selectable item — stay put
   return currentIndex
+}
+
+/** Default Page Up/Down step size when `limit` is not set (no visible window to size the page from). */
+const DEFAULT_PAGE_SIZE = 10
+
+/**
+ * Moves `abs(delta)` valid steps in the direction of `delta`'s sign, skipping
+ * non-selectable items exactly like {@link findNextValidIndex} at each step
+ * and honouring `loop`. Stops early if a step doesn't move the index
+ * (boundary reached in clamp mode, or no selectable item) rather than
+ * spinning `abs(delta)` times for nothing.
+ */
+export function findPageIndex<V>(
+  items: Array<ItemOrSeparator<V>>,
+  currentIndex: number,
+  delta: number,
+  loop: boolean
+): number {
+  if (items.length === 0) return 0
+
+  const step = delta < 0 ? -1 : 1
+  const pageSize = Math.abs(delta)
+  let index = currentIndex
+  for (let i = 0; i < pageSize; i++) {
+    const next = findNextValidIndex(items, index, step, loop)
+    if (next === index) break
+    index = next
+  }
+
+  return index
 }
 
 export function findFirstValidIndex<V>(
@@ -462,6 +552,109 @@ function itemKey<V>(item: Item<V>): string {
   return item.key ?? String(item.value)
 }
 
+/**
+ * Whether `text` matches `query` under the given {@link MatchMode}. An empty
+ * query always matches. `'includes'` is a case-insensitive substring test;
+ * `'fuzzy'` is a case-insensitive ordered subsequence test (each query
+ * character must appear in `text`, in order, not necessarily contiguously).
+ *
+ * Written as a plain index walk (no regex/split) since this runs once per
+ * item per keystroke over the full (unpaginated) item list — see the 10k-item
+ * benchmark in `large-list-performance.test.tsx`. The fuzzy walk compares
+ * Unicode code points (via `codePointAt`), not UTF-16 code units, so astral
+ * characters (e.g. emoji) that are encoded as surrogate pairs still compare
+ * equal as a single character.
+ */
+export function matchesQuery(
+  text: string,
+  query: string,
+  mode: MatchMode
+): boolean {
+  if (!query) return true
+  const normalizedText = text.toLowerCase()
+  const normalizedQuery = query.toLowerCase()
+
+  if (mode === 'fuzzy') {
+    let textIndex = 0
+    let queryIndex = 0
+    while (queryIndex < normalizedQuery.length) {
+      const queryCodePoint = normalizedQuery.codePointAt(queryIndex)!
+      let found = false
+      while (textIndex < normalizedText.length) {
+        const textCodePoint = normalizedText.codePointAt(textIndex)!
+        textIndex += textCodePoint > 0xff_ff ? 2 : 1
+        if (textCodePoint === queryCodePoint) {
+          found = true
+          break
+        }
+      }
+
+      if (!found) return false
+      queryIndex += queryCodePoint > 0xff_ff ? 2 : 1
+    }
+
+    return true
+  }
+
+  return normalizedText.includes(normalizedQuery)
+}
+
+/**
+ * Matched character ranges (`[start, end)`, ascending, non-overlapping) of
+ * `query` within `text` under the given {@link MatchMode}. Returns `[]` for
+ * an empty query or no match. `'includes'` yields a single range at the
+ * substring's position; `'fuzzy'` yields one range per matched character,
+ * merging adjacent indices into contiguous ranges.
+ */
+export function computeMatchRanges(
+  text: string,
+  query: string,
+  mode: MatchMode
+): Array<[number, number]> {
+  if (!query) return []
+  const normalizedText = text.toLowerCase()
+  const normalizedQuery = query.toLowerCase()
+
+  if (mode === 'fuzzy') {
+    const ranges: Array<[number, number]> = []
+    let searchFrom = 0
+    let queryIndex = 0
+    while (queryIndex < normalizedQuery.length) {
+      const queryCodePoint = normalizedQuery.codePointAt(queryIndex)!
+      let matchIndex = -1
+      let matchEnd = -1
+      for (let i = searchFrom; i < normalizedText.length; ) {
+        const textCodePoint = normalizedText.codePointAt(i)!
+        const textCharLength = textCodePoint > 0xff_ff ? 2 : 1
+        if (textCodePoint === queryCodePoint) {
+          matchIndex = i
+          matchEnd = i + textCharLength
+          break
+        }
+
+        i += textCharLength
+      }
+
+      if (matchIndex === -1) return []
+
+      const lastRange = ranges.at(-1)
+      if (lastRange && lastRange[1] === matchIndex) {
+        lastRange[1] = matchEnd
+      } else {
+        ranges.push([matchIndex, matchEnd])
+      }
+
+      searchFrom = matchEnd
+      queryIndex += queryCodePoint > 0xff_ff ? 2 : 1
+    }
+
+    return ranges
+  }
+
+  const index = normalizedText.indexOf(normalizedQuery)
+  return index === -1 ? [] : [[index, index + normalizedQuery.length]]
+}
+
 /** Fully-resolved key map — every group explicitly enabled or disabled. */
 type ResolvedKeyMap = Required<KeyMap>
 
@@ -479,6 +672,10 @@ export type InputIntentContext<V> = {
   typeahead?: boolean
   /** Whether the type-ahead buffer is currently active (non-empty, not yet idle-expired). Defaults to false. */
   typeaheadActive?: boolean
+  /** Whether navigation wraps around at the first/last item. Defaults to true. */
+  loop?: boolean
+  /** Number of items a Page Up/Down press moves. Defaults to {@link DEFAULT_PAGE_SIZE}. */
+  pageSize?: number
 }
 
 /**
@@ -540,6 +737,32 @@ function resolveJumpIntent<V>(
   return undefined
 }
 
+/** Page Up/Down, gated on `km.pageKeys` — moves a page of items at a time, honoring `loop`. */
+function resolvePageIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, filteredItems, selectedIndex } = context
+  const loop = context.loop ?? true
+  const pageSize = context.pageSize ?? DEFAULT_PAGE_SIZE
+
+  if (km.pageKeys && key.pageUp) {
+    return {
+      type: 'navigate',
+      index: findPageIndex(filteredItems, selectedIndex, -pageSize, loop),
+    }
+  }
+
+  if (km.pageKeys && key.pageDown) {
+    return {
+      type: 'navigate',
+      index: findPageIndex(filteredItems, selectedIndex, pageSize, loop),
+    }
+  }
+
+  return undefined
+}
+
 /** -1 (backward) / +1 (forward) for the arrow or vim key pressed, orientation-aware. */
 function resolveNavigateStep<V>(
   input: string,
@@ -584,7 +807,8 @@ function resolveNavigateIntent<V>(
     index: findNextValidIndex(
       context.filteredItems,
       context.selectedIndex,
-      step
+      step,
+      context.loop ?? true
     ),
   }
 }
@@ -673,6 +897,7 @@ function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
     arrows: keyMap?.arrows ?? true,
     vimKeys: keyMap?.vimKeys ?? true,
     homeEnd: keyMap?.homeEnd ?? true,
+    pageKeys: keyMap?.pageKeys ?? true,
     cancel: keyMap?.cancel ?? true,
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
@@ -788,6 +1013,9 @@ export function resolveInputIntent<V>(
 
   const jump = resolveJumpIntent(key, context)
   if (jump) return jump
+
+  const page = resolvePageIntent(key, context)
+  if (page) return page
 
   if (isToggleIntent(input, context)) {
     return { type: 'toggle' }
@@ -917,9 +1145,13 @@ export function useEnhancedSelectInput<V>({
   minSelections,
   maxSelections,
   searchable = false,
+  filter,
+  matchMode = 'includes',
+  searchFields,
   keyMap,
   typeahead = false,
   typeaheadTimeout = 500,
+  loop = true,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
@@ -936,17 +1168,20 @@ export function useEnhancedSelectInput<V>({
   // across renders that don't actually change the item set — downstream
   // effects depend on this reference to distinguish "items changed" from
   // "parent re-rendered with a new-but-equivalent array".
-  const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(
-    () =>
-      searchable && searchQuery
-        ? items.filter(
-            (item): item is Item<V> =>
-              !isSeparator(item) &&
-              item.label.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : items,
-    [items, searchable, searchQuery]
-  )
+  const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(() => {
+    if (!searchable || !searchQuery) return items
+    const nonSeparatorItems = items.filter(
+      (item): item is Item<V> => !isSeparator(item)
+    )
+    if (filter) return nonSeparatorItems.filter((item) => filter(item, searchQuery))
+    return nonSeparatorItems.filter((item) => {
+      const fields = searchFields ? searchFields(item) : item.label
+      const fieldList = Array.isArray(fields) ? fields : [fields]
+      return fieldList.some((field) =>
+        matchesQuery(field, searchQuery, matchMode)
+      )
+    })
+  }, [items, searchable, searchQuery, filter, matchMode, searchFields])
 
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
@@ -1018,6 +1253,11 @@ export function useEnhancedSelectInput<V>({
       ? rawSelectedItem
       : undefined
   const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
+  // Page Up/Down step by the number of items currently on screen — matching
+  // what the user actually sees scroll by a "page" — falling back to a fixed
+  // size when there's no `limit` (the whole list is already visible, so
+  // there's no on-screen page to size the step from).
+  const pageSize = limit ? Math.max(1, visibleItems.length) : DEFAULT_PAGE_SIZE
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
@@ -1292,6 +1532,8 @@ export function useEnhancedSelectInput<V>({
         filteredItems,
         typeahead,
         typeaheadActive: typeaheadIsActive,
+        loop,
+        pageSize,
       })
 
       switch (intent.type) {
@@ -1474,6 +1716,7 @@ export function DefaultItemComponent({
   isSelected,
   label,
   isDisabled,
+  matches,
   theme,
 }: ItemProperties) {
   const resolvedTheme = theme ?? resolveTheme()
@@ -1484,13 +1727,39 @@ export function DefaultItemComponent({
     color = resolvedTheme.selected
   }
 
+  if (!matches || matches.length === 0) {
+    return (
+      <Text
+        color={color}
+        dimColor={isDisabled && resolvedTheme.dim}
+        wrap="truncate-end"
+      >
+        {label}
+      </Text>
+    )
+  }
+
+  const segments: React.ReactNode[] = []
+  let cursor = 0
+  for (const [start, end] of matches) {
+    if (start > cursor) segments.push(label.slice(cursor, start))
+    segments.push(
+      <Text key={`match-${start}-${end}`} bold>
+        {label.slice(start, end)}
+      </Text>
+    )
+    cursor = end
+  }
+
+  if (cursor < label.length) segments.push(label.slice(cursor))
+
   return (
     <Text
       color={color}
       dimColor={isDisabled && resolvedTheme.dim}
       wrap="truncate-end"
     >
-      {label}
+      {segments}
     </Text>
   )
 }
@@ -1564,6 +1833,7 @@ export function EnhancedSelectInput<V>({
 
   const resolvedTheme = resolveTheme(theme)
   const searchable = hookProperties.searchable === true
+  const matchMode = hookProperties.matchMode ?? 'includes'
 
   if (!hasItems && !searchable) {
     return <Box />
@@ -1651,6 +1921,10 @@ export function EnhancedSelectInput<V>({
             const isChecked = isMultiple
               ? checkedKeys.has(itemKey(item))
               : undefined
+            const matches =
+              searchable && searchQuery
+                ? computeMatchRanges(item.label, searchQuery, matchMode)
+                : undefined
 
             // Determine if we need to render a group header before this item.
             // Compare against the immediately preceding visible item (adjacency check),
@@ -1695,6 +1969,7 @@ export function EnhancedSelectInput<V>({
                       description={item.description}
                       hint={item.hint}
                       disabledReason={item.disabledReason}
+                      matches={matches}
                       theme={resolvedTheme}
                     />
                     {isDefaultItemComponent && item.hint && (
