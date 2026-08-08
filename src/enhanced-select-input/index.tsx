@@ -135,7 +135,35 @@ export type MatchMode = 'includes' | 'fuzzy'
 export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<ItemOrSeparator<V>>
   readonly isFocused?: boolean
+  /**
+   * Index of the item to highlight at mount. Ignored after mount — like
+   * `initialValue`/`initialKey`, this is an initial-only prop, not a
+   * controlled one. When several of `initialKey`, `initialValue`, and
+   * `initialIndex` are supplied, `initialKey` wins, then `initialValue`,
+   * then `initialIndex`.
+   */
   readonly initialIndex?: number
+  /**
+   * Highlight the item whose `key` (or `String(value)` fallback) equals this
+   * string at mount. Takes precedence over `initialValue` and `initialIndex`.
+   * Initial-only — see {@link initialIndex}.
+   */
+  readonly initialKey?: string
+  /**
+   * Highlight the first item whose `value` matches this at mount, using `===`
+   * (reference equality — for object values, prefer `initialKey`). Takes
+   * precedence over `initialIndex` but not `initialKey`. Initial-only — see
+   * {@link initialIndex}.
+   */
+  readonly initialValue?: V
+  /**
+   * When none of `initialKey`/`initialValue`/`initialIndex` resolve to an
+   * item (or none are supplied), fall back to highlighting the first enabled
+   * item. Set to `false` to start with no highlight instead — `selectedItem`
+   * is `undefined`, `onHighlight` does not fire, and no cursor is rendered,
+   * until the user navigates. Default: true.
+   */
+  readonly autoSelectFirstEnabled?: boolean
   /**
    * Controls the highlighted index from outside the component. When
    * provided, navigation/jump/hotkey/typeahead keypresses call
@@ -433,6 +461,55 @@ export function resolveInitialIndex<V>(
   }
 
   return clamped
+}
+
+/**
+ * Resolves the index to highlight at mount from `initialKey`, `initialValue`,
+ * `initialIndex`, and `autoSelectFirstEnabled`, in that precedence order.
+ *
+ * `autoSelectFirstEnabled` only governs the final fallback step, when none of
+ * `initialKey`/`initialValue`/`initialIndex` resolve to a target — it does
+ * NOT gate an explicit `initialIndex` (an out-of-range or otherwise
+ * unmatched index is still clamped/resolved via `resolveInitialIndex`,
+ * regardless of `autoSelectFirstEnabled`). Returns `-1` (no selection) only
+ * when no target resolves at all and `autoSelectFirstEnabled` is explicitly
+ * `false`.
+ */
+export function resolveInitialSelection<V>(
+  items: Array<ItemOrSeparator<V>>,
+  options: {
+    initialKey?: string
+    initialValue?: V
+    initialIndex?: number
+    autoSelectFirstEnabled?: boolean
+  }
+): number {
+  const { initialKey, initialValue, initialIndex, autoSelectFirstEnabled } =
+    options
+
+  if (items.length === 0) {
+    return autoSelectFirstEnabled === false ? -1 : 0
+  }
+
+  if (initialKey !== undefined) {
+    const index = items.findIndex(
+      (item) => !isSeparator(item) && itemKey(item) === initialKey
+    )
+    if (index !== -1) return resolveInitialIndex(items, index)
+  }
+
+  if (initialValue !== undefined) {
+    const index = items.findIndex(
+      (item) => !isSeparator(item) && item.value === initialValue
+    )
+    if (index !== -1) return resolveInitialIndex(items, index)
+  }
+
+  if (initialIndex !== undefined) {
+    return resolveInitialIndex(items, initialIndex)
+  }
+
+  return autoSelectFirstEnabled === false ? -1 : resolveInitialIndex(items, 0)
 }
 
 export function findNextValidIndex<V>(
@@ -1031,6 +1108,18 @@ function resolveNavigateIntent<V>(
 ): Intent<V> | undefined {
   const step = resolveNavigateStep(input, key, context, isModifiedChord)
   if (step === undefined) return undefined
+
+  // No item is highlighted yet (autoSelectFirstEnabled: false and nothing
+  // resolved at mount) — seed the selection at the boundary the step points
+  // toward instead of stepping relative to a nonexistent -1 position.
+  if (context.selectedIndex === -1) {
+    const seeded =
+      step === 1
+        ? findFirstValidIndex(context.filteredItems)
+        : findLastValidIndex(context.filteredItems)
+    return { type: 'navigate', index: seeded }
+  }
+
   return {
     type: 'navigate',
     index: findNextValidIndex(
@@ -1476,6 +1565,9 @@ export function useEnhancedSelectInput<V>({
   items,
   isFocused = true,
   initialIndex: rawInitialIndex,
+  initialKey,
+  initialValue,
+  autoSelectFirstEnabled = true,
   selectedIndex: controlledIndex,
   onIndexChange,
   limit,
@@ -1503,9 +1595,6 @@ export function useEnhancedSelectInput<V>({
   typeaheadTimeout = 500,
   loop = true,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
-  // Kept distinct from the defaulted `initialIndex` below so the dev warning
-  // can tell "not passed" apart from "explicitly passed as 0".
-  const initialIndex = rawInitialIndex ?? 0
   const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
@@ -1558,7 +1647,12 @@ export function useEnhancedSelectInput<V>({
     [filteredItems, limit]
   )
 
-  const safeInitialIndex = resolveInitialIndex(filteredItems, initialIndex)
+  const safeInitialIndex = resolveInitialSelection(filteredItems, {
+    initialKey,
+    initialValue,
+    initialIndex: rawInitialIndex,
+    autoSelectFirstEnabled,
+  })
   const [uncontrolledIndex, setUncontrolledIndex] = useState(safeInitialIndex)
   const isIndexControlled = controlledIndex !== undefined
   const selectedIndex = isIndexControlled
@@ -1741,6 +1835,11 @@ export function useEnhancedSelectInput<V>({
   // without writing back to the parent.
   useEffect(() => {
     if (isIndexControlled) return
+    // The "no selection" state (autoSelectFirstEnabled: false, nothing
+    // resolved yet) must survive item/filter changes rather than snapping to
+    // an item the user never asked for — only navigation should leave it.
+    if (selectedIndexReference.current === -1) return
+
     if (filteredItems.length === 0) {
       setUncontrolledIndex(0)
       return
@@ -1893,6 +1992,14 @@ export function useEnhancedSelectInput<V>({
     if (!isKeysControlled) setUncontrolledCheckedKeys(next)
   }
 
+  // Search edits (append/backspace/clear) highlight the top match — but must
+  // preserve the no-selection sentinel (autoSelectFirstEnabled: false,
+  // nothing resolved yet) rather than snapping to item 0, the same rule the
+  // filtered-items revalidation effect applies below.
+  const resetSelectionToTopUnlessUnselected = () => {
+    if (selectedIndex !== -1) updateSelection(0)
+  }
+
   // Toggle the checked state of `item` (defaults to the highlighted item) in
   // multi-select mode. Shared by the Space keybinding and the public API so
   // custom keybindings can reuse the exact same behaviour.
@@ -1978,7 +2085,7 @@ export function useEnhancedSelectInput<V>({
     searchCursorReference.current = query.length
     setSearchQueryState(query)
     setSearchCursor(query.length)
-    updateSelection(0)
+    resetSelectionToTopUnlessUnselected()
   }
 
   // Enter: in multi-select mode confirms the full selection, gated on
@@ -2059,7 +2166,7 @@ export function useEnhancedSelectInput<V>({
         searchCursorReference.current = edit.cursor
         setSearchQueryState(edit.query)
         setSearchCursor(edit.cursor)
-        if (edit.resetSelection) updateSelection(0)
+        if (edit.resetSelection) resetSelectionToTopUnlessUnselected()
         return
       }
 

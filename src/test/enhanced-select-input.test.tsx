@@ -303,6 +303,286 @@ test.serial(
   }
 )
 
+// --- initialKey / initialValue / autoSelectFirstEnabled ---
+
+test.serial(
+  'initialKey highlights the item with the matching key',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', key: 'key-a' },
+      { label: 'B', value: 'b', key: 'key-b' },
+      { label: 'C', value: 'c', key: 'key-c' },
+    ]
+
+    let highlighted = ''
+    render(
+      <EnhancedSelectInput
+        items={items}
+        initialKey="key-b"
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'initialValue highlights the item with the matching value',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+    render(
+      <EnhancedSelectInput
+        items={items}
+        initialValue="c"
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'C')
+  }
+)
+
+test.serial('initialKey takes precedence over initialValue', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', key: 'key-a' },
+    { label: 'B', value: 'b', key: 'key-b' },
+    { label: 'C', value: 'c', key: 'key-c' },
+  ]
+
+  let highlighted = ''
+  render(
+    <EnhancedSelectInput
+      items={items}
+      initialKey="key-c"
+      initialValue="a"
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'C')
+})
+
+test.serial(
+  'autoSelectFirstEnabled false: no cursor and no onHighlight at mount',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlightCount = 0
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlightCount, 0)
+    t.false(lastFrame()!.includes('>'))
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: arrow down from no-selection highlights first item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'A')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: arrow up from no-selection highlights last item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(highlighted, 'C')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: no-selection state survives an items rerender',
+  async (t) => {
+    const itemsA = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    const itemsB = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlightCount = 0
+    const { rerender, lastFrame } = render(
+      <EnhancedSelectInput
+        items={itemsA}
+        autoSelectFirstEnabled={false}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    rerender(
+      <EnhancedSelectInput
+        items={itemsB}
+        autoSelectFirstEnabled={false}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlightCount, 0)
+    t.false(lastFrame()!.includes('>'))
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: Enter from no-selection state does not call onSelect',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let selected = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(selected, '')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: hotkey from no-selection state selects and highlights its item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', hotkey: 'x' },
+      { label: 'B', value: 'b', hotkey: 'y' },
+    ]
+
+    let selected = ''
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('y')
+    await delay()
+    t.is(selected, 'B')
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false + searchable: typing a character does not snap the highlight to the first item',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'a' },
+      { label: 'Apricot', value: 'b' },
+    ]
+
+    let highlightCount = 0
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        autoSelectFirstEnabled={false}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    await delay()
+    t.is(highlightCount, 0)
+    t.false(lastFrame()!.includes('>'))
+  }
+)
+
 // --- Keyboard Navigation (vertical, arrow keys) ---
 
 test.serial('arrow down moves selection down', async (t) => {

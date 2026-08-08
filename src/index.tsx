@@ -6,6 +6,7 @@ export {
   DefaultGroupHeaderComponent,
   DefaultSeparatorComponent,
   resolveInitialIndex,
+  resolveInitialSelection,
   findNextValidIndex,
   findFirstValidIndex,
   findLastValidIndex,
