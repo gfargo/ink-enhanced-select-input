@@ -370,10 +370,12 @@ When typing:
 
 **Key behavior in searchable mode:**
 
-- Printable characters are captured as search input
-- `Backspace` removes the last character from the query
+- Printable characters are inserted into the query at the cursor position, shown as an inverse-video block
+- `Backspace`/`Delete` removes the character before the cursor
 - `Escape` clears the query; if already empty, calls `onCancel`
-- Arrow keys navigate the filtered results
+- In vertical orientation (the default), `←`/`→` and `Home`/`End` move the search cursor; `Ctrl+A`/`Ctrl+E` do the same in either orientation
+- `Ctrl+W` deletes the word before the cursor; `Ctrl+U` deletes from the start of the query up to the cursor
+- In horizontal orientation, `←`/`→` and `Home`/`End` navigate the filtered results instead (use `Ctrl+A`/`Ctrl+E`/`Ctrl+W`/`Ctrl+U` to edit the query)
 - Vim keys (`h/j/k/l`) are treated as search characters, not navigation
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
@@ -605,8 +607,9 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 - `itemsAbove` / `itemsBelow` — counts of items hidden above/below the current window.
 - `checkedKeys` — a `Set<string>` of checked item keys, only populated when `multiple` is `true`. Reflects the `selectedKeys` prop when controlled.
 - `searchQuery` — the current filter string, empty when `searchable` is `false`.
+- `searchCursor` — cursor position within `searchQuery` (`[0, searchQuery.length]`); always `0` when `searchable` is `false`.
 - `setSelectedIndex(index)` — imperatively move the highlighted item, clamping into range and snapping `rotateIndex` to the containing page.
-- `setSearchQuery(query)` — imperatively set the search query and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
+- `setSearchQuery(query)` — imperatively set the search query, place the cursor at the end, and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
 - `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode, on a disabled item, or when checking would exceed `maxSelections` (unchecking is always allowed), and fires `onToggle`.
 - `selectAll()` / `selectNone()` / `invertSelection()` — bulk-check/uncheck/flip every enabled item (respecting the active search filter and `maxSelections`); no-op outside `multiple` mode.
 - `selectionCount` — number of currently checked items (`0` outside `multiple` mode).

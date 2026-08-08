@@ -830,6 +830,8 @@ export type InputIntentContext<V> = {
   km: ResolvedKeyMap
   searchable: boolean
   searchQuery: string
+  /** Cursor position within `searchQuery`, in `[0, searchQuery.length]`. */
+  searchCursor: number
   hasItems: boolean
   multiple: boolean
   orientation: 'vertical' | 'horizontal'
@@ -856,6 +858,12 @@ export type Intent<V> =
   | { type: 'none' }
   | { type: 'search-backspace' }
   | { type: 'search-clear' }
+  | { type: 'search-cursor-left' }
+  | { type: 'search-cursor-right' }
+  | { type: 'search-cursor-home' }
+  | { type: 'search-cursor-end' }
+  | { type: 'search-delete-word' }
+  | { type: 'search-kill-to-start' }
   | { type: 'jump'; index: number }
   | { type: 'cancel' }
   | { type: 'toggle' }
@@ -868,21 +876,102 @@ export type Intent<V> =
   | { type: 'typeahead'; char: string }
   | { type: 'hotkey'; item: Item<V>; index: number }
 
-/** Backspace/Delete and Escape-while-querying, scoped to searchable mode. */
-function resolveSearchEditIntent<V>(
+/**
+ * Search-line word/line delete, backspace, and Escape-while-querying,
+ * scoped to searchable mode.
+ */
+function resolveSearchDeleteIntent<V>(
   key: Key,
+  input: string,
   context: InputIntentContext<V>
 ): Intent<V> | undefined {
-  const { searchable, searchQuery } = context
-  if (searchable && (key.backspace || key.delete)) {
+  const { searchQuery } = context
+
+  if (key.backspace || key.delete) {
     return { type: 'search-backspace' }
   }
 
-  if (searchable && key.escape && searchQuery) {
+  if (key.escape && searchQuery) {
     return { type: 'search-clear' }
   }
 
+  if (key.ctrl && input === 'w') {
+    return { type: 'search-delete-word' }
+  }
+
+  if (key.ctrl && input === 'u') {
+    return { type: 'search-kill-to-start' }
+  }
+
   return undefined
+}
+
+/**
+ * Search-line cursor movement, scoped to searchable mode.
+ *
+ * Left/right and Home/End are only claimed in vertical orientation — in
+ * horizontal orientation ←/→ (and Home/End, via {@link resolveJumpIntent})
+ * remain list navigation, since they're currently no-ops for the cursor in
+ * that layout. Ctrl+A/Ctrl+E provide cursor-to-start/end in both orientations.
+ *
+ * Ctrl+A is deferred to {@link resolveBulkIntent}'s select-all when the list
+ * is also in multi-select mode with bulk chords enabled — Ctrl+A means
+ * "select all" there, and Home still reaches cursor-to-start in vertical
+ * orientation.
+ */
+function resolveSearchCursorIntent<V>(
+  key: Key,
+  input: string,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { orientation, multiple, km } = context
+
+  if (key.ctrl && input === 'a' && !(multiple && km.bulk)) {
+    return { type: 'search-cursor-home' }
+  }
+
+  if (key.ctrl && input === 'e') {
+    return { type: 'search-cursor-end' }
+  }
+
+  if (orientation !== 'vertical') return undefined
+
+  if (key.home) {
+    return { type: 'search-cursor-home' }
+  }
+
+  if (key.end) {
+    return { type: 'search-cursor-end' }
+  }
+
+  if (key.leftArrow) {
+    return { type: 'search-cursor-left' }
+  }
+
+  if (key.rightArrow) {
+    return { type: 'search-cursor-right' }
+  }
+
+  return undefined
+}
+
+/**
+ * Search-line editing: cursor movement, word/line delete, backspace, and
+ * Escape-while-querying — all scoped to searchable mode. Runs first in
+ * {@link resolveInputIntent} so these keys always win over list navigation
+ * and hotkeys while a search is active.
+ */
+function resolveSearchEditIntent<V>(
+  key: Key,
+  input: string,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  if (!context.searchable) return undefined
+
+  return (
+    resolveSearchDeleteIntent(key, input, context) ??
+    resolveSearchCursorIntent(key, input, context)
+  )
 }
 
 /** Home/End jump-to-boundary, gated on `km.homeEnd`. */
@@ -1170,7 +1259,7 @@ export function resolveInputIntent<V>(
 ): Intent<V> {
   const { km, searchable, hasItems } = context
 
-  const searchEdit = resolveSearchEditIntent(key, context)
+  const searchEdit = resolveSearchEditIntent(key, input, context)
   if (searchEdit) return searchEdit
 
   // Escape → onCancel is a global key: it must work even when the list has
@@ -1236,6 +1325,116 @@ export function resolveInputIntent<V>(
   return { type: 'none' }
 }
 
+/** Result of applying a search-editing intent: the next query/cursor pair. */
+type SearchEditResult = {
+  query: string
+  cursor: number
+  /** Whether the edit should reset the highlighted list selection to 0. */
+  resetSelection: boolean
+}
+
+/**
+ * Pure string/cursor math for every search-line editing intent (append,
+ * backspace, clear, cursor movement, word/line delete). Extracted out of the
+ * `useInput` switch so the word-boundary scanning loop in
+ * `search-delete-word` doesn't inflate that handler's cyclomatic complexity.
+ * `cursorInput` is clamped to `query.length` up front so every branch below
+ * can assume a valid cursor position.
+ */
+function computeSearchEdit<V>(
+  intent: Intent<V>,
+  query: string,
+  cursorInput: number
+): SearchEditResult {
+  const cursor = Math.min(cursorInput, query.length)
+
+  switch (intent.type) {
+    case 'search-append': {
+      // The appended text can be a multi-character chunk — Ink coalesces
+      // consecutive plain characters delivered in the same stdin event (e.g.
+      // fast typing or a paste) into a single keypress with a multi-char
+      // `input` string, so the cursor must advance by its length, not by a
+      // fixed 1.
+      const nextQuery =
+        query.slice(0, cursor) + intent.char + query.slice(cursor)
+      return {
+        query: nextQuery,
+        cursor: cursor + intent.char.length,
+        resetSelection: true,
+      }
+    }
+
+    case 'search-backspace': {
+      if (cursor === 0) return { query, cursor, resetSelection: true }
+      const nextQuery = query.slice(0, cursor - 1) + query.slice(cursor)
+      return { query: nextQuery, cursor: cursor - 1, resetSelection: true }
+    }
+
+    case 'search-clear': {
+      return { query: '', cursor: 0, resetSelection: true }
+    }
+
+    case 'search-cursor-left': {
+      return { query, cursor: Math.max(0, cursor - 1), resetSelection: false }
+    }
+
+    case 'search-cursor-right': {
+      return {
+        query,
+        cursor: Math.min(query.length, cursor + 1),
+        resetSelection: false,
+      }
+    }
+
+    case 'search-cursor-home': {
+      return { query, cursor: 0, resetSelection: false }
+    }
+
+    case 'search-cursor-end': {
+      return { query, cursor: query.length, resetSelection: false }
+    }
+
+    case 'search-delete-word': {
+      let start = cursor
+      while (start > 0 && query[start - 1] === ' ') start--
+      while (start > 0 && query[start - 1] !== ' ') start--
+      const nextQuery = query.slice(0, start) + query.slice(cursor)
+      return { query: nextQuery, cursor: start, resetSelection: true }
+    }
+
+    case 'search-kill-to-start': {
+      return { query: query.slice(cursor), cursor: 0, resetSelection: true }
+    }
+
+    default: {
+      return { query, cursor, resetSelection: false }
+    }
+  }
+}
+
+const SEARCH_EDIT_INTENT_TYPES = new Set<Intent<unknown>['type']>([
+  'search-append',
+  'search-backspace',
+  'search-clear',
+  'search-cursor-left',
+  'search-cursor-right',
+  'search-cursor-home',
+  'search-cursor-end',
+  'search-delete-word',
+  'search-kill-to-start',
+])
+
+/**
+ * Narrows `intent` to one of the nine search-editing variants. Collapses
+ * what would otherwise be nine `case` labels in the `useInput` switch into a
+ * single branch, keeping that switch's cyclomatic complexity in check.
+ */
+function isSearchEditIntent<V>(
+  intent: Intent<V>
+): intent is Extract<Intent<V>, { type: `search-${string}` }> {
+  return SEARCH_EDIT_INTENT_TYPES.has(intent.type)
+}
+
 export type UseEnhancedSelectInputResult<V> = {
   /** Index of the currently highlighted item within the filtered items array. */
   selectedIndex: number
@@ -1253,6 +1452,11 @@ export type UseEnhancedSelectInputResult<V> = {
   checkedKeys: Set<string>
   /** Current search query. Empty string when searchable is false or no input yet. */
   searchQuery: string
+  /**
+   * Cursor position within `searchQuery`, clamped to `[0, searchQuery.length]`.
+   * 0 when searchable is false or no input has been entered yet.
+   */
+  searchCursor: number
   /** The currently highlighted item, or undefined when there are no items. */
   selectedItem: Item<V> | undefined
   /** The filtered (pre-pagination) items array. */
@@ -1344,6 +1548,19 @@ export function useEnhancedSelectInput<V>({
   const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
+  const [searchCursor, setSearchCursor] = useState(0)
+
+  // Mirror searchQuery/searchCursor synchronously so the useInput handler can
+  // read-and-update both together within a single keypress, and so a burst of
+  // keypresses delivered in one synchronous tick (e.g. a fast paste) chains
+  // correctly — React coalesces same-tick setState calls, so a later call in
+  // the same burst would otherwise still see this render's (stale) query and
+  // cursor rather than the previous call's result. Resynced at the top of
+  // every render so external updates (e.g. setSearchQueryPublic) stay authoritative.
+  const searchQueryReference = useRef(searchQuery)
+  searchQueryReference.current = searchQuery
+  const searchCursorReference = useRef(searchCursor)
+  searchCursorReference.current = searchCursor
 
   // Keep the latest onHighlight in a ref so the highlight effect below can
   // depend only on the highlighted index, not on the callback reference —
@@ -1814,7 +2031,10 @@ export function useEnhancedSelectInput<V>({
   }
 
   const setSearchQueryPublic = (query: string) => {
+    searchQueryReference.current = query
+    searchCursorReference.current = query.length
     setSearchQueryState(query)
+    setSearchCursor(query.length)
     resetSelectionToTopUnlessUnselected()
   }
 
@@ -1873,7 +2093,8 @@ export function useEnhancedSelectInput<V>({
       const intent = resolveInputIntent(input, key, {
         km,
         searchable,
-        searchQuery,
+        searchQuery: searchQueryReference.current,
+        searchCursor: searchCursorReference.current,
         hasItems,
         multiple,
         orientation,
@@ -1885,19 +2106,21 @@ export function useEnhancedSelectInput<V>({
         pageSize,
       })
 
+      if (isSearchEditIntent(intent)) {
+        const edit = computeSearchEdit(
+          intent,
+          searchQueryReference.current,
+          searchCursorReference.current
+        )
+        searchQueryReference.current = edit.query
+        searchCursorReference.current = edit.cursor
+        setSearchQueryState(edit.query)
+        setSearchCursor(edit.cursor)
+        if (edit.resetSelection) resetSelectionToTopUnlessUnselected()
+        return
+      }
+
       switch (intent.type) {
-        case 'search-backspace': {
-          setSearchQueryState((previous) => previous.slice(0, -1))
-          resetSelectionToTopUnlessUnselected()
-          break
-        }
-
-        case 'search-clear': {
-          setSearchQueryState('')
-          resetSelectionToTopUnlessUnselected()
-          break
-        }
-
         case 'cancel': {
           onCancel?.()
           break
@@ -1941,12 +2164,6 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
-        case 'search-append': {
-          setSearchQueryState((previous) => previous + intent.char)
-          resetSelectionToTopUnlessUnselected()
-          break
-        }
-
         case 'typeahead': {
           handleTypeahead(intent.char, typeaheadIsActive, now)
           break
@@ -1975,6 +2192,7 @@ export function useEnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
+    searchCursor: Math.min(searchCursor, searchQuery.length),
     selectedItem,
     filteredItems,
     windowIndex,
@@ -2177,6 +2395,7 @@ export function EnhancedSelectInput<V>({
     itemsBelow,
     checkedKeys,
     searchQuery,
+    searchCursor,
     selectionCount,
   } = useEnhancedSelectInput(hookProperties)
 
@@ -2202,12 +2421,27 @@ export function EnhancedSelectInput<V>({
 
   const searchInput = searchable ? (
     <Box>
-      <Text
-        color={resolvedTheme.searchPlaceholder}
-        dimColor={resolvedTheme.dim}
-      >
-        {searchQuery ? `/ ${searchQuery}` : `/ ${searchPlaceholder}`}
-      </Text>
+      {searchQuery ? (
+        <Text color={resolvedTheme.searchPlaceholder}>
+          <Text dimColor={resolvedTheme.dim}>{`/ ${searchQuery.slice(
+            0,
+            searchCursor
+          )}`}</Text>
+          <Text inverse>{searchQuery[searchCursor] ?? ' '}</Text>
+          <Text dimColor={resolvedTheme.dim}>
+            {searchQuery.slice(searchCursor + 1)}
+          </Text>
+        </Text>
+      ) : (
+        <Text
+          color={resolvedTheme.searchPlaceholder}
+          dimColor={resolvedTheme.dim}
+        >
+          {'/ '}
+          <Text inverse>{searchPlaceholder[0] ?? ' '}</Text>
+          {searchPlaceholder.slice(1)}
+        </Text>
+      )}
     </Box>
   ) : null
 
