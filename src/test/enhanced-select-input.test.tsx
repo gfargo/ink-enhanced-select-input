@@ -8,6 +8,7 @@ import {
   EnhancedSelectInput,
   useEnhancedSelectInput,
   type Item,
+  type ItemProperties,
   type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
 
@@ -20,6 +21,8 @@ const ENTER = '\r'
 const ESCAPE = '\u001B'
 const HOME = '\u001B[H'
 const END = '\u001B[F'
+const PAGE_UP = '\u001B[5~'
+const PAGE_DOWN = '\u001B[6~'
 const SPACE = ' '
 const CTRL_X = '\u0018' // Ctrl+X
 const ALT_X = '\u001Bx' // Alt+X
@@ -27,6 +30,9 @@ const CTRL_J = '\u000A' // Ctrl+J
 const CTRL_K = '\u000B' // Ctrl+K
 const CTRL_H = '\u0008' // Ctrl+H
 const CTRL_L = '\u000C' // Ctrl+L
+const CTRL_A = '\u0001' // Ctrl+A
+const CTRL_D = '\u0004' // Ctrl+D
+const CTRL_R = '\u0012' // Ctrl+R
 
 // Small delay to let React/Ink process state updates. AVA runs this file's
 // ~150 tests concurrently, so the default needs enough margin that a busy
@@ -1764,6 +1770,12 @@ type HookHarnessProperties = {
   // eslint-disable-next-line react/boolean-prop-naming
   readonly multiple?: boolean
   readonly onToggle?: (item: Item<unknown>, checked: boolean) => void
+  readonly filter?: (item: Item<unknown>, query: string) => boolean
+  readonly matchMode?: 'includes' | 'fuzzy'
+  readonly searchFields?: (item: Item<unknown>) => string | string[]
+  readonly defaultSelectedKeys?: string[]
+  readonly minSelections?: number
+  readonly maxSelections?: number
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -2121,6 +2133,472 @@ test('toggle is a no-op on disabled items in multiple mode', async (t) => {
   await delay()
   t.is(result?.checkedKeys.size, 0)
 })
+
+// --- F7: multi-select quality of life ---
+
+test('selectAll checks every enabled item, skipping disabled ones', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  await waitFor(() => result?.checkedKeys.size === 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.false(result?.checkedKeys.has('b'))
+  t.true(result?.checkedKeys.has('c'))
+  t.is(result?.selectionCount, 2)
+})
+
+test('selectNone clears every checked item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b']}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  result?.selectNone()
+  await waitFor(() => result?.checkedKeys.size === 0)
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('invertSelection flips every enabled item, leaving disabled items untouched', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a']}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.invertSelection()
+  await waitFor(() => Boolean(result?.checkedKeys.has('c')))
+  t.false(result?.checkedKeys.has('a'))
+  t.false(result?.checkedKeys.has('b'))
+  t.true(result?.checkedKeys.has('c'))
+})
+
+test('selectAll/selectNone/invertSelection are no-ops outside multiple mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  result?.invertSelection()
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('maxSelections blocks toggle from checking beyond the cap, uncheck still allowed', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.toggle(items[0])
+  await waitFor(() => Boolean(result?.checkedKeys.has('a')))
+  result?.toggle(items[1])
+  await waitFor(() => Boolean(result?.checkedKeys.has('b')))
+  result?.toggle(items[2])
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  t.false(result?.checkedKeys.has('c'))
+
+  result?.toggle(items[0])
+  await waitFor(() => result?.checkedKeys.size === 1)
+  t.false(result?.checkedKeys.has('a'))
+})
+
+test('maxSelections caps selectAll deterministically in filteredItems order', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  await waitFor(() => result?.checkedKeys.size === 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.true(result?.checkedKeys.has('b'))
+  t.false(result?.checkedKeys.has('c'))
+})
+
+test('isSelectionValid and selectionCount reflect minSelections/maxSelections', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      minSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectionCount, 0)
+  t.false(result?.isSelectionValid)
+
+  result?.toggle(items[0])
+  await waitFor(() => result?.selectionCount === 1)
+  t.false(result?.isSelectionValid)
+
+  result?.toggle(items[1])
+  await waitFor(() => result?.selectionCount === 2)
+  t.true(result?.isSelectionValid)
+})
+
+test.serial(
+  'minSelections blocks onConfirm until enough items are checked',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ENTER) // Only 1 checked — blocked
+    await delay()
+    t.is(confirmed, undefined)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(SPACE) // Check B — now 2 checked
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+
+    t.not(confirmed, undefined)
+    t.is(confirmed!.length, 2)
+  }
+)
+
+test.serial(
+  'maxSelections blocks onConfirm when the checked count exceeds the cap',
+  async (t) => {
+    // A caller could pass defaultSelectedKeys that already exceed
+    // maxSelections — Enter must still refuse to confirm in that case.
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        maxSelections={1}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(confirmed, undefined)
+  }
+)
+
+test.serial('Ctrl+A selects all enabled items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput multiple items={items} />
+  )
+
+  await delay()
+  stdin.write(CTRL_A)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+})
+
+test.serial('Ctrl+D clears all checked items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b']}
+    />
+  )
+
+  await delay()
+  stdin.write(CTRL_D)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 0)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 2)
+})
+
+test.serial('Ctrl+R inverts checked items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
+  )
+
+  await delay()
+  stdin.write(CTRL_R)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 1)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+})
+
+test.serial(
+  'bulk chords are no-ops when keyMap.bulk is disabled',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput multiple items={items} keyMap={{ bulk: false }} />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    const frame = lastFrame()!
+    t.is((frame.match(/\[x]/g) ?? []).length, 0)
+  }
+)
+
+test.serial(
+  'showSelectionCount renders the checked count and updates on toggle',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput multiple showSelectionCount items={items} />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('0 selected'))
+
+    stdin.write(SPACE)
+    await delay()
+    t.true(lastFrame()!.includes('1 selected'))
+  }
+)
+
+test.serial(
+  'showSelectionCount shows a /max hint when maxSelections is set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        showSelectionCount
+        maxSelections={2}
+        items={items}
+      />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('0 selected/2'))
+  }
+)
+
+test.serial('showSelectionCount is hidden by default', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
+
+  await delay()
+  t.false(lastFrame()!.includes('selected'))
+})
+
+test.serial('showSelectionCount is hidden in single-select mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput showSelectionCount items={items} />
+  )
+
+  await delay()
+  t.false(lastFrame()!.includes('selected'))
+})
+
+test.serial(
+  'checkedIndicator/uncheckedIndicator customise the checkbox glyphs',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        defaultSelectedKeys={['a']}
+        checkedIndicator="✔"
+        uncheckedIndicator="✗"
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('✔'))
+    t.true(frame.includes('✗'))
+    t.false(frame.includes('[x]'))
+    t.false(frame.includes('[ ]'))
+  }
+)
+
+test.serial(
+  'default checkbox glyphs are unchanged when indicators are not set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('[x]'))
+    t.true(frame.includes('[ ]'))
+  }
+)
 
 // --- #15: items prop sync after mount ---
 
@@ -2557,6 +3035,50 @@ test.serial(
 
       await delay()
       t.false(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'warns exactly once per distinct duplicate-key set across re-renders with a new-but-equivalent items array',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    // A fresh inline array literal every call — same content, new reference —
+    // mirrors a caller re-rendering with `items={[...]}` inline.
+    const makeItems = () => [
+      { label: 'A', value: { id: 1 } },
+      { label: 'B', value: { id: 2 } },
+    ]
+
+    try {
+      const { rerender } = render(<EnhancedSelectInput items={makeItems()} />)
+      await delay()
+
+      for (let index = 0; index < 4; index++) {
+        rerender(<EnhancedSelectInput items={makeItems()} />)
+        // eslint-disable-next-line no-await-in-loop
+        await delay()
+      }
+
+      const duplicateWarnings = warnings.filter((w) =>
+        w.includes('Duplicate item keys')
+      )
+      t.is(duplicateWarnings.length, 1)
     } finally {
       console.warn = originalWarn
 
@@ -4366,6 +4888,71 @@ test.serial('searchable: renders custom placeholder', (t) => {
   t.true(frame.includes('/ Type to filter'))
 })
 
+test.serial(
+  'searchable: search prompt renders on its own line above items in horizontal orientation',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    )
+
+    const lines = lastFrame()!.split('\n')
+    const searchLineIndex = lines.findIndex((line) =>
+      line.includes('/ Search...')
+    )
+    const itemsLineIndex = lines.findIndex(
+      (line) => line.includes('Apple') && line.includes('Banana')
+    )
+
+    t.true(searchLineIndex !== -1)
+    t.true(itemsLineIndex !== -1)
+    t.true(searchLineIndex < itemsLineIndex)
+    // The search prompt must not share a line with the items.
+    t.false(lines[searchLineIndex]!.includes('Apple'))
+  }
+)
+
+test.serial(
+  'searchable: horizontal orientation item row layout matches vertical (unaffected by the search-line wrapper)',
+  (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const horizontal = render(
+      <EnhancedSelectInput searchable items={items} orientation="horizontal" />
+    ).lastFrame()!
+
+    const vertical = render(
+      <EnhancedSelectInput searchable items={items} orientation="vertical" />
+    ).lastFrame()!
+
+    const horizontalLines = horizontal.split('\n')
+    const verticalLines = vertical.split('\n')
+
+    // Vertical mode still stacks each item on its own line.
+    t.true(verticalLines.some((line) => line.includes('Apple')))
+    t.true(verticalLines.some((line) => line.includes('Banana')))
+    t.false(
+      verticalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+
+    // Horizontal mode still puts both items on the same row.
+    t.true(
+      horizontalLines.some(
+        (line) => line.includes('Apple') && line.includes('Banana')
+      )
+    )
+  }
+)
+
 test.serial('searchable: typing filters items by label', async (t) => {
   const items = [
     { label: 'Apple', value: 'apple' },
@@ -5171,6 +5758,217 @@ test.serial(
   }
 )
 
+// --- F2: custom filter, fuzzy matching, match highlighting ---
+
+test.serial(
+  'matchMode="fuzzy": matches an ordered subsequence, not just a substring',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Grape', value: 'grape' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        matchMode="fuzzy"
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 2)
+
+    const labels = result?.filteredItems.map((item) => item.label)
+    t.deepEqual(labels, ['Apple', 'Grape'])
+  }
+)
+
+test.serial(
+  'matchMode="includes" (default) still requires a contiguous substring',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Grape', value: 'grape' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await delay()
+
+    // Neither "Apple" nor "Grape" contains the contiguous substring "ae".
+    t.is(result?.filteredItems.length, 0)
+  }
+)
+
+test.serial(
+  'filter: a custom predicate fully overrides label matching',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 1 },
+      { label: 'Banana', value: 2 },
+      { label: 'Cherry', value: 3 },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        filter={(item, query) => String(item.value) === query}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('2')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
+
+    t.is(result?.filteredItems[0]?.label, 'Banana')
+  }
+)
+
+test.serial(
+  'searchFields: matches against a field other than label',
+  async (t) => {
+    const descriptions: Record<string, string> = {
+      apple: 'a sweet red fruit',
+      banana: 'a long yellow fruit',
+      cherry: 'a small stone fruit',
+    }
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        searchFields={(item) => descriptions[String(item.value)] ?? ''}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('yellow')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
+
+    t.is(result?.filteredItems[0]?.label, 'Banana')
+  }
+)
+
+test.serial(
+  'highlighting: default item component renders the label unchanged for matches',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('app')
+    await waitFor(() => lastFrame()!.includes('/ app'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('Apple'))
+  }
+)
+
+function MatchesProbeItemComponent({ label, matches }: ItemProperties) {
+  const ranges = (matches ?? [])
+    .map(([start, end]) => `${start}-${end}`)
+    .join(',')
+  return <Text>{`${label}|${ranges}`}</Text>
+}
+
+test.serial(
+  'highlighting: itemComponent receives computed match ranges (includes mode)',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    stdin.write('ppl')
+    await waitFor(() => lastFrame()!.includes('Apple|1-4'))
+
+    t.true(lastFrame()!.includes('Apple|1-4'))
+  }
+)
+
+test.serial(
+  'highlighting: itemComponent receives merged match ranges (fuzzy mode)',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        matchMode="fuzzy"
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await waitFor(() => lastFrame()!.includes('Apple|0-1,4-5'))
+
+    t.true(lastFrame()!.includes('Apple|0-1,4-5'))
+  }
+)
+
+test.serial(
+  'highlighting: no matches prop is passed outside searchable mode',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('Apple|'))
+  }
+)
+
 // --- keyMap: selective key group disabling ---
 
 test.serial('keyMap.arrows=false disables arrow key navigation', async (t) => {
@@ -5289,6 +6087,80 @@ test.serial('keyMap.homeEnd=false disables Home/End keys', async (t) => {
   t.is(highlighted, 'B') // Must not jump to C
 })
 
+test.serial(
+  'PageDown moves the highlight forward by a page of items',
+  async (t) => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      label: `Item ${i}`,
+      value: `item-${i}`,
+    }))
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'Item 0')
+    stdin.write(PAGE_DOWN)
+    await waitFor(() => highlighted === 'Item 3')
+    t.is(highlighted, 'Item 3')
+  }
+)
+
+test.serial(
+  'PageUp moves the highlight backward by a page of items',
+  async (t) => {
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      label: `Item ${i}`,
+      value: `item-${i}`,
+    }))
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        initialIndex={6}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'Item 6')
+    stdin.write(PAGE_UP)
+    await waitFor(() => highlighted === 'Item 3')
+    t.is(highlighted, 'Item 3')
+  }
+)
+
+test.serial('keyMap.pageKeys=false disables PageUp/PageDown', async (t) => {
+  const items = Array.from({ length: 10 }, (_, i) => ({
+    label: `Item ${i}`,
+    value: `item-${i}`,
+  }))
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={3}
+      keyMap={{ pageKeys: false }}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'Item 0')
+  stdin.write(PAGE_DOWN)
+  await delay()
+  t.is(highlighted, 'Item 0') // Must not move
+})
+
 test.serial('keyMap.cancel=false disables Escape → onCancel', async (t) => {
   const items = [{ label: 'A', value: 'a' }]
   let cancelled = false
@@ -5372,6 +6244,108 @@ test.serial('keyMap defaults to all enabled when not provided', async (t) => {
   stdin.write(ENTER)
   await delay()
   t.is(selected, 'B')
+})
+
+// --- loop ---
+
+test.serial(
+  'loop=false clamps arrow-down navigation at the last item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        loop={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => highlighted === 'B')
+    t.is(highlighted, 'B')
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B') // Must not wrap back to A
+  }
+)
+
+test.serial(
+  'loop=false clamps arrow-up navigation at the first item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        loop={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+    await delay()
+    t.is(highlighted, 'A')
+    stdin.write(ARROW_UP)
+    await delay()
+    t.is(highlighted, 'A') // Must not wrap to B
+  }
+)
+
+test.serial('loop defaults to true (wraps around)', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'A')
+  stdin.write(ARROW_UP)
+  await waitFor(() => highlighted === 'B')
+  t.is(highlighted, 'B') // Wraps to the last item
+})
+
+test.serial('loop=false also clamps PageDown at the last item', async (t) => {
+  const items = Array.from({ length: 5 }, (_, i) => ({
+    label: `Item ${i}`,
+    value: `item-${i}`,
+  }))
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      limit={2}
+      loop={false}
+      initialIndex={3}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+  await delay()
+  t.is(highlighted, 'Item 3')
+  stdin.write(PAGE_DOWN)
+  await waitFor(() => highlighted === 'Item 4')
+  t.is(highlighted, 'Item 4')
+  stdin.write(PAGE_DOWN)
+  await delay()
+  t.is(highlighted, 'Item 4') // Must not wrap back to Item 0
 })
 
 // --- typeahead ---
@@ -5799,5 +6773,78 @@ test.serial(
     t.is((frame.match(/\[x]/g) ?? []).length, 1)
     const cherryLine = frame.split('\n').find((line) => line.includes('Cherry'))
     t.true(cherryLine?.includes('[x]'))
+  }
+)
+
+// --- B19: long labels must not wrap and inflate rendered row count past limit ---
+
+test.serial(
+  'limit stays a reliable row budget when a label is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A'.repeat(200), value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Without truncation, the 200-char label alone would wrap across
+    // multiple lines at the 100-column test width, pushing the frame past
+    // the 2-row budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+  }
+)
+
+test.serial(
+  'a long label is truncated with an ellipsis rather than wrapped onto extra lines',
+  (t) => {
+    const items = [{ label: 'A'.repeat(200), value: 'a' }]
+
+    const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A'.repeat(200)))
+  }
+)
+
+test.serial(
+  'limit stays a reliable row budget when a group name is far longer than the terminal width',
+  (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G'.repeat(200) },
+      { label: 'B', value: 'b', group: 'G'.repeat(200) },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} limit={2} />
+    )
+
+    const frame = lastFrame()!
+    // Pagination charges the group header exactly one row; without
+    // truncation the 200-char group name would wrap across multiple lines
+    // at the 100-column test width, pushing the frame past the 2-row
+    // budget `limit` promises.
+    t.is(frame.split('\n').length, 2)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
+  }
+)
+
+test.serial(
+  'DefaultGroupHeaderComponent truncates an overlong label with an ellipsis rather than wrapping',
+  (t) => {
+    const { lastFrame } = render(
+      <DefaultGroupHeaderComponent label={'G'.repeat(200)} />
+    )
+
+    const frame = lastFrame()!
+    t.is(frame.split('\n').length, 1)
+    t.true(frame.includes('…'))
+    t.false(frame.includes('G'.repeat(200)))
   }
 )
