@@ -14,11 +14,12 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Custom Indicators & Items:** Easily swap out the default indicator and item rendering.
 - **Hotkey Support:** Assign single-character hotkeys for quick selection.
 - **Disabled Items:** Gracefully skip unselectable items during navigation.
-- **Keyboard Navigation:** Arrow keys, Vim-like keys (`h/j/k/l`), Home/End supported.
+- **Keyboard Navigation:** Arrow keys, Vim-like keys (`h/j/k/l`), Home/End, Page Up/Down supported.
+- **Configurable Wrap-Around:** `loop` (default `true`) controls whether navigation wraps at the list boundary or clamps.
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
 - **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
-- **Searchable Mode:** Type to filter items inline with case-insensitive matching.
+- **Searchable Mode:** Type to filter items inline with case-insensitive matching, opt-in fuzzy matching, custom filter predicates, and matched-character highlighting.
 - **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
@@ -177,6 +178,33 @@ Customize the checkbox glyphs with `checkedIndicator` / `uncheckedIndicator` (de
 
 `item.indicator` only applies in single-select mode — see the [Multi-select](#multi-select) note above for the multi-select behaviour.
 
+### Pagination (`limit`)
+
+Set `limit` to cap how many rows are visible at once. By default (`paginationMode: 'page'`), the viewport snaps to fixed page boundaries — moving past the last visible row jumps the whole window to the next page.
+
+Set `paginationMode="scroll"` for a cursor-following viewport instead: the window advances one row at a time as the cursor reaches its edge, keeping the highlight where the eye already is — matching `ink-select-input`, `fzf`, and `gum`.
+
+```tsx
+<EnhancedSelectInput items={items} limit={5} paginationMode="scroll" />
+```
+
+Use `scrollOffset` (only meaningful in `'scroll'` mode) to keep a margin of context rows above/below the cursor before the window scrolls:
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  limit={5}
+  paginationMode="scroll"
+  scrollOffset={2}
+/>
+```
+
+`scrollOffset` is clamped internally to `floor((limit - 1) / 2)` — larger values would leave no stable cursor range between the "scroll up" and "scroll down" margins, so the window would jitter instead of scrolling one row at a time.
+
+Home/End always land on a sane window — Home scrolls to the start of the list, End scrolls so the last item is on the bottom row.
+
+`'scroll'` mode windows are sized by item count. `'page'` mode charges group headers against `limit` too (see [Grouped Items](#grouped-items)) so its rendered height never exceeds `limit`; in `'scroll'` mode a window can render up to `limit` items **plus** any group headers in view, so the visible row count may exceed `limit` when `group` is used together with `paginationMode="scroll"`.
+
 ### Grouped Items
 
 Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
@@ -259,6 +287,50 @@ When typing:
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
 
+#### Custom Filtering, Fuzzy Matching & Highlighting
+
+By default, searchable mode matches the query as a case-insensitive substring of `item.label`. Three props let you customize this:
+
+- **`matchMode`** — `'includes'` (default) or `'fuzzy'`. `'fuzzy'` matches an ordered, non-contiguous subsequence — e.g. the query `ae` matches `Apple` and `Grape` but not `Banana`.
+- **`searchFields`** — `(item) => string | string[]`, selects which text an item is matched against instead of (or in addition to) `label`. An item matches if any returned field matches.
+- **`filter`** — `(item, query) => boolean`, fully overrides the built-in matcher (`matchMode` and `searchFields` are ignored) for total control over what counts as a match.
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  searchable
+  matchMode="fuzzy"
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+```tsx
+// Search descriptions instead of (or alongside) labels
+<EnhancedSelectInput
+  items={items}
+  searchable
+  searchFields={(item) => [item.label, item.value.description]}
+/>
+```
+
+```tsx
+// Fully custom predicate — matchMode/searchFields are ignored
+<EnhancedSelectInput
+  items={items}
+  searchable
+  filter={(item, query) => item.value.tags.includes(query)}
+/>
+```
+
+The default `<ItemComponent>` bolds the matched characters in the label. A custom `itemComponent` receives the same information via the `matches` prop — an array of `[start, end)` character ranges into `label`, computed against the active `matchMode` (ranges are best-effort against `label` even when a custom `filter` matched on a different field, and are `undefined` outside searchable mode or when the query is empty):
+
+```tsx
+function MyItem({ label, matches, isSelected }: ItemProperties) {
+  // matches: ReadonlyArray<readonly [number, number]> | undefined
+  return <Text color={isSelected ? 'green' : undefined}>{label}</Text>
+}
+```
+
 ### Type-ahead Jump
 
 Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and only takes effect when `searchable` is off. Typing printable characters builds a short-lived buffer and jumps the highlight to the first non-disabled item whose label starts with it (case-insensitive) — it moves the highlight only, it never calls `onSelect`/`onConfirm`. The buffer resets after `typeaheadTimeout` ms of inactivity (default `500`).
@@ -337,6 +409,7 @@ Because Ink does not support event propagation stopping, every `useInput` handle
 | `arrows`       | `↑` `↓` `←` `→`                                                            | `true`  |
 | `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                  | `true`  |
 | `homeEnd`      | `Home` · `End`                                                             | `true`  |
+| `pageKeys`     | `Page Up` · `Page Down`                                                    | `true`  |
 | `cancel`       | `Escape` → `onCancel`                                                      | `true`  |
 | `select`       | `Enter` → `onSelect` / `onConfirm`                                         | `true`  |
 | `toggle`       | `Space` toggle in multi-select mode                                        | `true`  |
@@ -460,6 +533,8 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `isFocused`            | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                                                                                     |
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                                                                                     |
 | `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count, one row each; the default components truncate overlong labels/group names rather than wrapping them                                                         |
+| `paginationMode`       | `'page' \| 'scroll'`                        | `'page'`                      | How the `limit` window advances: `'page'` snaps to fixed page boundaries; `'scroll'` follows the cursor one row at a time                                                                                                   |
+| `scrollOffset`         | `number`                                    | `0`                           | Rows of context to keep above/below the cursor before scrolling. Only used when `paginationMode` is `'scroll'`. Clamped internally to `floor((limit - 1) / 2)`                                                              |
 | `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                                                                                  |
 | `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                                                                        |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                                                                                  |
@@ -480,11 +555,15 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                                                                                |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                                                                            |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                                                                           |
+| `matchMode`            | `'includes' \| 'fuzzy'`                     | `'includes'`                  | Built-in search matcher; `'fuzzy'` matches an ordered, non-contiguous subsequence. Ignored when `filter` is supplied                                                                                                        |
+| `searchFields`         | `(item: Item<V>) => string \| string[]`     | `item.label`                  | Selects which text field(s) the built-in matcher searches. Ignored when `filter` is supplied                                                                                                                                |
+| `filter`               | `(item: Item<V>, query: string) => boolean` | —                             | Fully overrides the built-in search matching; `matchMode` and `searchFields` are ignored                                                                                                                                    |
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                  |
 | `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                               |
 | `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                   |
 | `maxWidth`             | `number`                                    | —                             | Max display width (characters) for a label; longer labels are ellipsized so each item stays on one row. Display-only — search, `onSelect`/`onHighlight`/`onConfirm`, and hotkeys still use the full label                   |
 | `truncate`             | `'end' \| 'middle' \| 'start'`              | `'end'`                       | Where the ellipsis lands when `maxWidth` truncates a label. `'middle'` is useful for file paths                                                                                                                             |
+| `loop`                 | `boolean`                                   | `true`                        | Whether arrow/vim/Page Up/Down navigation wraps around at the list boundary; `false` clamps instead. `Home`/`End` are unaffected                                                                                            |
 | `theme`                | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                                                                            |
 
 ### Item Shape
@@ -509,16 +588,24 @@ type Item<V> = {
 
 ## Keyboard Navigation
 
-| Orientation | Previous  | Next      | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
-| ----------- | --------- | --------- | ------ | ----- | ---------------- | -------------- | -------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
+| ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
 
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 
-Disabled items are automatically skipped during navigation, including by `Home` and `End`.
+`Page Up`/`Page Down` move the highlight by a page at a time — the number of items currently visible in the `limit` window, or 10 when `limit` is not set.
+
+Disabled items are automatically skipped during navigation, including by `Home`, `End`, `Page Up`, and `Page Down`.
 
 `Escape` calls the `onCancel` prop when provided — useful for multi-step CLI flows that need a "go back" action.
+
+By default, navigation wraps around at the list boundary (pressing `↓`/`Page Down` on the last item jumps back to the first). Set `loop={false}` to clamp instead — the highlight stops at the first/last item rather than wrapping, which can feel less disorienting in long lists. `Home`/`End` always jump to the absolute boundary regardless of `loop`.
+
+```tsx
+<EnhancedSelectInput items={items} loop={false} onSelect={onSelect} />
+```
 
 > **Hotkey constraints:** Navigation keys take priority over hotkeys. In vertical
 > orientation the characters `j` and `k` are reserved for navigation — an item

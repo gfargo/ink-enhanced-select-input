@@ -9,11 +9,14 @@ export {
   findFirstValidIndex,
   findLastValidIndex,
   truncateLabel,
+  matchesQuery,
+  computeMatchRanges,
 } from './enhanced-select-input/index.js'
 
 export type {
   Item,
   KeyMap,
+  MatchMode,
   Properties,
   Theme,
   UseEnhancedSelectInputProperties,
