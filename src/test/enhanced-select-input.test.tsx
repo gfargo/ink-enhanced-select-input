@@ -35,6 +35,9 @@ const CTRL_K = '\u000B' // Ctrl+K
 const CTRL_H = '\u0008' // Ctrl+H
 const CTRL_L = '\u000C' // Ctrl+L
 const CTRL_A = '\u0001' // Ctrl+A
+const CTRL_E = '\u0005' // Ctrl+E
+const CTRL_W = '\u0017' // Ctrl+W
+const CTRL_U = '\u0015' // Ctrl+U
 const CTRL_D = '\u0004' // Ctrl+D
 const CTRL_R = '\u0012' // Ctrl+R
 
@@ -5775,43 +5778,52 @@ test.serial('searchable: typing blocked when isFocused=false', async (t) => {
 
 // --- Searchable + Home/End on filtered results ---
 
-test.serial('searchable: Home/End work on filtered results', async (t) => {
-  const items = [
-    { label: 'Alpha', value: 'alpha' },
-    { label: 'Apex', value: 'apex' },
-    { label: 'Apple', value: 'apple' },
-    { label: 'Banana', value: 'banana' },
-  ]
+test.serial(
+  'searchable: Home/End work on filtered results (horizontal orientation)',
+  async (t) => {
+    // In vertical orientation (the default) Home/End address the search-line
+    // cursor instead — see "searchable: Home/End move the search cursor,
+    // not the list" below. Horizontal orientation still uses them for
+    // list-boundary jumps, since the cursor keys there are left for the
+    // search line's own Ctrl+A/Ctrl+E.
+    const items = [
+      { label: 'Alpha', value: 'alpha' },
+      { label: 'Apex', value: 'apex' },
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
 
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      searchable
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        orientation="horizontal"
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
 
-  await delay()
-  t.is(highlighted, 'Alpha')
+    await delay()
+    t.is(highlighted, 'Alpha')
 
-  stdin.write('ap')
-  await delay()
-  // After filtering, move down first to change selectedIndex
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'Apple')
+    stdin.write('ap')
+    await delay()
+    // After filtering, move right first to change selectedIndex
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(highlighted, 'Apple')
 
-  stdin.write(HOME)
-  await delay()
-  t.is(highlighted, 'Apex')
+    stdin.write(HOME)
+    await delay()
+    t.is(highlighted, 'Apex')
 
-  stdin.write(END)
-  await delay()
-  t.is(highlighted, 'Apple')
-})
+    stdin.write(END)
+    await delay()
+    t.is(highlighted, 'Apple')
+  }
+)
 
 // --- Searchable: query with no results then backspace restores items ---
 
@@ -5850,6 +5862,270 @@ test.serial(
     t.true(frame.includes('Apple'))
     t.true(frame.includes('Apricot'))
     t.false(frame.includes('Banana'))
+  }
+)
+
+// --- Searchable: text-input cursor ergonomics (F3) ---
+
+test.serial(
+  'searchable: Home then typing inserts at the start of the query',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Xapple', value: 'xapple' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('apple')
+    await waitFor(() => lastFrame()!.includes('/ apple'))
+
+    stdin.write(HOME)
+    await delay()
+    stdin.write('X')
+    await waitFor(() => lastFrame()!.includes('/ Xapple'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('/ Xapple'))
+    t.true(frame.includes('Xapple'))
+  }
+)
+
+test.serial(
+  'searchable: End then Backspace removes the last character',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('Xapp')
+    await waitFor(() => lastFrame()!.includes('/ Xapp'))
+
+    stdin.write(HOME)
+    await delay()
+    stdin.write(END)
+    await delay()
+    stdin.write('')
+    await waitFor(() => !lastFrame()!.includes('/ Xapp'))
+
+    t.true(lastFrame()!.includes('/ Xap'))
+  }
+)
+
+test.serial(
+  'searchable: left arrow twice then backspace deletes the middle character',
+  async (t) => {
+    const items = [{ label: 'Abc', value: 'abc' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('abc')
+    await waitFor(() => lastFrame()!.includes('/ abc'))
+
+    stdin.write(ARROW_LEFT)
+    await delay()
+    stdin.write(ARROW_LEFT)
+    await delay()
+    // Cursor is now before "b" (between "a" and "bc") — backspace removes "a".
+    stdin.write('')
+    await waitFor(() => lastFrame()!.includes('/ bc'))
+
+    t.true(lastFrame()!.includes('/ bc'))
+  }
+)
+
+test.serial(
+  'searchable: multi-character paste inserts at the cursor and advances it by the chunk length',
+  async (t) => {
+    const items = [{ label: 'AXYZC', value: 'axyzc' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('ac')
+    await waitFor(() => lastFrame()!.includes('/ ac'))
+
+    // Cursor is now between "a" and "c".
+    stdin.write(ARROW_LEFT)
+    await delay()
+
+    // Simulate a paste: Ink coalesces multiple chars delivered in one stdin
+    // event into a single keypress with a multi-char `input` string.
+    stdin.write('XY')
+    await waitFor(() => lastFrame()!.includes('/ aXYc'))
+
+    // If the cursor had stayed at its pre-paste position instead of
+    // advancing by the pasted chunk's length, this would insert "Z" before
+    // "XY" (producing "aZXYc") instead of after it.
+    stdin.write('Z')
+    await waitFor(() => lastFrame()!.includes('/ aXYZc'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('/ aXYZc'))
+  }
+)
+
+test.serial(
+  'searchable: Ctrl+W deletes the word before the cursor',
+  async (t) => {
+    const items = [{ label: 'Foo', value: 'foo' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('foo bar')
+    await waitFor(() => lastFrame()!.includes('/ foo bar'))
+
+    stdin.write(CTRL_W)
+    await waitFor(() => !lastFrame()!.includes('bar'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('/ foo'))
+    t.false(frame.includes('bar'))
+  }
+)
+
+test.serial(
+  'searchable: Ctrl+U kills the query from the start up to the cursor',
+  async (t) => {
+    const items = [{ label: 'Bar', value: 'bar' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('foo bar')
+    await waitFor(() => lastFrame()!.includes('/ foo bar'))
+
+    // Move cursor to just after "foo " (between the space and "bar").
+    stdin.write(HOME)
+    await delay()
+    stdin.write(ARROW_RIGHT.repeat(4))
+    await delay()
+
+    stdin.write(CTRL_U)
+    await waitFor(() => !lastFrame()!.includes('foo'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('/ bar'))
+    t.false(frame.includes('foo'))
+  }
+)
+
+test.serial(
+  'searchable: Ctrl+A/Ctrl+E move the cursor to start/end for editing',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apples', value: 'apples' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('Apple')
+    await waitFor(() => lastFrame()!.includes('/ Apple'))
+
+    stdin.write(CTRL_A)
+    await delay()
+    stdin.write('X')
+    await waitFor(() => lastFrame()!.includes('/ XApple'))
+    t.true(lastFrame()!.includes('/ XApple'))
+
+    stdin.write(CTRL_E)
+    await delay()
+    stdin.write('s')
+    await waitFor(() => lastFrame()!.includes('/ XApples'))
+    t.true(lastFrame()!.includes('/ XApples'))
+  }
+)
+
+test.serial(
+  'searchable: filtering still resets the highlighted item after a cursor-based edit',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Apricot', value: 'apricot' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ap')
+    await waitFor(() => lastFrame()!.includes('/ ap'))
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'Apricot')
+
+    stdin.write(HOME)
+    await delay()
+    stdin.write('X')
+    await waitFor(() => lastFrame()!.includes('/ Xap'))
+
+    // "Xap" matches nothing, so the list should show no matches and the
+    // highlight should not still be pinned to "Apricot".
+    t.true(lastFrame()!.includes('No matches'))
+  }
+)
+
+test.serial(
+  'searchable: cursor keys do nothing when searchable is false',
+  async (t) => {
+    const items = [
+      { label: 'Alpha', value: 'a' },
+      { label: 'Beta', value: 'b' },
+    ]
+
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'Alpha')
+
+    stdin.write(CTRL_W)
+    await delay()
+    stdin.write(CTRL_U)
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+    stdin.write(CTRL_E)
+    await delay()
+
+    t.is(highlighted, 'Alpha')
+    t.false(lastFrame()!.includes('/ '))
   }
 )
 
