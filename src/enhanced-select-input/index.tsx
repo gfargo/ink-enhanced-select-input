@@ -349,7 +349,10 @@ function itemKey<V>(item: Item<V>): string {
  *
  * Written as a plain index walk (no regex/split) since this runs once per
  * item per keystroke over the full (unpaginated) item list — see the 10k-item
- * benchmark in `large-list-performance.test.tsx`.
+ * benchmark in `large-list-performance.test.tsx`. The fuzzy walk compares
+ * Unicode code points (via `codePointAt`), not UTF-16 code units, so astral
+ * characters (e.g. emoji) that are encoded as surrogate pairs still compare
+ * equal as a single character.
  */
 export function matchesQuery(
   text: string,
@@ -362,19 +365,21 @@ export function matchesQuery(
 
   if (mode === 'fuzzy') {
     let textIndex = 0
-    for (const char of normalizedQuery) {
+    let queryIndex = 0
+    while (queryIndex < normalizedQuery.length) {
+      const queryCodePoint = normalizedQuery.codePointAt(queryIndex)!
       let found = false
       while (textIndex < normalizedText.length) {
-        if (normalizedText[textIndex] === char) {
+        const textCodePoint = normalizedText.codePointAt(textIndex)!
+        textIndex += textCodePoint > 0xff_ff ? 2 : 1
+        if (textCodePoint === queryCodePoint) {
           found = true
-          textIndex++
           break
         }
-
-        textIndex++
       }
 
       if (!found) return false
+      queryIndex += queryCodePoint > 0xff_ff ? 2 : 1
     }
 
     return true
@@ -402,25 +407,34 @@ export function computeMatchRanges(
   if (mode === 'fuzzy') {
     const ranges: Array<[number, number]> = []
     let searchFrom = 0
-    for (const char of normalizedQuery) {
+    let queryIndex = 0
+    while (queryIndex < normalizedQuery.length) {
+      const queryCodePoint = normalizedQuery.codePointAt(queryIndex)!
       let matchIndex = -1
-      for (let i = searchFrom; i < normalizedText.length; i++) {
-        if (normalizedText[i] === char) {
+      let matchEnd = -1
+      for (let i = searchFrom; i < normalizedText.length; ) {
+        const textCodePoint = normalizedText.codePointAt(i)!
+        const textCharLength = textCodePoint > 0xff_ff ? 2 : 1
+        if (textCodePoint === queryCodePoint) {
           matchIndex = i
+          matchEnd = i + textCharLength
           break
         }
+
+        i += textCharLength
       }
 
       if (matchIndex === -1) return []
 
       const lastRange = ranges.at(-1)
       if (lastRange && lastRange[1] === matchIndex) {
-        lastRange[1] = matchIndex + 1
+        lastRange[1] = matchEnd
       } else {
-        ranges.push([matchIndex, matchIndex + 1])
+        ranges.push([matchIndex, matchEnd])
       }
 
-      searchFrom = matchIndex + 1
+      searchFrom = matchEnd
+      queryIndex += queryCodePoint > 0xff_ff ? 2 : 1
     }
 
     return ranges

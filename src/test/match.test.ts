@@ -31,6 +31,14 @@ test('matchesQuery: fuzzy requires query characters in order', (t) => {
   t.false(matchesQuery('Apple', 'ea', 'fuzzy'))
 })
 
+test('matchesQuery: fuzzy matches astral characters (surrogate pairs)', (t) => {
+  // 🍎 (U+1F34E) is encoded as a UTF-16 surrogate pair — the query character
+  // must compare by code point, not by code unit, to match at all.
+  t.true(matchesQuery('🍎Apple', '🍎a', 'fuzzy'))
+  t.true(matchesQuery('🍎Apple', '🍎', 'fuzzy'))
+  t.false(matchesQuery('Apple', '🍎', 'fuzzy'))
+})
+
 // ── computeMatchRanges ──────────────────────────────────────────────────
 
 test('computeMatchRanges: empty query returns no ranges', (t) => {
@@ -69,4 +77,26 @@ test('computeMatchRanges: fuzzy is case-insensitive', (t) => {
     [0, 1],
     [4, 5],
   ])
+})
+
+test('computeMatchRanges: fuzzy produces slice-correct ranges for astral characters', (t) => {
+  // 🍎 occupies two UTF-16 code units, so its matched range must span both —
+  // a range of [0, 1] would slice the string in the middle of the surrogate
+  // pair and produce an unpaired half. Here it's immediately followed by a
+  // match at index 2, so the two merge into one [0, 3) range.
+  const text = '🍎Apple'
+  const ranges = computeMatchRanges(text, '🍎a', 'fuzzy')
+  t.deepEqual(ranges, [[0, 3]])
+  t.is(text.slice(...ranges[0]!), '🍎A')
+})
+
+test('computeMatchRanges: fuzzy keeps non-adjacent astral and BMP matches as separate ranges', (t) => {
+  const text = '🍎Apple'
+  const ranges = computeMatchRanges(text, '🍎e', 'fuzzy')
+  t.deepEqual(ranges, [
+    [0, 2],
+    [6, 7],
+  ])
+  t.is(text.slice(...ranges[0]!), '🍎')
+  t.is(text.slice(...ranges[1]!), 'e')
 })
