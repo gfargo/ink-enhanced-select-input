@@ -806,6 +806,29 @@ function computeSearchEdit<V>(
   }
 }
 
+const SEARCH_EDIT_INTENT_TYPES = new Set<Intent<unknown>['type']>([
+  'search-append',
+  'search-backspace',
+  'search-clear',
+  'search-cursor-left',
+  'search-cursor-right',
+  'search-cursor-home',
+  'search-cursor-end',
+  'search-delete-word',
+  'search-kill-to-start',
+])
+
+/**
+ * Narrows `intent` to one of the nine search-editing variants. Collapses
+ * what would otherwise be nine `case` labels in the `useInput` switch into a
+ * single branch, keeping that switch's cyclomatic complexity in check.
+ */
+function isSearchEditIntent<V>(
+  intent: Intent<V>
+): intent is Extract<Intent<V>, { type: `search-${string}` }> {
+  return SEARCH_EDIT_INTENT_TYPES.has(intent.type)
+}
+
 export type UseEnhancedSelectInputResult<V> = {
   /** Index of the currently highlighted item within the filtered items array. */
   selectedIndex: number
@@ -1156,29 +1179,21 @@ export function useEnhancedSelectInput<V>({
         typeaheadActive: typeaheadIsActive,
       })
 
-      switch (intent.type) {
-        case 'search-append':
-        case 'search-backspace':
-        case 'search-clear':
-        case 'search-cursor-left':
-        case 'search-cursor-right':
-        case 'search-cursor-home':
-        case 'search-cursor-end':
-        case 'search-delete-word':
-        case 'search-kill-to-start': {
-          const edit = computeSearchEdit(
-            intent,
-            searchQueryReference.current,
-            searchCursorReference.current
-          )
-          searchQueryReference.current = edit.query
-          searchCursorReference.current = edit.cursor
-          setSearchQueryState(edit.query)
-          setSearchCursor(edit.cursor)
-          if (edit.resetSelection) setSelectedIndexState(0)
-          break
-        }
+      if (isSearchEditIntent(intent)) {
+        const edit = computeSearchEdit(
+          intent,
+          searchQueryReference.current,
+          searchCursorReference.current
+        )
+        searchQueryReference.current = edit.query
+        searchCursorReference.current = edit.cursor
+        setSearchQueryState(edit.query)
+        setSearchCursor(edit.cursor)
+        if (edit.resetSelection) setSelectedIndexState(0)
+        return
+      }
 
+      switch (intent.type) {
         case 'cancel': {
           onCancel?.()
           break
