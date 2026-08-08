@@ -4,17 +4,22 @@ export {
   DefaultIndicatorComponent,
   DefaultItemComponent,
   DefaultGroupHeaderComponent,
+  DefaultSeparatorComponent,
   resolveInitialIndex,
   findNextValidIndex,
   findFirstValidIndex,
   findLastValidIndex,
   truncateLabel,
+  isSeparator,
+  isSelectable,
   matchesQuery,
   computeMatchRanges,
 } from './enhanced-select-input/index.js'
 
 export type {
   Item,
+  SeparatorItem,
+  ItemOrSeparator,
   KeyMap,
   MatchMode,
   Properties,
@@ -25,4 +30,5 @@ export type {
   ItemProperties,
   GroupHeaderProperties,
   TruncateMode,
+  SeparatorProperties,
 } from './enhanced-select-input/index.js'

@@ -10,6 +10,8 @@ import {
   resolveInitialIndex,
   truncateLabel,
   type Item,
+  type ItemOrSeparator,
+  type SeparatorItem,
 } from '../enhanced-select-input/index.js'
 
 /** Reference O(pages) linear scan — mirrors the pre-binary-search behaviour. */
@@ -34,6 +36,8 @@ const mkGroupedItem = (label: string, group?: string): Item<string> => ({
   value: label,
   group,
 })
+
+const mkSeparator = (): SeparatorItem => ({ type: 'separator' })
 
 // ── resolveInitialIndex ────────────────────────────────────────────────────────
 
@@ -394,4 +398,61 @@ test('truncateLabel: default mode is end', (t) => {
     truncateLabel('somelonglabel', 11),
     truncateLabel('somelonglabel', 11, 'end')
   )
+})
+
+// ── separators ───────────────────────────────────────────────────────────────
+
+test('resolveInitialIndex: skips a separator at the initial index', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkItem('a'),
+    mkSeparator(),
+    mkItem('c'),
+  ]
+  t.is(resolveInitialIndex(items, 1), 2)
+})
+
+test('resolveInitialIndex: all separators/disabled returns clamped index', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkSeparator(),
+    mkItem('a', true),
+    mkSeparator(),
+  ]
+  t.is(resolveInitialIndex(items, 1), 1)
+})
+
+test('findNextValidIndex: steps over a separator when moving forward', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkItem('a'),
+    mkSeparator(),
+    mkItem('c'),
+  ]
+  t.is(findNextValidIndex(items, 0, 1), 2)
+})
+
+test('findNextValidIndex: steps over a separator when moving backward', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkItem('a'),
+    mkSeparator(),
+    mkItem('c'),
+  ]
+  t.is(findNextValidIndex(items, 2, -1), 0)
+})
+
+test('findFirstValidIndex: skips a leading separator', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [mkSeparator(), mkItem('a')]
+  t.is(findFirstValidIndex(items), 1)
+})
+
+test('findLastValidIndex: skips a trailing separator', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [mkItem('a'), mkSeparator()]
+  t.is(findLastValidIndex(items), 0)
+})
+
+test('computePageStarts: a separator costs exactly one row, same as a plain item', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkItem('a'),
+    mkSeparator(),
+    mkItem('c'),
+  ]
+  t.deepEqual(computePageStarts(items, 2), [0, 2])
 })
