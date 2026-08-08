@@ -476,6 +476,91 @@ test.serial(
   }
 )
 
+test.serial(
+  'autoSelectFirstEnabled false: Enter from no-selection state does not call onSelect',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let selected = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(selected, '')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: hotkey from no-selection state selects and highlights its item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', hotkey: 'x' },
+      { label: 'B', value: 'b', hotkey: 'y' },
+    ]
+
+    let selected = ''
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        autoSelectFirstEnabled={false}
+        onSelect={(item) => {
+          selected = item.label
+        }}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('y')
+    await delay()
+    t.is(selected, 'B')
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false + searchable: typing a character does not snap the highlight to the first item',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'a' },
+      { label: 'Apricot', value: 'b' },
+    ]
+
+    let highlightCount = 0
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        autoSelectFirstEnabled={false}
+        onHighlight={() => {
+          highlightCount++
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    await delay()
+    t.is(highlightCount, 0)
+    t.false(lastFrame()!.includes('>'))
+  }
+)
+
 // --- Keyboard Navigation (vertical, arrow keys) ---
 
 test.serial('arrow down moves selection down', async (t) => {

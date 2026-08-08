@@ -207,8 +207,14 @@ export function resolveInitialIndex<V>(
 /**
  * Resolves the index to highlight at mount from `initialKey`, `initialValue`,
  * `initialIndex`, and `autoSelectFirstEnabled`, in that precedence order.
- * Returns `-1` (no selection) only when no target resolves and
- * `autoSelectFirstEnabled` is explicitly `false`.
+ *
+ * `autoSelectFirstEnabled` only governs the final fallback step, when none of
+ * `initialKey`/`initialValue`/`initialIndex` resolve to a target — it does
+ * NOT gate an explicit `initialIndex` (an out-of-range or otherwise
+ * unmatched index is still clamped/resolved via `resolveInitialIndex`,
+ * regardless of `autoSelectFirstEnabled`). Returns `-1` (no selection) only
+ * when no target resolves at all and `autoSelectFirstEnabled` is explicitly
+ * `false`.
  */
 export function resolveInitialSelection<V>(
   items: Array<Item<V>>,
@@ -980,6 +986,14 @@ export function useEnhancedSelectInput<V>({
     setSelectedIndexState(nextIndex)
   }
 
+  // Search edits (append/backspace/clear) highlight the top match — but must
+  // preserve the no-selection sentinel (autoSelectFirstEnabled: false,
+  // nothing resolved yet) rather than snapping to item 0, the same rule the
+  // filtered-items revalidation effect applies below.
+  const resetSelectionToTopUnlessUnselected = () => {
+    if (selectedIndex !== -1) setSelectedIndexState(0)
+  }
+
   // Toggle the checked state of `item` (defaults to the highlighted item) in
   // multi-select mode. Shared by the Space keybinding and the public API so
   // custom keybindings can reuse the exact same behaviour.
@@ -1006,7 +1020,7 @@ export function useEnhancedSelectInput<V>({
 
   const setSearchQueryPublic = (query: string) => {
     setSearchQueryState(query)
-    setSelectedIndexState(0)
+    resetSelectionToTopUnlessUnselected()
   }
 
   useInput(
@@ -1032,13 +1046,13 @@ export function useEnhancedSelectInput<V>({
       switch (intent.type) {
         case 'search-backspace': {
           setSearchQueryState((previous) => previous.slice(0, -1))
-          setSelectedIndexState(0)
+          resetSelectionToTopUnlessUnselected()
           break
         }
 
         case 'search-clear': {
           setSearchQueryState('')
-          setSelectedIndexState(0)
+          resetSelectionToTopUnlessUnselected()
           break
         }
 
@@ -1091,7 +1105,7 @@ export function useEnhancedSelectInput<V>({
 
         case 'search-append': {
           setSearchQueryState((previous) => previous + intent.char)
-          setSelectedIndexState(0)
+          resetSelectionToTopUnlessUnselected()
           break
         }
 
