@@ -8,6 +8,7 @@ import {
   EnhancedSelectInput,
   useEnhancedSelectInput,
   type Item,
+  type ItemProperties,
   type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
 
@@ -1487,6 +1488,9 @@ type HookHarnessProperties = {
   // eslint-disable-next-line react/boolean-prop-naming
   readonly multiple?: boolean
   readonly onToggle?: (item: Item<unknown>, checked: boolean) => void
+  readonly filter?: (item: Item<unknown>, query: string) => boolean
+  readonly matchMode?: 'includes' | 'fuzzy'
+  readonly searchFields?: (item: Item<unknown>) => string | string[]
   readonly defaultSelectedKeys?: string[]
   readonly minSelections?: number
   readonly maxSelections?: number
@@ -5469,6 +5473,217 @@ test.serial(
     t.true(frame.includes('Apple'))
     t.true(frame.includes('Apricot'))
     t.false(frame.includes('Banana'))
+  }
+)
+
+// --- F2: custom filter, fuzzy matching, match highlighting ---
+
+test.serial(
+  'matchMode="fuzzy": matches an ordered subsequence, not just a substring',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Grape', value: 'grape' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        matchMode="fuzzy"
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 2)
+
+    const labels = result?.filteredItems.map((item) => item.label)
+    t.deepEqual(labels, ['Apple', 'Grape'])
+  }
+)
+
+test.serial(
+  'matchMode="includes" (default) still requires a contiguous substring',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Grape', value: 'grape' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await delay()
+
+    // Neither "Apple" nor "Grape" contains the contiguous substring "ae".
+    t.is(result?.filteredItems.length, 0)
+  }
+)
+
+test.serial(
+  'filter: a custom predicate fully overrides label matching',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 1 },
+      { label: 'Banana', value: 2 },
+      { label: 'Cherry', value: 3 },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        filter={(item, query) => String(item.value) === query}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('2')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
+
+    t.is(result?.filteredItems[0]?.label, 'Banana')
+  }
+)
+
+test.serial(
+  'searchFields: matches against a field other than label',
+  async (t) => {
+    const descriptions: Record<string, string> = {
+      apple: 'a sweet red fruit',
+      banana: 'a long yellow fruit',
+      cherry: 'a small stone fruit',
+    }
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+      { label: 'Cherry', value: 'cherry' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        searchFields={(item) => descriptions[String(item.value)] ?? ''}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('yellow')
+    await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
+
+    t.is(result?.filteredItems[0]?.label, 'Banana')
+  }
+)
+
+test.serial(
+  'highlighting: default item component renders the label unchanged for matches',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('app')
+    await waitFor(() => lastFrame()!.includes('/ app'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('Apple'))
+  }
+)
+
+function MatchesProbeItemComponent({ label, matches }: ItemProperties) {
+  const ranges = (matches ?? [])
+    .map(([start, end]) => `${start}-${end}`)
+    .join(',')
+  return <Text>{`${label}|${ranges}`}</Text>
+}
+
+test.serial(
+  'highlighting: itemComponent receives computed match ranges (includes mode)',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    stdin.write('ppl')
+    await waitFor(() => lastFrame()!.includes('Apple|1-4'))
+
+    t.true(lastFrame()!.includes('Apple|1-4'))
+  }
+)
+
+test.serial(
+  'highlighting: itemComponent receives merged match ranges (fuzzy mode)',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        matchMode="fuzzy"
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    stdin.write('ae')
+    await waitFor(() => lastFrame()!.includes('Apple|0-1,4-5'))
+
+    t.true(lastFrame()!.includes('Apple|0-1,4-5'))
+  }
+)
+
+test.serial(
+  'highlighting: no matches prop is passed outside searchable mode',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        itemComponent={MatchesProbeItemComponent}
+      />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('Apple|'))
   }
 )
 

@@ -18,7 +18,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
 - **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
-- **Searchable Mode:** Type to filter items inline with case-insensitive matching.
+- **Searchable Mode:** Type to filter items inline with case-insensitive matching, opt-in fuzzy matching, custom filter predicates, and matched-character highlighting.
 - **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
 - **Item Groups:** Organize items under non-navigable section headers.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
@@ -259,6 +259,50 @@ When typing:
 - Hotkeys are disabled (characters go to the search query)
 - "No matches" is shown when the query matches nothing
 
+#### Custom Filtering, Fuzzy Matching & Highlighting
+
+By default, searchable mode matches the query as a case-insensitive substring of `item.label`. Three props let you customize this:
+
+- **`matchMode`** — `'includes'` (default) or `'fuzzy'`. `'fuzzy'` matches an ordered, non-contiguous subsequence — e.g. the query `ae` matches `Apple` and `Grape` but not `Banana`.
+- **`searchFields`** — `(item) => string | string[]`, selects which text an item is matched against instead of (or in addition to) `label`. An item matches if any returned field matches.
+- **`filter`** — `(item, query) => boolean`, fully overrides the built-in matcher (`matchMode` and `searchFields` are ignored) for total control over what counts as a match.
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  searchable
+  matchMode="fuzzy"
+  onSelect={(item) => console.log(item.value)}
+/>
+```
+
+```tsx
+// Search descriptions instead of (or alongside) labels
+<EnhancedSelectInput
+  items={items}
+  searchable
+  searchFields={(item) => [item.label, item.value.description]}
+/>
+```
+
+```tsx
+// Fully custom predicate — matchMode/searchFields are ignored
+<EnhancedSelectInput
+  items={items}
+  searchable
+  filter={(item, query) => item.value.tags.includes(query)}
+/>
+```
+
+The default `<ItemComponent>` bolds the matched characters in the label. A custom `itemComponent` receives the same information via the `matches` prop — an array of `[start, end)` character ranges into `label`, computed against the active `matchMode` (ranges are best-effort against `label` even when a custom `filter` matched on a different field, and are `undefined` outside searchable mode or when the query is empty):
+
+```tsx
+function MyItem({ label, matches, isSelected }: ItemProperties) {
+  // matches: ReadonlyArray<readonly [number, number]> | undefined
+  return <Text color={isSelected ? 'green' : undefined}>{label}</Text>
+}
+```
+
 ### Type-ahead Jump
 
 Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and only takes effect when `searchable` is off. Typing printable characters builds a short-lived buffer and jumps the highlight to the first non-disabled item whose label starts with it (case-insensitive) — it moves the highlight only, it never calls `onSelect`/`onConfirm`. The buffer resets after `typeaheadTimeout` ms of inactivity (default `500`).
@@ -466,6 +510,9 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                                                                                |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                                                                            |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                                                                           |
+| `matchMode`            | `'includes' \| 'fuzzy'`                     | `'includes'`                  | Built-in search matcher; `'fuzzy'` matches an ordered, non-contiguous subsequence. Ignored when `filter` is supplied                                                                                                        |
+| `searchFields`         | `(item: Item<V>) => string \| string[]`     | `item.label`                  | Selects which text field(s) the built-in matcher searches. Ignored when `filter` is supplied                                                                                                                                |
+| `filter`               | `(item: Item<V>, query: string) => boolean` | —                             | Fully overrides the built-in search matching; `matchMode` and `searchFields` are ignored                                                                                                                                    |
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                  |
 | `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                               |
 | `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                   |
