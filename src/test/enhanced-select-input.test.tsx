@@ -30,6 +30,9 @@ const CTRL_J = '\u000A' // Ctrl+J
 const CTRL_K = '\u000B' // Ctrl+K
 const CTRL_H = '\u0008' // Ctrl+H
 const CTRL_L = '\u000C' // Ctrl+L
+const CTRL_A = '\u0001' // Ctrl+A
+const CTRL_D = '\u0004' // Ctrl+D
+const CTRL_R = '\u0012' // Ctrl+R
 
 // Small delay to let React/Ink process state updates. AVA runs this file's
 // ~150 tests concurrently, so the default needs enough margin that a busy
@@ -1487,6 +1490,9 @@ type HookHarnessProperties = {
   // eslint-disable-next-line react/boolean-prop-naming
   readonly multiple?: boolean
   readonly onToggle?: (item: Item<unknown>, checked: boolean) => void
+  readonly defaultSelectedKeys?: string[]
+  readonly minSelections?: number
+  readonly maxSelections?: number
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -1847,6 +1853,472 @@ test('toggle is a no-op on disabled items in multiple mode', async (t) => {
   await delay()
   t.is(result?.checkedKeys.size, 0)
 })
+
+// --- F7: multi-select quality of life ---
+
+test('selectAll checks every enabled item, skipping disabled ones', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  await waitFor(() => result?.checkedKeys.size === 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.false(result?.checkedKeys.has('b'))
+  t.true(result?.checkedKeys.has('c'))
+  t.is(result?.selectionCount, 2)
+})
+
+test('selectNone clears every checked item', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b']}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  result?.selectNone()
+  await waitFor(() => result?.checkedKeys.size === 0)
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('invertSelection flips every enabled item, leaving disabled items untouched', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a']}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.invertSelection()
+  await waitFor(() => Boolean(result?.checkedKeys.has('c')))
+  t.false(result?.checkedKeys.has('a'))
+  t.false(result?.checkedKeys.has('b'))
+  t.true(result?.checkedKeys.has('c'))
+})
+
+test('selectAll/selectNone/invertSelection are no-ops outside multiple mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      items={items}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  result?.invertSelection()
+  await delay()
+  t.is(result?.checkedKeys.size, 0)
+})
+
+test('maxSelections blocks toggle from checking beyond the cap, uncheck still allowed', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.toggle(items[0])
+  await waitFor(() => Boolean(result?.checkedKeys.has('a')))
+  result?.toggle(items[1])
+  await waitFor(() => Boolean(result?.checkedKeys.has('b')))
+  result?.toggle(items[2])
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  t.false(result?.checkedKeys.has('c'))
+
+  result?.toggle(items[0])
+  await waitFor(() => result?.checkedKeys.size === 1)
+  t.false(result?.checkedKeys.has('a'))
+})
+
+test('maxSelections caps selectAll deterministically in filteredItems order', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  result?.selectAll()
+  await waitFor(() => result?.checkedKeys.size === 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.true(result?.checkedKeys.has('b'))
+  t.false(result?.checkedKeys.has('c'))
+})
+
+test('isSelectionValid and selectionCount reflect minSelections/maxSelections', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      minSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.selectionCount, 0)
+  t.false(result?.isSelectionValid)
+
+  result?.toggle(items[0])
+  await waitFor(() => result?.selectionCount === 1)
+  t.false(result?.isSelectionValid)
+
+  result?.toggle(items[1])
+  await waitFor(() => result?.selectionCount === 2)
+  t.true(result?.isSelectionValid)
+})
+
+test.serial(
+  'minSelections blocks onConfirm until enough items are checked',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(SPACE) // Check A
+    await delay()
+    stdin.write(ENTER) // Only 1 checked — blocked
+    await delay()
+    t.is(confirmed, undefined)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(SPACE) // Check B — now 2 checked
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+
+    t.not(confirmed, undefined)
+    t.is(confirmed!.length, 2)
+  }
+)
+
+test.serial(
+  'maxSelections blocks onConfirm when the checked count exceeds the cap',
+  async (t) => {
+    // A caller could pass defaultSelectedKeys that already exceed
+    // maxSelections — Enter must still refuse to confirm in that case.
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] | undefined
+    const { stdin } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        maxSelections={1}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(confirmed, undefined)
+  }
+)
+
+test.serial('Ctrl+A selects all enabled items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput multiple items={items} />
+  )
+
+  await delay()
+  stdin.write(CTRL_A)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 2)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+})
+
+test.serial('Ctrl+D clears all checked items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b']}
+    />
+  )
+
+  await delay()
+  stdin.write(CTRL_D)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 0)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 2)
+})
+
+test.serial('Ctrl+R inverts checked items via keyboard', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
+  )
+
+  await delay()
+  stdin.write(CTRL_R)
+  await delay()
+
+  const frame = lastFrame()!
+  t.is((frame.match(/\[x]/g) ?? []).length, 1)
+  t.is((frame.match(/\[ ]/g) ?? []).length, 1)
+})
+
+test.serial(
+  'bulk chords are no-ops when keyMap.bulk is disabled',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput multiple items={items} keyMap={{ bulk: false }} />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    const frame = lastFrame()!
+    t.is((frame.match(/\[x]/g) ?? []).length, 0)
+  }
+)
+
+test.serial(
+  'showSelectionCount renders the checked count and updates on toggle',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput multiple showSelectionCount items={items} />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('0 selected'))
+
+    stdin.write(SPACE)
+    await delay()
+    t.true(lastFrame()!.includes('1 selected'))
+  }
+)
+
+test.serial(
+  'showSelectionCount shows a /max hint when maxSelections is set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        showSelectionCount
+        maxSelections={2}
+        items={items}
+      />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('0 selected/2'))
+  }
+)
+
+test.serial('showSelectionCount is hidden by default', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput multiple items={items} />)
+
+  await delay()
+  t.false(lastFrame()!.includes('selected'))
+})
+
+test.serial('showSelectionCount is hidden in single-select mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput showSelectionCount items={items} />
+  )
+
+  await delay()
+  t.false(lastFrame()!.includes('selected'))
+})
+
+test.serial(
+  'checkedIndicator/uncheckedIndicator customise the checkbox glyphs',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        defaultSelectedKeys={['a']}
+        checkedIndicator="✔"
+        uncheckedIndicator="✗"
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('✔'))
+    t.true(frame.includes('✗'))
+    t.false(frame.includes('[x]'))
+    t.false(frame.includes('[ ]'))
+  }
+)
+
+test.serial(
+  'default checkbox glyphs are unchanged when indicators are not set',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput multiple items={items} defaultSelectedKeys={['a']} />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('[x]'))
+    t.true(frame.includes('[ ]'))
+  }
+)
 
 // --- #15: items prop sync after mount ---
 
