@@ -45,6 +45,15 @@ const delay = async (ms = 300) =>
     setTimeout(resolve, ms)
   })
 
+// Test fixtures below never include separators — narrow the label lookup so
+// assertions can read `.label` without threading isSeparator checks through
+// every call site.
+function labelOf(
+  item: ItemOrSeparator<unknown> | undefined
+): string | undefined {
+  return item && !isSeparator(item) ? item.label : undefined
+}
+
 // Ink 7 flushes a lone Escape byte asynchronously (it briefly buffers it in
 // case more bytes follow, e.g. an arrow-key sequence), so state updates
 // triggered by Escape can land after a fixed `delay()` under load. Poll
@@ -5514,7 +5523,9 @@ test.serial(
     stdin.write('ae')
     await waitFor(() => (result?.filteredItems.length ?? 0) === 2)
 
-    const labels = result?.filteredItems.map((item) => item.label)
+    const labels = result?.filteredItems
+      .filter((item): item is Item<unknown> => !isSeparator(item))
+      .map((item) => item.label)
     t.deepEqual(labels, ['Apple', 'Grape'])
   }
 )
@@ -5572,7 +5583,7 @@ test.serial(
     stdin.write('2')
     await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
 
-    t.is(result?.filteredItems[0]?.label, 'Banana')
+    t.is(labelOf(result?.filteredItems[0]), 'Banana')
   }
 )
 
@@ -5606,7 +5617,7 @@ test.serial(
     stdin.write('yellow')
     await waitFor(() => (result?.filteredItems.length ?? 0) === 1)
 
-    t.is(result?.filteredItems[0]?.label, 'Banana')
+    t.is(labelOf(result?.filteredItems[0]), 'Banana')
   }
 )
 

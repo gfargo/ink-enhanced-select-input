@@ -1173,7 +1173,8 @@ export function useEnhancedSelectInput<V>({
     const nonSeparatorItems = items.filter(
       (item): item is Item<V> => !isSeparator(item)
     )
-    if (filter) return nonSeparatorItems.filter((item) => filter(item, searchQuery))
+    if (filter)
+      return nonSeparatorItems.filter((item) => filter(item, searchQuery))
     return nonSeparatorItems.filter((item) => {
       const fields = searchFields ? searchFields(item) : item.label
       const fieldList = Array.isArray(fields) ? fields : [fields]
