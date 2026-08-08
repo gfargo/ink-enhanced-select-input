@@ -431,7 +431,7 @@ export function resolveInitialIndex<V>(
  * `false`.
  */
 export function resolveInitialSelection<V>(
-  items: Array<Item<V>>,
+  items: Array<ItemOrSeparator<V>>,
   options: {
     initialKey?: string
     initialValue?: V
@@ -447,12 +447,16 @@ export function resolveInitialSelection<V>(
   }
 
   if (initialKey !== undefined) {
-    const index = items.findIndex((item) => itemKey(item) === initialKey)
+    const index = items.findIndex(
+      (item) => !isSeparator(item) && itemKey(item) === initialKey
+    )
     if (index !== -1) return resolveInitialIndex(items, index)
   }
 
   if (initialValue !== undefined) {
-    const index = items.findIndex((item) => item.value === initialValue)
+    const index = items.findIndex(
+      (item) => !isSeparator(item) && item.value === initialValue
+    )
     if (index !== -1) return resolveInitialIndex(items, index)
   }
 
@@ -1392,7 +1396,7 @@ export function useEnhancedSelectInput<V>({
   // Both lookups are binary searches — pageStarts is strictly ascending — so
   // per-render cost is O(log pages) rather than O(pages).
   let effectiveRotateIndex: number
-  let visibleItems: Array<Item<V>>
+  let visibleItems: Array<ItemOrSeparator<V>>
   if (limit && paginationMode === 'scroll') {
     const windowStart = scrollWindowStart(
       windowStartReference.current,

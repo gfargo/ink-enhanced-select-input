@@ -1222,7 +1222,7 @@ test.serial(
     t.is(result?.rotateIndex, 1)
     t.is(result?.windowIndex, 2)
     t.deepEqual(
-      result?.visibleItems.map((item) => item.label),
+      result?.visibleItems.map((item) => labelOf(item)),
       ['B', 'C', 'D']
     )
   }
@@ -1277,7 +1277,7 @@ test.serial(
     t.is(result?.rotateIndex, 0)
     t.is(result?.windowIndex, 0)
     t.deepEqual(
-      result?.visibleItems.map((item) => item.label),
+      result?.visibleItems.map((item) => labelOf(item)),
       ['A', 'B', 'C']
     )
   }
@@ -1465,7 +1465,7 @@ test.serial(
     t.is(result?.selectedIndex, 2)
     t.is(result?.rotateIndex, 2)
     t.deepEqual(
-      result?.visibleItems.map((item) => item.label),
+      result?.visibleItems.map((item) => labelOf(item)),
       ['C', 'D']
     )
   }
