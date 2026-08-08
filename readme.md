@@ -134,6 +134,34 @@ function MultiDemo() {
 render(<MultiDemo />)
 ```
 
+#### Bulk selection & selection constraints
+
+In `multiple` mode, `Ctrl+A` checks every enabled item, `Ctrl+D` clears the selection, and `Ctrl+R` inverts it (gated by `keyMap.bulk`, default `true`). The same operations are available headlessly via `selectAll()`, `selectNone()`, and `invertSelection()` from `useEnhancedSelectInput`.
+
+`minSelections` / `maxSelections` constrain how many items may be checked: `toggle` (and the bulk actions) refuse to check beyond `maxSelections`, and `onConfirm` only fires on Enter when the checked count is within `[minSelections, maxSelections]` — otherwise Enter is a no-op. Pair this with `showSelectionCount` to render an always-visible "N selected" line (with a `/min` or `/max` hint) so the constraint is visible to the user:
+
+```tsx
+<EnhancedSelectInput
+  items={options}
+  multiple
+  minSelections={1}
+  maxSelections={2}
+  showSelectionCount
+  onConfirm={(selected) => console.log('Confirmed:', selected)}
+/>
+```
+
+Customize the checkbox glyphs with `checkedIndicator` / `uncheckedIndicator` (defaults `'[x]'` / `'[ ]'`):
+
+```tsx
+<EnhancedSelectInput
+  items={options}
+  multiple
+  checkedIndicator="✔"
+  uncheckedIndicator="✗"
+/>
+```
+
 ### Per-Item Indicators
 
 ```tsx
@@ -304,16 +332,17 @@ Because Ink does not support event propagation stopping, every `useInput` handle
 />
 ```
 
-| `keyMap` field | Keys it controls                               | Default |
-| -------------- | ---------------------------------------------- | ------- |
-| `arrows`       | `↑` `↓` `←` `→`                                | `true`  |
-| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)      | `true`  |
-| `homeEnd`      | `Home` · `End`                                 | `true`  |
-| `cancel`       | `Escape` → `onCancel`                          | `true`  |
-| `select`       | `Enter` → `onSelect` / `onConfirm`             | `true`  |
-| `toggle`       | `Space` toggle in multi-select mode            | `true`  |
-| `hotkeys`      | Item `hotkey` chars (independent of `select`)  | `true`  |
-| `search`       | Printable-character capture in searchable mode | `true`  |
+| `keyMap` field | Keys it controls                                                           | Default |
+| -------------- | -------------------------------------------------------------------------- | ------- |
+| `arrows`       | `↑` `↓` `←` `→`                                                            | `true`  |
+| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                  | `true`  |
+| `homeEnd`      | `Home` · `End`                                                             | `true`  |
+| `cancel`       | `Escape` → `onCancel`                                                      | `true`  |
+| `select`       | `Enter` → `onSelect` / `onConfirm`                                         | `true`  |
+| `toggle`       | `Space` toggle in multi-select mode                                        | `true`  |
+| `bulk`         | `Ctrl+A`/`Ctrl+D`/`Ctrl+R` bulk select-all/none/invert (multi-select mode) | `true`  |
+| `hotkeys`      | Item `hotkey` chars (independent of `select`)                              | `true`  |
+| `search`       | Printable-character capture in searchable mode                             | `true`  |
 
 Any field not supplied stays enabled. `isFocused={false}` remains the way to disable all input at once.
 
@@ -416,7 +445,10 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 - `searchQuery` — the current filter string, empty when `searchable` is `false`.
 - `setSelectedIndex(index)` — imperatively move the highlighted item, clamping into range and snapping `rotateIndex` to the containing page.
 - `setSearchQuery(query)` — imperatively set the search query and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
-- `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode or on a disabled item, and fires `onToggle`.
+- `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode, on a disabled item, or when checking would exceed `maxSelections` (unchecking is always allowed), and fires `onToggle`.
+- `selectAll()` / `selectNone()` / `invertSelection()` — bulk-check/uncheck/flip every enabled item (respecting the active search filter and `maxSelections`); no-op outside `multiple` mode.
+- `selectionCount` — number of currently checked items (`0` outside `multiple` mode).
+- `isSelectionValid` — `true` when `selectionCount` satisfies `minSelections`/`maxSelections` (always `true` outside `multiple` mode or when neither bound is set).
 
 These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
@@ -440,6 +472,11 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `onConfirm`            | `(items: Array<Item<V>>) => void`           | —                             | Called on Enter in multi-select mode with all checked items, unaffected by the active search filter                                                                                                                         |
 | `confirmScope`         | `'all' \| 'filtered'`                       | `'all'`                       | Which items `onConfirm` draws from in multi-select mode; `'filtered'` restores the old behaviour of only confirming checked items that match the active search query                                                        |
 | `onToggle`             | `(item: Item<V>, checked: boolean) => void` | —                             | Called each time an item is toggled in multi-select mode                                                                                                                                                                    |
+| `minSelections`        | `number`                                    | —                             | Minimum checked items required for `onConfirm` to fire in multi-select mode; Enter is a no-op below this count                                                                                                              |
+| `maxSelections`        | `number`                                    | —                             | Maximum items that may be checked at once in multi-select mode; `toggle`/bulk actions refuse to check beyond this cap                                                                                                       |
+| `showSelectionCount`   | `boolean`                                   | `false`                       | Render an "N selected" line (with a `/min` or `/max` hint) above the list in multi-select mode                                                                                                                              |
+| `checkedIndicator`     | `string`                                    | `'[x]'`                       | Glyph shown for a checked item in multi-select mode                                                                                                                                                                         |
+| `uncheckedIndicator`   | `string`                                    | `'[ ]'`                       | Glyph shown for an unchecked item in multi-select mode                                                                                                                                                                      |
 | `groupHeaderComponent` | `FC<GroupHeaderProperties>`                 | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                                                                                |
 | `searchable`           | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                                                                            |
 | `searchPlaceholder`    | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                                                                           |
@@ -477,7 +514,7 @@ type Item<V> = {
 | Vertical    | `↑` / `k` | `↓` / `j` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
 | Horizontal  | `←` / `h` | `→` / `l` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
 
-In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
+In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 
 Disabled items are automatically skipped during navigation, including by `Home` and `End`.
 
