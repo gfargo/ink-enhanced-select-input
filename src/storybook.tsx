@@ -152,12 +152,18 @@ export function Storybook() {
       {currentView === 'multi-select' && orientation && (
         <Box flexDirection="column">
           <Text dimColor>
-            Multi-Select — Space to toggle, Enter to confirm:
+            Multi-Select — Space to toggle, Ctrl+A/D/R to
+            select-all/none/invert, Enter to confirm (pick 1-3):
           </Text>
           <EnhancedSelectInput
             multiple
+            showSelectionCount
             orientation={orientation}
             defaultSelectedKeys={['ts']}
+            minSelections={1}
+            maxSelections={3}
+            checkedIndicator="✔"
+            uncheckedIndicator="✗"
             items={[
               { label: 'TypeScript', value: 'ts' },
               { label: 'React', value: 'react' },
