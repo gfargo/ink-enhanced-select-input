@@ -447,6 +447,20 @@ Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and 
 - Ignored entirely when `searchable` is `true` — printable characters remain search input in that mode
 - In single-select mode, `Space` is treated as a buffer character (the multi-select toggle path doesn't apply), so a leading space only matches labels that begin with a space
 
+### Truncating Long Labels
+
+Set `maxWidth` to ellipsize labels that would otherwise wrap to multiple rows, keeping `limit` a trustworthy height budget — one row per item. `truncate` controls where the ellipsis lands: `'end'` (default), `'start'`, or `'middle'` (handy for file paths, since it keeps both the leading directory and the filename visible).
+
+```tsx
+<EnhancedSelectInput
+  items={[{ label: '/very/long/path/to/some/deeply/nested/file.ts', value: 1 }]}
+  maxWidth={30}
+  truncate="middle"
+/>
+```
+
+Truncation is display-only: search filtering, `onSelect`/`onHighlight`/`onConfirm`, and hotkeys all operate on the item's original, untruncated `label`. A custom `itemComponent` receives the already-truncated string via its `label` prop.
+
 ### Avoiding Key Conflicts (`keyMap`)
 
 Because Ink does not support event propagation stopping, every `useInput` handler in your app receives every keypress simultaneously. If your application already binds one of the component's default keys globally, you can disable individual key groups with the `keyMap` prop — the component ignores those keys without interfering with your own handlers.
@@ -595,7 +609,7 @@ function MyCustomSelect({ items, onSelect }) {
 
 `windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, and `theme` (theming is render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, `maxWidth`, `truncate`, and `theme` (theming is render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
 
 - `selectedIndex` — index of the highlighted item within `filteredItems`. Reflects the `selectedIndex` prop when controlled.
 - `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
@@ -658,6 +672,8 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                                                                     |
 | `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                                                                                  |
 | `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                                                                      |
+| `maxWidth`             | `number`                                    | —                             | Max display width (characters) for a label; longer labels are ellipsized so each item stays on one row. Display-only — search, `onSelect`/`onHighlight`/`onConfirm`, and hotkeys still use the full label                                                                      |
+| `truncate`             | `'end' \| 'middle' \| 'start'`              | `'end'`                       | Where the ellipsis lands when `maxWidth` truncates a label. `'middle'` is useful for file paths                                                                                                                                                                                |
 | `loop`                 | `boolean`                                   | `true`                        | Whether arrow/vim/Page Up/Down navigation wraps around at the list boundary; `false` clamps instead. `Home`/`End` are unaffected                                                                                                                                               |
 | `theme`                | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                                                                                                                               |
 

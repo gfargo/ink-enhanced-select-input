@@ -8,6 +8,7 @@ import {
   pageIndexOfStart,
   pageStartFor,
   resolveInitialIndex,
+  truncateLabel,
   type Item,
   type ItemOrSeparator,
   type SeparatorItem,
@@ -331,6 +332,72 @@ test('pageIndexOfStart: matches Array#indexOf for exact and missing values', (t)
       `mismatch at start ${start}`
     )
   }
+})
+
+// ── truncateLabel ────────────────────────────────────────────────────────────
+
+test('truncateLabel: label shorter than maxWidth is returned unchanged', (t) => {
+  t.is(truncateLabel('short', 10), 'short')
+})
+
+test('truncateLabel: label exactly maxWidth is returned unchanged', (t) => {
+  t.is(truncateLabel('exact', 5), 'exact')
+})
+
+test('truncateLabel: maxWidth unset returns original', (t) => {
+  t.is(truncateLabel('a very long label indeed', 0), 'a very long label indeed')
+})
+
+test('truncateLabel: negative maxWidth returns original', (t) => {
+  t.is(
+    truncateLabel('a very long label indeed', -5),
+    'a very long label indeed'
+  )
+})
+
+test('truncateLabel: maxWidth === 1 returns a bare ellipsis', (t) => {
+  t.is(truncateLabel('somelonglabel', 1), '…')
+})
+
+test('truncateLabel: end mode keeps the start and ellipsizes the tail', (t) => {
+  const result = truncateLabel('somelonglabel', 11, 'end')
+  t.is(result.length, 11)
+  t.true(result.endsWith('…'))
+  t.is(result, 'somelongla…')
+})
+
+test('truncateLabel: start mode keeps the end and ellipsizes the head', (t) => {
+  const result = truncateLabel('somelonglabel', 11, 'start')
+  t.is(result.length, 11)
+  t.true(result.startsWith('…'))
+  t.is(result, '…elonglabel')
+})
+
+test('truncateLabel: middle mode keeps both ends', (t) => {
+  const result = truncateLabel('somelonglabel', 9, 'middle')
+  t.is(result.length, 9)
+  t.true(result.includes('…'))
+  t.true(result.startsWith('some'))
+  t.true(result.endsWith('abel'))
+})
+
+test('truncateLabel: middle mode on a file path keeps directory and filename visible', (t) => {
+  const result = truncateLabel(
+    '/very/long/path/to/some/deeply/nested/file.ts',
+    20,
+    'middle'
+  )
+  t.is(result.length, 20)
+  t.true(result.includes('…'))
+  t.true(result.startsWith('/very/long'))
+  t.true(result.endsWith('file.ts'))
+})
+
+test('truncateLabel: default mode is end', (t) => {
+  t.is(
+    truncateLabel('somelonglabel', 11),
+    truncateLabel('somelonglabel', 11, 'end')
+  )
 })
 
 // ── separators ───────────────────────────────────────────────────────────────
