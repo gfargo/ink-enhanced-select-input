@@ -7429,6 +7429,178 @@ test.serial(
   }
 )
 
+// --- maxWidth / truncate ---
+
+test.serial('maxWidth: unset renders the full label (no regression)', (t) => {
+  const items = [
+    { label: 'A very long label that would normally wrap', value: 'a' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  const frame = lastFrame()!
+  t.true(frame.includes('A very long label that would normally wrap'))
+  t.false(frame.includes('…'))
+})
+
+test.serial('maxWidth: 0 renders the full label (no regression)', (t) => {
+  const items = [
+    { label: 'A very long label that would normally wrap', value: 'a' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} maxWidth={0} />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('A very long label that would normally wrap'))
+})
+
+test.serial(
+  'maxWidth: ellipsizes a label exceeding the width, default end mode',
+  (t) => {
+    const items = [
+      { label: 'A very long label that would normally wrap', value: 'a' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} maxWidth={20} />
+    )
+
+    const frame = lastFrame()!
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A very long label that would normally wrap'))
+  }
+)
+
+test.serial('maxWidth: short labels are left untouched', (t) => {
+  const items = [{ label: 'Short', value: 'a' }]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} maxWidth={20} />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('Short'))
+  t.false(frame.includes('…'))
+})
+
+test.serial('maxWidth: truncate="start" keeps the tail of the label', (t) => {
+  const items = [{ label: 'somelonglabelvalue', value: 'a' }]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} maxWidth={10} truncate="start" />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('…'))
+  t.true(frame.includes('abelvalue'))
+})
+
+test.serial(
+  'maxWidth: truncate="middle" keeps both ends for a file path',
+  (t) => {
+    const items = [
+      { label: '/very/long/path/to/some/deeply/nested/file.ts', value: 'a' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} maxWidth={20} truncate="middle" />
+    )
+
+    const frame = lastFrame()!
+    t.true(frame.includes('…'))
+    t.true(frame.includes('/very/long'))
+    t.true(frame.includes('file.ts'))
+  }
+)
+
+test.serial('maxWidth: applies in horizontal orientation', (t) => {
+  const items = [
+    { label: 'A very long horizontal label', value: 'a' },
+    { label: 'Short', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} orientation="horizontal" maxWidth={15} />
+  )
+
+  const frame = lastFrame()!
+  t.true(frame.includes('…'))
+  t.false(frame.includes('A very long horizontal label'))
+})
+
+test.serial(
+  'maxWidth: custom itemComponent receives the truncated label',
+  (t) => {
+    const items = [
+      { label: 'A very long label for custom rendering', value: 'a' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        maxWidth={15}
+        itemComponent={({ label }) => <Text>{`[${label}]`}</Text>}
+      />
+    )
+
+    const frame = lastFrame()!
+    t.true(frame.includes('…'))
+    t.false(frame.includes('A very long label for custom rendering'))
+  }
+)
+
+test.serial(
+  'maxWidth: searchable filtering still matches against the untruncated label',
+  async (t) => {
+    const items = [
+      { label: 'A very long label containing zzz-marker', value: 'a' },
+      { label: 'Unrelated short label', value: 'b' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} maxWidth={15} />
+    )
+
+    await delay()
+    stdin.write('zzz-marker')
+    await delay()
+
+    const frame = lastFrame()!
+    t.true(frame.includes('…'))
+    t.false(frame.includes('Unrelated short label'))
+  }
+)
+
+test.serial(
+  'maxWidth: onSelect receives the item with its original, untruncated label',
+  async (t) => {
+    const items = [
+      {
+        label: 'A very long label that gets truncated for display',
+        value: 'a',
+      },
+    ]
+
+    let selectedLabel = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        maxWidth={15}
+        onSelect={(item) => {
+          selectedLabel = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(selectedLabel, 'A very long label that gets truncated for display')
+  }
+)
+
 // --- OSS-1515: controlled mode ---
 
 test.serial(

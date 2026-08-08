@@ -10,6 +10,7 @@ export {
   findNextValidIndex,
   findFirstValidIndex,
   findLastValidIndex,
+  truncateLabel,
   isSeparator,
   isSelectable,
   matchesQuery,
@@ -29,5 +30,6 @@ export type {
   IndicatorProperties,
   ItemProperties,
   GroupHeaderProperties,
+  TruncateMode,
   SeparatorProperties,
 } from './enhanced-select-input/index.js'
