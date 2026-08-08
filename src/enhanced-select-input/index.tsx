@@ -63,6 +63,11 @@ export type KeyMap = {
   /** Space toggle in multi-select mode. Default: true. */
   readonly toggle?: boolean
   /**
+   * Bulk selection chords in multi-select mode: `Ctrl+A` select-all,
+   * `Ctrl+D` select-none, `Ctrl+R` invert. Default: true.
+   */
+  readonly bulk?: boolean
+  /**
    * Item hotkeys (single-char item selection, e.g. `hotkey: 'q'`). Independent
    * of `select` — disabling `select` only turns off Enter, and disabling
    * `hotkeys` only turns off item hotkeys. Default: true.
@@ -79,6 +84,17 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly items: Array<Item<V>>
   readonly isFocused?: boolean
   readonly initialIndex?: number
+  /**
+   * Max number of visible rows — items and group headers count, but each
+   * counts as exactly one row regardless of label length. `limit` bounds row
+   * *count*, not terminal width: `DefaultItemComponent` and
+   * `DefaultGroupHeaderComponent` both truncate an overlong label with an
+   * ellipsis (`wrap="truncate-end"`) rather than letting Ink wrap it onto
+   * extra lines, so the rendered height stays `limit` rows. A custom
+   * `itemComponent` or `groupHeaderComponent` renders its own `<Text>` and
+   * is responsible for its own truncation/wrap behaviour — an unbounded
+   * `wrap="wrap"` there can still exceed `limit` rows on narrow terminals.
+   */
   readonly limit?: number
   readonly onSelect?: (item: Item<V>) => void
   readonly onHighlight?: (item: Item<V>) => void
@@ -110,6 +126,19 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly onToggle?: (item: Item<V>, checked: boolean) => void
   /**
+   * Minimum number of checked items required for `onConfirm` to fire in
+   * multi-select mode. `Enter` is a no-op while the checked count is below
+   * this threshold. Only used when `multiple` is true.
+   */
+  readonly minSelections?: number
+  /**
+   * Maximum number of items that may be checked at once in multi-select
+   * mode. `toggle` (and bulk select-all/invert) refuse to check additional
+   * items once this many are checked; unchecking is always allowed. Only
+   * used when `multiple` is true.
+   */
+  readonly maxSelections?: number
+  /**
    * Enable searchable/filterable mode. When true, printable characters
    * build a search query that filters items by label. Hotkeys and vim
    * navigation keys are disabled in this mode.
@@ -127,6 +156,40 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly typeaheadTimeout?: number
 }
 
+/**
+ * Colors used by the default render components. Any slot left unset falls
+ * back to the built-in default (which reproduces the component's original,
+ * pre-theming appearance). Set a slot to `undefined` explicitly to disable
+ * that color. This shape may grow over time — treat it as append-only.
+ */
+export type Theme = {
+  /** Color of the cursor/indicator and label for the highlighted item. Default: 'green'. */
+  readonly selected?: string
+  /** Color of disabled item labels. Default: 'gray'. */
+  readonly disabled?: string
+  /** Color of group header text. Default: undefined (dim only). */
+  readonly groupHeader?: string
+  /** Color of the trailing hotkey hint, e.g. "(a)". Default: 'gray'. */
+  readonly hotkey?: string
+  /** Color of the ▲/▼/◀/▶ scroll indicators. Default: undefined (dim only). */
+  readonly scrollIndicator?: string
+  /** Color of the search query/placeholder text. Default: undefined (dim only). */
+  readonly searchPlaceholder?: string
+}
+
+/** Every {@link Theme} color slot, always present (possibly `undefined`). */
+type ThemeColors = {
+  readonly selected: string | undefined
+  readonly disabled: string | undefined
+  readonly groupHeader: string | undefined
+  readonly hotkey: string | undefined
+  readonly scrollIndicator: string | undefined
+  readonly searchPlaceholder: string | undefined
+}
+
+/** Fully-resolved theme — every color slot present, plus whether dim styling is active. */
+type ResolvedTheme = ThemeColors & { readonly dim: boolean }
+
 /** Full component props — hook props plus rendering customisation. */
 export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly indicatorComponent?: FC<IndicatorProperties>
@@ -141,6 +204,22 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly showScrollIndicators?: boolean
   /** Placeholder text shown in the search input when the query is empty. */
   readonly searchPlaceholder?: string
+  /** Glyph shown for a checked item in multi-select mode. Default: `'[x]'`. */
+  readonly checkedIndicator?: string
+  /** Glyph shown for an unchecked item in multi-select mode. Default: `'[ ]'`. */
+  readonly uncheckedIndicator?: string
+  /**
+   * Render a "N selected" line above the list in multi-select mode. Shows a
+   * `/max` (or `/min`) hint when the corresponding prop is set. Default: false.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly showSelectionCount?: boolean
+  /**
+   * Override the colors used by the default render components. Omitted
+   * slots keep their default value. Automatically disabled when the
+   * `NO_COLOR` environment variable is set. See {@link Theme}.
+   */
+  readonly theme?: Partial<Theme>
 }
 
 export type IndicatorProperties = {
@@ -149,6 +228,12 @@ export type IndicatorProperties = {
   readonly isChecked?: boolean
   // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
+  /** Glyph shown when `isChecked` is true. Falls back to `'[x]'`. */
+  readonly checkedIndicator?: string
+  /** Glyph shown when `isChecked` is false. Falls back to `'[ ]'`. */
+  readonly uncheckedIndicator?: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type ItemProperties = {
@@ -158,10 +243,14 @@ export type ItemProperties = {
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   // eslint-disable-next-line react/no-unused-prop-types
   readonly isChecked?: boolean
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type GroupHeaderProperties = {
   readonly label: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 // Vim navigation keys that take precedence over hotkeys.
@@ -358,6 +447,9 @@ export type Intent<V> =
   | { type: 'jump'; index: number }
   | { type: 'cancel' }
   | { type: 'toggle' }
+  | { type: 'select-all' }
+  | { type: 'select-none' }
+  | { type: 'invert' }
   | { type: 'navigate'; index: number }
   | { type: 'submit' }
   | { type: 'search-append'; char: string }
@@ -401,15 +493,20 @@ function resolveSearchDeleteIntent<V>(
  * horizontal orientation ←/→ (and Home/End, via {@link resolveJumpIntent})
  * remain list navigation, since they're currently no-ops for the cursor in
  * that layout. Ctrl+A/Ctrl+E provide cursor-to-start/end in both orientations.
+ *
+ * Ctrl+A is deferred to {@link resolveBulkIntent}'s select-all when the list
+ * is also in multi-select mode with bulk chords enabled — Ctrl+A means
+ * "select all" there, and Home still reaches cursor-to-start in vertical
+ * orientation.
  */
 function resolveSearchCursorIntent<V>(
   key: Key,
   input: string,
   context: InputIntentContext<V>
 ): Intent<V> | undefined {
-  const { orientation } = context
+  const { orientation, multiple, km } = context
 
-  if (key.ctrl && input === 'a') {
+  if (key.ctrl && input === 'a' && !(multiple && km.bulk)) {
     return { type: 'search-cursor-home' }
   }
 
@@ -565,7 +662,12 @@ function resolveTypeaheadIntent<V>(
 /**
  * Item hotkeys. Not active in multi-select or searchable mode, and active
  * vim nav keys or Ctrl/Alt chords (which take priority over a same-character
- * hotkey) are excluded here too.
+ * hotkey) are excluded here too. `input` is empty for arrows and other
+ * non-alphanumeric keys, which would otherwise match an unset `hotkey: ''`
+ * on an item (B14) — guarded explicitly here rather than relying solely on
+ * navigation/jump resolving first, since a key with no navigate/jump
+ * mapping (e.g. `km.arrows` disabled) can still reach this branch with an
+ * empty `input`.
  */
 function resolveHotkeyIntent<V>(
   input: string,
@@ -579,6 +681,7 @@ function resolveHotkeyIntent<V>(
     !km.hotkeys ||
     multiple ||
     searchable ||
+    !input ||
     isActiveVimKey ||
     isModifiedChord
   ) {
@@ -594,6 +697,21 @@ function resolveHotkeyIntent<V>(
     type: 'hotkey',
     item: hotkeyItem,
     index: filteredItems.indexOf(hotkeyItem),
+  }
+}
+
+/** Resolves the full key map, defaulting any unsupplied flag to enabled (true). */
+function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
+  return {
+    arrows: keyMap?.arrows ?? true,
+    vimKeys: keyMap?.vimKeys ?? true,
+    homeEnd: keyMap?.homeEnd ?? true,
+    cancel: keyMap?.cancel ?? true,
+    select: keyMap?.select ?? true,
+    toggle: keyMap?.toggle ?? true,
+    bulk: keyMap?.bulk ?? true,
+    hotkeys: keyMap?.hotkeys ?? true,
+    search: keyMap?.search ?? true,
   }
 }
 
@@ -627,6 +745,28 @@ function isToggleIntent<V>(
 ): boolean {
   const { km, multiple, searchable } = context
   return km.toggle && multiple && !searchable && input === ' '
+}
+
+/**
+ * Bulk selection chords in multi-select mode: `Ctrl+A` select-all, `Ctrl+D`
+ * select-none, `Ctrl+R` invert. Gated on `km.bulk` and `multiple`, and only
+ * recognized as Ctrl chords so they never collide with search-append text,
+ * vim navigation, or item hotkeys (`Ctrl+I` is deliberately not used — it is
+ * indistinguishable from Tab).
+ */
+function resolveBulkIntent<V>(
+  input: string,
+  context: InputIntentContext<V>,
+  isCtrlChord: boolean
+): Intent<V> | undefined {
+  const { km, multiple } = context
+  if (!km.bulk || !multiple || !isCtrlChord) return undefined
+
+  if (input === 'a') return { type: 'select-all' }
+  if (input === 'd') return { type: 'select-none' }
+  if (input === 'r') return { type: 'invert' }
+
+  return undefined
 }
 
 /**
@@ -685,6 +825,9 @@ export function resolveInputIntent<V>(
   if (isToggleIntent(input, context)) {
     return { type: 'toggle' }
   }
+
+  const bulk = resolveBulkIntent(input, context, key.ctrl)
+  if (bulk) return bulk
 
   const navigate = resolveNavigateIntent(input, key, context, isModifiedChord)
   if (navigate) return navigate
@@ -873,9 +1016,31 @@ export type UseEnhancedSelectInputResult<V> = {
   /**
    * Toggle the checked state of `item` (defaults to the currently highlighted
    * item). No-op outside `multiple` mode, when the item is missing, or when
-   * it is disabled. Fires `onToggle`.
+   * it is disabled. Also a no-op when checking would exceed `maxSelections`
+   * (unchecking is always allowed). Fires `onToggle`.
    */
   toggle: (item?: Item<V>) => void
+  /** Number of currently checked items. Always 0 outside `multiple` mode. */
+  selectionCount: number
+  /**
+   * True when `selectionCount` satisfies `minSelections`/`maxSelections`.
+   * Always true outside `multiple` mode (or when neither bound is set).
+   * `onConfirm` only fires when this is true.
+   */
+  isSelectionValid: boolean
+  /**
+   * Check every enabled item (respecting the active search filter, disabled
+   * items, and `maxSelections`). No-op outside `multiple` mode.
+   */
+  selectAll: () => void
+  /** Uncheck every item. No-op outside `multiple` mode. */
+  selectNone: () => void
+  /**
+   * Flip the checked state of every enabled item (respecting the active
+   * search filter, disabled items, and `maxSelections`). No-op outside
+   * `multiple` mode.
+   */
+  invertSelection: () => void
 }
 
 /**
@@ -897,22 +1062,14 @@ export function useEnhancedSelectInput<V>({
   onConfirm,
   confirmScope = 'all',
   onToggle,
+  minSelections,
+  maxSelections,
   searchable = false,
   keyMap,
   typeahead = false,
   typeaheadTimeout = 500,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
-  // Resolve full key map — any flag not supplied defaults to enabled (true).
-  const km = {
-    arrows: keyMap?.arrows ?? true,
-    vimKeys: keyMap?.vimKeys ?? true,
-    homeEnd: keyMap?.homeEnd ?? true,
-    cancel: keyMap?.cancel ?? true,
-    select: keyMap?.select ?? true,
-    toggle: keyMap?.toggle ?? true,
-    hotkeys: keyMap?.hotkeys ?? true,
-    search: keyMap?.search ?? true,
-  }
+  const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
   const [searchCursor, setSearchCursor] = useState(0)
@@ -1137,14 +1294,74 @@ export function useEnhancedSelectInput<V>({
     // React may defer actually invoking a functional setState updater, so a
     // same-tick Enter that reads checkedKeysReference.current must not
     // depend on that updater having run yet.
-    const next = new Set(checkedKeysReference.current)
-    const nowChecked = !next.has(k)
-    if (nowChecked) next.add(k)
+    const { current } = checkedKeysReference
+    const willCheck = !current.has(k)
+    // Unchecking is always allowed; checking a new item is refused once
+    // maxSelections is already met.
+    if (
+      willCheck &&
+      maxSelections !== undefined &&
+      current.size >= maxSelections
+    ) {
+      return
+    }
+
+    const next = new Set(current)
+    if (willCheck) next.add(k)
     else next.delete(k)
     checkedKeysReference.current = next
-    onToggle?.(item, nowChecked)
+    onToggle?.(item, willCheck)
     setCheckedKeys(next)
   }
+
+  // Bulk selection helpers — select-all/invert only add enabled items drawn
+  // from filteredItems (never disabled ones, matching defaultSelectedKeys'
+  // and toggle's behaviour) and stop adding once maxSelections is reached,
+  // in filteredItems order, so the result is deterministic. None of these
+  // fire onToggle per-item to avoid callback storms on large lists.
+  const selectAll = () => {
+    if (!multiple) return
+    const next = new Set(checkedKeysReference.current)
+    for (const item of filteredItems) {
+      if (item.disabled) continue
+      if (maxSelections !== undefined && next.size >= maxSelections) break
+      next.add(itemKey(item))
+    }
+
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const selectNone = () => {
+    if (!multiple) return
+    const next = new Set<string>()
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const invertSelection = () => {
+    if (!multiple) return
+    const { current } = checkedKeysReference
+    const next = new Set(current)
+    for (const item of filteredItems) {
+      if (item.disabled) continue
+      const k = itemKey(item)
+      if (next.has(k)) {
+        next.delete(k)
+      } else if (maxSelections === undefined || next.size < maxSelections) {
+        next.add(k)
+      }
+    }
+
+    checkedKeysReference.current = next
+    setCheckedKeys(next)
+  }
+
+  const selectionCount = multiple ? checkedKeys.size : 0
+  const isSelectionValid =
+    !multiple ||
+    ((minSelections === undefined || selectionCount >= minSelections) &&
+      (maxSelections === undefined || selectionCount <= maxSelections))
 
   const setSelectedIndexPublic = (index: number) => {
     updateSelection(resolveInitialIndex(filteredItems, index))
@@ -1156,6 +1373,50 @@ export function useEnhancedSelectInput<V>({
     setSearchQueryState(query)
     setSearchCursor(query.length)
     setSelectedIndexState(0)
+  }
+
+  // Enter: in multi-select mode confirms the full selection, gated on
+  // minSelections/maxSelections; otherwise selects the highlighted item.
+  const handleSubmit = () => {
+    if (multiple) {
+      // Read the count from the ref (not the `checkedKeys` state) since a
+      // Space toggle queued in the same tick has not been committed to
+      // state yet when this handler runs.
+      const checkedCount = checkedKeysReference.current.size
+      const valid =
+        (minSelections === undefined || checkedCount >= minSelections) &&
+        (maxSelections === undefined || checkedCount <= maxSelections)
+      if (!valid) return
+
+      // Default to `items` (not `filteredItems`) so checks made
+      // before/between search filters aren't silently dropped from the
+      // confirmed set.
+      const confirmSource = confirmScope === 'filtered' ? filteredItems : items
+      const confirmed = confirmSource.filter((item) =>
+        checkedKeysReference.current.has(itemKey(item))
+      )
+      onConfirm?.(confirmed)
+      return
+    }
+
+    const itemToSelect = filteredItems[selectedIndex]
+    if (itemToSelect && !itemToSelect.disabled) {
+      onSelect?.(itemToSelect)
+    }
+  }
+
+  // Accumulate printable characters into a short-lived buffer and jump the
+  // highlight to the first item whose label starts with it. Idle buffers
+  // reset after `typeaheadTimeout` ms.
+  const handleTypeahead = (char: string, isActive: boolean, now: number) => {
+    const next = isActive ? typeaheadBuffer.current.text + char : char
+    typeaheadBuffer.current = { text: next, time: now }
+    const matchIndex = filteredItems.findIndex(
+      (item) =>
+        !item.disabled &&
+        item.label.toLowerCase().startsWith(next.toLowerCase())
+    )
+    if (matchIndex !== -1) updateSelection(matchIndex)
   }
 
   useInput(
@@ -1209,6 +1470,21 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
+        case 'select-all': {
+          selectAll()
+          break
+        }
+
+        case 'select-none': {
+          selectNone()
+          break
+        }
+
+        case 'invert': {
+          invertSelection()
+          break
+        }
+
         case 'navigate': {
           if (intent.index !== selectedIndex) {
             updateSelection(intent.index)
@@ -1218,43 +1494,12 @@ export function useEnhancedSelectInput<V>({
         }
 
         case 'submit': {
-          if (multiple) {
-            // In multi-select mode Enter confirms the full selection. Default
-            // to `items` (not `filteredItems`) so checks made before/between
-            // search filters aren't silently dropped from the confirmed set.
-            // Read from the ref (not the `checkedKeys` state) since a Space
-            // toggle queued in the same tick has not been committed to state
-            // yet when this handler runs.
-            const confirmSource =
-              confirmScope === 'filtered' ? filteredItems : items
-            const confirmed = confirmSource.filter((item) =>
-              checkedKeysReference.current.has(itemKey(item))
-            )
-            onConfirm?.(confirmed)
-          } else {
-            const itemToSelect = filteredItems[selectedIndex]
-            if (itemToSelect && !itemToSelect.disabled) {
-              onSelect?.(itemToSelect)
-            }
-          }
-
+          handleSubmit()
           break
         }
 
         case 'typeahead': {
-          // Accumulate printable characters into a short-lived buffer and
-          // jump the highlight to the first item whose label starts with
-          // it. Idle buffers reset after `typeaheadTimeout` ms.
-          const next = typeaheadIsActive
-            ? typeaheadBuffer.current.text + intent.char
-            : intent.char
-          typeaheadBuffer.current = { text: next, time: now }
-          const matchIndex = filteredItems.findIndex(
-            (item) =>
-              !item.disabled &&
-              item.label.toLowerCase().startsWith(next.toLowerCase())
-          )
-          if (matchIndex !== -1) updateSelection(matchIndex)
+          handleTypeahead(intent.char, typeaheadIsActive, now)
           break
         }
 
@@ -1288,19 +1533,71 @@ export function useEnhancedSelectInput<V>({
     setSelectedIndex: setSelectedIndexPublic,
     setSearchQuery: setSearchQueryPublic,
     toggle,
+    selectionCount,
+    isSelectionValid,
+    selectAll,
+    selectNone,
+    invertSelection,
   }
+}
+
+/** Default colors, reproducing the component's original (pre-theming) appearance. */
+const DEFAULT_THEME: ThemeColors = {
+  selected: 'green',
+  disabled: 'gray',
+  groupHeader: undefined,
+  hotkey: 'gray',
+  scrollIndicator: undefined,
+  searchPlaceholder: undefined,
+}
+
+/**
+ * Whether color output should be suppressed, per the NO_COLOR spec
+ * (https://no-color.org/): presence of the variable disables color,
+ * *unless* its value is the empty string. Read live (not cached) so tests
+ * can toggle it between renders.
+ */
+function isNoColor(): boolean {
+  // eslint-disable-next-line n/prefer-global/process
+  return Boolean(process.env['NO_COLOR'])
+}
+
+/**
+ * Merges a partial theme over {@link DEFAULT_THEME}, then — when `NO_COLOR`
+ * is set — collapses every color to `undefined` and disables dim styling
+ * (dim is an ANSI SGR effect, which NO_COLOR is understood to suppress too).
+ */
+function resolveTheme(theme?: Partial<Theme>): ResolvedTheme {
+  const merged = { ...DEFAULT_THEME, ...theme }
+  if (isNoColor()) {
+    return {
+      selected: undefined,
+      disabled: undefined,
+      groupHeader: undefined,
+      hotkey: undefined,
+      scrollIndicator: undefined,
+      searchPlaceholder: undefined,
+      dim: false,
+    }
+  }
+
+  return { ...merged, dim: true }
 }
 
 export function DefaultIndicatorComponent({
   isSelected,
   isChecked,
+  checkedIndicator = '[x]',
+  uncheckedIndicator = '[ ]',
+  theme,
 }: IndicatorProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
     return (
       <Box marginRight={1}>
-        <Text color={isSelected ? 'green' : undefined}>
-          {isChecked ? '[x]' : '[ ]'}
+        <Text color={isSelected ? resolvedTheme.selected : undefined}>
+          {isChecked ? checkedIndicator : uncheckedIndicator}
         </Text>
       </Box>
     )
@@ -1309,7 +1606,7 @@ export function DefaultIndicatorComponent({
   // Single-select mode: classic arrow cursor
   return (
     <Box marginRight={1}>
-      <Text color={isSelected ? 'green' : undefined}>
+      <Text color={isSelected ? resolvedTheme.selected : undefined}>
         {isSelected ? '>' : ' '}
       </Text>
     </Box>
@@ -1320,21 +1617,56 @@ export function DefaultItemComponent({
   isSelected,
   label,
   isDisabled,
+  theme,
 }: ItemProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
+  let color: string | undefined
+  if (isDisabled) {
+    color = resolvedTheme.disabled
+  } else if (isSelected) {
+    color = resolvedTheme.selected
+  }
+
   return (
     <Text
-      color={isDisabled ? 'gray' : isSelected ? 'green' : undefined}
-      dimColor={isDisabled}
+      color={color}
+      dimColor={isDisabled && resolvedTheme.dim}
+      wrap="truncate-end"
     >
       {label}
     </Text>
   )
 }
 
-export function DefaultGroupHeaderComponent({ label }: GroupHeaderProperties) {
+export function DefaultGroupHeaderComponent({
+  label,
+  theme,
+}: GroupHeaderProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
   return (
     <Box>
-      <Text dimColor>{`── ${label} ──`}</Text>
+      <Text
+        color={resolvedTheme.groupHeader}
+        dimColor={resolvedTheme.dim}
+        wrap="truncate-end"
+      >{`── ${label} ──`}</Text>
+    </Box>
+  )
+}
+
+/** The "n selected[/bound]" line shown above the list in multi-select mode, or `null` when hidden. */
+function resolveSelectionCountLine(
+  show: boolean,
+  count: number,
+  bound: number | undefined
+): React.ReactNode {
+  if (!show) return null
+  return (
+    <Box>
+      <Text dimColor>
+        {count} selected
+        {bound === undefined ? '' : `/${bound}`}
+      </Text>
     </Box>
   )
 }
@@ -1345,6 +1677,10 @@ export function EnhancedSelectInput<V>({
   groupHeaderComponent = DefaultGroupHeaderComponent,
   showScrollIndicators = false,
   searchPlaceholder = 'Search...',
+  checkedIndicator = '[x]',
+  uncheckedIndicator = '[ ]',
+  showSelectionCount = false,
+  theme,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -1358,8 +1694,10 @@ export function EnhancedSelectInput<V>({
     checkedKeys,
     searchQuery,
     searchCursor,
+    selectionCount,
   } = useEnhancedSelectInput(hookProperties)
 
+  const resolvedTheme = resolveTheme(theme)
   const searchable = hookProperties.searchable === true
 
   if (!hasItems && !searchable) {
@@ -1375,13 +1713,21 @@ export function EnhancedSelectInput<V>({
   const searchInput = searchable ? (
     <Box>
       {searchQuery ? (
-        <Text>
-          <Text dimColor>{`/ ${searchQuery.slice(0, searchCursor)}`}</Text>
+        <Text color={resolvedTheme.searchPlaceholder}>
+          <Text dimColor={resolvedTheme.dim}>{`/ ${searchQuery.slice(
+            0,
+            searchCursor
+          )}`}</Text>
           <Text inverse>{searchQuery[searchCursor] ?? ' '}</Text>
-          <Text dimColor>{searchQuery.slice(searchCursor + 1)}</Text>
+          <Text dimColor={resolvedTheme.dim}>
+            {searchQuery.slice(searchCursor + 1)}
+          </Text>
         </Text>
       ) : (
-        <Text dimColor>
+        <Text
+          color={resolvedTheme.searchPlaceholder}
+          dimColor={resolvedTheme.dim}
+        >
           {'/ '}
           <Text inverse>{searchPlaceholder[0] ?? ' '}</Text>
           {searchPlaceholder.slice(1)}
@@ -1390,13 +1736,22 @@ export function EnhancedSelectInput<V>({
     </Box>
   ) : null
 
+  const { maxSelections, minSelections } = hookProperties
+  const selectionBound = maxSelections ?? minSelections
+  const selectionCountLine = resolveSelectionCountLine(
+    showSelectionCount && isMultiple,
+    selectionCount,
+    selectionBound
+  )
+
   if (!hasItems) {
     // Searchable mode with no matching results
     return (
       <Box flexDirection="column">
         {searchInput}
+        {selectionCountLine}
         <Box>
-          <Text dimColor>No matches</Text>
+          <Text dimColor={resolvedTheme.dim}>No matches</Text>
         </Box>
       </Box>
     )
@@ -1405,10 +1760,14 @@ export function EnhancedSelectInput<V>({
   return (
     <Box flexDirection="column">
       {searchInput}
+      {selectionCountLine}
       <Box flexDirection={isVertical ? 'column' : 'row'}>
         {showScrollIndicators && itemsAbove > 0 && (
           <Box marginRight={isVertical ? 0 : 1}>
-            <Text dimColor>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
               {isVertical ? `▲ ${itemsAbove} more` : `◀ ${itemsAbove} more`}
             </Text>
           </Box>
@@ -1440,6 +1799,7 @@ export function EnhancedSelectInput<V>({
                 <GroupHeaderComponent
                   key={`group-header-${index}-${item.group}`}
                   label={item.group}
+                  theme={resolvedTheme}
                 />
               )
             }
@@ -1457,6 +1817,9 @@ export function EnhancedSelectInput<V>({
                       isSelected={isSelected}
                       isChecked={isChecked}
                       item={item}
+                      checkedIndicator={checkedIndicator}
+                      uncheckedIndicator={uncheckedIndicator}
+                      theme={resolvedTheme}
                     />
                   )}
                   <ItemComponent
@@ -1464,9 +1827,13 @@ export function EnhancedSelectInput<V>({
                     label={item.label}
                     isDisabled={Boolean(item.disabled)}
                     isChecked={isChecked}
+                    theme={resolvedTheme}
                   />
                   {item.hotkey && !isMultiple && (
-                    <Text dimColor color="gray">
+                    <Text
+                      dimColor={resolvedTheme.dim}
+                      color={resolvedTheme.hotkey}
+                    >
                       {' '}
                       ({item.hotkey})
                     </Text>
@@ -1478,7 +1845,10 @@ export function EnhancedSelectInput<V>({
         </Box>
         {showScrollIndicators && itemsBelow > 0 && (
           <Box marginLeft={isVertical ? 0 : 1}>
-            <Text dimColor>
+            <Text
+              color={resolvedTheme.scrollIndicator}
+              dimColor={resolvedTheme.dim}
+            >
               {isVertical ? `▼ ${itemsBelow} more` : `▶ ${itemsBelow} more`}
             </Text>
           </Box>

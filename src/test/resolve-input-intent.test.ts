@@ -39,6 +39,7 @@ const allKeyMapEnabled: Required<KeyMap> = {
   cancel: true,
   select: true,
   toggle: true,
+  bulk: true,
   hotkeys: true,
   search: true,
 }
@@ -202,6 +203,23 @@ test('home/end jump does not fire an empty-string item hotkey (B14)', (t) => {
   t.deepEqual(intent, { type: 'jump', index: 1 })
 })
 
+// B14 regression: with km.arrows disabled, a physical arrow keypress still
+// reports `input === ''` but resolveNavigateIntent no longer intercepts it
+// (no mapped step), so execution reaches hotkey resolution directly. An
+// empty-string item hotkey must not match here either.
+test('empty-string item hotkey never fires when arrow navigation is disabled (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems, km: { arrows: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
 test('return submits when select is enabled and no earlier branch matched', (t) => {
   const intent = resolveInputIntent('', key({ return: true }), context())
   t.deepEqual(intent, { type: 'submit' })
@@ -255,6 +273,107 @@ test('hotkeys are disabled in searchable mode', (t) => {
     context({ km: { vimKeys: false }, searchable: true })
   )
   t.deepEqual(intent, { type: 'search-append', char: 'j' })
+})
+
+// --- F7: bulk selection chords (Ctrl+A / Ctrl+D / Ctrl+R) ---
+
+test('ctrl+a resolves to select-all in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'select-all' })
+})
+
+test('ctrl+d resolves to select-none in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'd',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'select-none' })
+})
+
+test('ctrl+r resolves to invert in multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'r',
+    key({ ctrl: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'invert' })
+})
+
+test('bulk chords are no-ops outside multi-select mode', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: false })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('bulk chords are no-ops when km.bulk is disabled', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true, km: { bulk: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('bulk chords still resolve in searchable multi-select mode (chords are excluded from search-append)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'select-all' })
+})
+
+test('an unmodified "a" is not treated as a bulk chord', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key(),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'search-append', char: 'a' })
+})
+
+test('alt+a is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+d is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'd',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+r is not a bulk chord (bulk is Ctrl-only)', (t) => {
+  const intent = resolveInputIntent(
+    'r',
+    key({ meta: true }),
+    context({ multiple: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('alt+a in searchable multi-select mode is not a bulk chord and is not appended to search (still excluded as a modified chord)', (t) => {
+  const intent = resolveInputIntent(
+    'a',
+    key({ meta: true }),
+    context({ multiple: true, searchable: true })
+  )
+  t.deepEqual(intent, { type: 'none' })
 })
 
 test('km.hotkeys disabled leaves Enter/select working', (t) => {
