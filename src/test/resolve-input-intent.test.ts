@@ -39,6 +39,8 @@ const allKeyMapEnabled: Required<KeyMap> = {
   cancel: true,
   select: true,
   toggle: true,
+  hotkeys: true,
+  search: true,
 }
 
 const items: Array<Item<string>> = [
@@ -62,6 +64,8 @@ const context = (
   orientation: overrides.orientation ?? ('vertical' as const),
   selectedIndex: overrides.selectedIndex ?? 0,
   filteredItems: overrides.filteredItems ?? items,
+  typeahead: overrides.typeahead ?? false,
+  typeaheadActive: overrides.typeaheadActive ?? false,
 })
 
 // Search-edit keys (backspace/delete/clear-escape) win over everything else,
@@ -168,6 +172,52 @@ test('vim key navigation beats an identical-character item hotkey', (t) => {
   t.deepEqual(intent, { type: 'navigate', index: 1 })
 })
 
+// B14 regression: arrow keys report `input === ''`, which also equals an
+// unset `hotkey: ''` on an item. Navigation must resolve first so that
+// empty-hotkey items never fire on a bare arrow keypress.
+test('arrow-down navigation does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems })
+  )
+  t.deepEqual(intent, { type: 'navigate', index: 1 })
+})
+
+test('home/end jump does not fire an empty-string item hotkey (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ end: true }),
+    context({ filteredItems: emptyHotkeyItems, selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'jump', index: 1 })
+})
+
+// B14 regression: with km.arrows disabled, a physical arrow keypress still
+// reports `input === ''` but resolveNavigateIntent no longer intercepts it
+// (no mapped step), so execution reaches hotkey resolution directly. An
+// empty-string item hotkey must not match here either.
+test('empty-string item hotkey never fires when arrow navigation is disabled (B14)', (t) => {
+  const emptyHotkeyItems: Array<Item<string>> = [
+    { key: 'a', label: 'Alpha', value: 'a', hotkey: '' },
+    { key: 'b', label: 'Beta', value: 'b' },
+  ]
+  const intent = resolveInputIntent(
+    '',
+    key({ downArrow: true }),
+    context({ filteredItems: emptyHotkeyItems, km: { arrows: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
 test('return submits when select is enabled and no earlier branch matched', (t) => {
   const intent = resolveInputIntent('', key({ return: true }), context())
   t.deepEqual(intent, { type: 'submit' })
@@ -221,4 +271,52 @@ test('hotkeys are disabled in searchable mode', (t) => {
     context({ km: { vimKeys: false }, searchable: true })
   )
   t.deepEqual(intent, { type: 'search-append', char: 'j' })
+})
+
+test('km.hotkeys disabled leaves Enter/select working', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({ km: { hotkeys: false } })
+  )
+  t.deepEqual(intent, { type: 'submit' })
+})
+
+test('km.hotkeys disabled turns a hotkey char into a no-op', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { hotkeys: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
+})
+
+test('km.select disabled leaves item hotkeys working', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({ km: { select: false, vimKeys: false } })
+  )
+  t.deepEqual(intent, { type: 'hotkey', item: items[0], index: 0 })
+})
+
+test('km.hotkeys disabled with typeahead lets a hotkey char be captured as typeahead', (t) => {
+  const intent = resolveInputIntent(
+    'j',
+    key(),
+    context({
+      km: { hotkeys: false, vimKeys: false },
+      typeahead: true,
+    })
+  )
+  t.deepEqual(intent, { type: 'typeahead', char: 'j' })
+})
+
+test('km.search disabled stops printable characters from being captured in searchable mode', (t) => {
+  const intent = resolveInputIntent(
+    'z',
+    key(),
+    context({ searchable: true, km: { search: false } })
+  )
+  t.deepEqual(intent, { type: 'none' })
 })

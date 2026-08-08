@@ -19,6 +19,7 @@ export type {
   ItemOrSeparator,
   KeyMap,
   Properties,
+  Theme,
   UseEnhancedSelectInputProperties,
   UseEnhancedSelectInputResult,
   IndicatorProperties,
