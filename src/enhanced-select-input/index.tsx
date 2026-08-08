@@ -82,6 +82,11 @@ export type UseEnhancedSelectInputProperties<V> = {
    * In `'scroll'` pagination mode, the number of rows of context to keep
    * above/below the cursor before the window scrolls. Ignored in `'page'`
    * mode. Default: `0`.
+   *
+   * Internally clamped to `floor((limit - 1) / 2)` — larger values would
+   * leave no stable cursor range between the "scroll up" and "scroll down"
+   * margins, causing the window to jitter instead of scrolling one row at a
+   * time.
    */
   readonly scrollOffset?: number
   readonly onSelect?: (item: Item<V>) => void
@@ -326,6 +331,12 @@ export function pageIndexOfStart(pageStarts: number[], start: number): number {
  * leave its padded margin, when `offset > 0`), advancing one row at a time
  * rather than snapping to a fixed page boundary. The result is always
  * clamped to `[0, max(0, itemCount - limit)]`.
+ *
+ * `offset` is clamped to `floor((limit - 1) / 2)` before use. Beyond that,
+ * the two margin checks (`< start + offset` / `> start + limit - 1 - offset`)
+ * overlap — there is no cursor position that satisfies neither — so every
+ * step would trip one branch, jittering the window backward or by more than
+ * one row per keypress instead of scrolling smoothly.
  */
 export function scrollWindowStart(
   previousStart: number,
@@ -337,12 +348,16 @@ export function scrollWindowStart(
   if (limit <= 0 || itemCount <= 0) return 0
 
   const maxStart = Math.max(0, itemCount - limit)
+  const clampedOffset = Math.max(
+    0,
+    Math.min(offset, Math.floor((limit - 1) / 2))
+  )
   let start = Math.max(0, Math.min(previousStart, maxStart))
 
-  if (selectedIndex < start + offset) {
-    start = selectedIndex - offset
-  } else if (selectedIndex > start + limit - 1 - offset) {
-    start = selectedIndex - limit + 1 + offset
+  if (selectedIndex < start + clampedOffset) {
+    start = selectedIndex - clampedOffset
+  } else if (selectedIndex > start + limit - 1 - clampedOffset) {
+    start = selectedIndex - limit + 1 + clampedOffset
   }
 
   return Math.max(0, Math.min(start, maxStart))

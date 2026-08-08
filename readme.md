@@ -158,6 +158,8 @@ Use `scrollOffset` (only meaningful in `'scroll'` mode) to keep a margin of cont
 />
 ```
 
+`scrollOffset` is clamped internally to `floor((limit - 1) / 2)` — larger values would leave no stable cursor range between the "scroll up" and "scroll down" margins, so the window would jitter instead of scrolling one row at a time.
+
 Home/End always land on a sane window — Home scrolls to the start of the list, End scrolls so the last item is on the bottom row.
 
 `'scroll'` mode windows are sized by item count. `'page'` mode charges group headers against `limit` too (see [Grouped Items](#grouped-items)) so its rendered height never exceeds `limit`; in `'scroll'` mode a window can render up to `limit` items **plus** any group headers in view, so the visible row count may exceed `limit` when `group` is used together with `paginationMode="scroll"`.
@@ -392,7 +394,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `initialIndex`         | `number`                                    | `0`                           | Index of the initially highlighted item                                                                                                                              |
 | `limit`                | `number`                                    | —                             | Max number of visible rows — items **and** group headers count                                                                                                       |
 | `paginationMode`       | `'page' \| 'scroll'`                        | `'page'`                      | How the `limit` window advances: `'page'` snaps to fixed page boundaries; `'scroll'` follows the cursor one row at a time                                            |
-| `scrollOffset`         | `number`                                    | `0`                           | Rows of context to keep above/below the cursor before scrolling. Only used when `paginationMode` is `'scroll'`                                                       |
+| `scrollOffset`         | `number`                                    | `0`                           | Rows of context to keep above/below the cursor before scrolling. Only used when `paginationMode` is `'scroll'`. Clamped internally to `floor((limit - 1) / 2)`       |
 | `indicatorComponent`   | `FC<IndicatorProperties>`                   | `DefaultIndicatorComponent`   | Custom selection indicator                                                                                                                                           |
 | `itemComponent`        | `FC<ItemProperties>`                        | `DefaultItemComponent`        | Custom item renderer                                                                                                                                                 |
 | `onSelect`             | `(item: Item<V>) => void`                   | —                             | Called on selection (Enter or hotkey) — single-select only                                                                                                           |

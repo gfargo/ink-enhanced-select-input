@@ -857,6 +857,29 @@ test('scrollWindowStart: offset keeps padding rows before scrolling', (t) => {
   t.is(scrollWindowStart(5, 5, 3, 10, 1), 4)
 })
 
+test('scrollWindowStart: offset >= limit/2 is clamped to avoid jitter', (t) => {
+  // Limit=3 → floor((3-1)/2) = 1, so a requested offset of 2 behaves like
+  // offset=1 rather than leaving no stable interval between the two edge
+  // checks. Stepping the cursor 0..6 must move the window by at most one
+  // row per step, never backward.
+  let start = 0
+  const starts: number[] = []
+  for (let index = 0; index <= 6; index++) {
+    start = scrollWindowStart(start, index, 3, 10, 2)
+    starts.push(start)
+  }
+
+  t.deepEqual(starts, [0, 0, 1, 2, 3, 4, 5])
+  for (let index = 1; index < starts.length; index++) {
+    t.true(starts[index]! - starts[index - 1]! >= 0)
+    t.true(starts[index]! - starts[index - 1]! <= 1)
+  }
+})
+
+test('scrollWindowStart: negative offset is clamped to 0', (t) => {
+  t.is(scrollWindowStart(0, 3, 3, 10, -5), 1)
+})
+
 test.serial(
   'scroll mode: moving down past the last visible row scrolls by one row, cursor stays on the last row',
   async (t) => {
