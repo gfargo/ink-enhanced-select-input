@@ -783,6 +783,15 @@ export function useEnhancedSelectInput<V>({
   // filtered item set changes).
   const selectedIndexReference = useRef(selectedIndex)
   selectedIndexReference.current = selectedIndex
+  // Latest-value ref so the sync-back effects below can call the parent's
+  // callback without listing it as a dependency — an inline arrow function
+  // (as shown in the README) is a new reference every render and would
+  // otherwise re-run those effects on every render instead of only when the
+  // resolved value actually diverges from the controlled prop.
+  const onIndexChangeReference = useRef(onIndexChange)
+  onIndexChangeReference.current = onIndexChange
+  const onSelectedKeysChangeReference = useRef(onSelectedKeysChange)
+  onSelectedKeysChangeReference.current = onSelectedKeysChange
   const isKeysControlled = controlledKeys !== undefined
   const [uncontrolledCheckedKeys, setUncontrolledCheckedKeys] = useState<
     Set<string>
@@ -811,6 +820,18 @@ export function useEnhancedSelectInput<V>({
     text: '',
     time: 0,
   })
+
+  // Keep the parent in sync when a controlled selectedKeys resolves to a
+  // smaller set than what was passed in — e.g. a previously-checked item
+  // became disabled and is now filtered out of `controlledCheckedKeys`
+  // above. Without this the parent's own copy of the keys would silently
+  // include a key that no longer renders as checked.
+  useEffect(() => {
+    if (!isKeysControlled || !controlledCheckedKeys) return
+    if (controlledCheckedKeys.size !== controlledKeys.length) {
+      onSelectedKeysChangeReference.current?.([...controlledCheckedKeys])
+    }
+  }, [isKeysControlled, controlledCheckedKeys, controlledKeys])
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex so there
@@ -893,6 +914,20 @@ export function useEnhancedSelectInput<V>({
     }
   }, [filteredItems, limit, pageStarts, isIndexControlled])
 
+  // Keep the parent in sync when a controlled selectedIndex resolves to a
+  // different value than what was passed in — e.g. items shrank and the
+  // index fell out of range, or it landed on a disabled item.
+  // `resolveInitialIndex` above already picks a safe value for rendering,
+  // but without this the parent's own copy of the index would silently
+  // diverge from what is actually highlighted until the user's next
+  // keypress happens to fire onIndexChange.
+  useEffect(() => {
+    if (!isIndexControlled) return
+    if (selectedIndex !== controlledIndex) {
+      onIndexChangeReference.current?.(selectedIndex)
+    }
+  }, [isIndexControlled, selectedIndex, controlledIndex])
+
   // Fire onHighlight when the highlighted item's identity (key) changes,
   // not merely when the items array reference changes — that would cause
   // spurious calls on every parent re-render that passes a new array with
@@ -949,6 +984,33 @@ export function useEnhancedSelectInput<V>({
       )
     }
   }, [isKeysControlled, defaultSelectedKeys])
+
+  // Warn in development when a controlled prop is passed without its change
+  // handler — the analogue of React's "value prop without onChange" warning.
+  // Without the handler the highlight/checkboxes are frozen: every keypress
+  // still computes a next value, but nothing ever feeds it back through the
+  // controlled prop, so the UI silently stops responding.
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (isIndexControlled && onIndexChange === undefined) {
+      console.warn(
+        '[ink-enhanced-select-input] selectedIndex was provided without onIndexChange — ' +
+          'the highlight will not respond to navigation. Pass onIndexChange to update it.'
+      )
+    }
+  }, [isIndexControlled, onIndexChange])
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (isKeysControlled && onSelectedKeysChange === undefined) {
+      console.warn(
+        '[ink-enhanced-select-input] selectedKeys was provided without onSelectedKeysChange — ' +
+          'checkboxes will not respond to toggling. Pass onSelectedKeysChange to update them.'
+      )
+    }
+  }, [isKeysControlled, onSelectedKeysChange])
 
   // Re-fire whenever the highlighted item's *identity* changes, not just its
   // index — filtering can swap in a different item at the same index (e.g.

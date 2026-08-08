@@ -5975,3 +5975,334 @@ test.serial(
     }
   }
 )
+
+test.serial(
+  'dev warning: selectedIndex without onIndexChange logs a warning',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput items={items} selectedIndex={0} />)
+      await delay()
+      t.true(
+        warnings.some((message) =>
+          message.includes('selectedIndex was provided without onIndexChange')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: selectedIndex with onIndexChange does not log the missing-handler warning',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          items={items}
+          selectedIndex={0}
+          onIndexChange={() => undefined}
+        />
+      )
+      await delay()
+      t.false(
+        warnings.some((message) =>
+          message.includes('selectedIndex was provided without onIndexChange')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: selectedKeys without onSelectedKeysChange logs a warning',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a', key: 'a' }]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput multiple items={items} selectedKeys={[]} />)
+      await delay()
+      t.true(
+        warnings.some((message) =>
+          message.includes(
+            'selectedKeys was provided without onSelectedKeysChange'
+          )
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: selectedKeys with onSelectedKeysChange does not log the missing-handler warning',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a', key: 'a' }]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={items}
+          selectedKeys={[]}
+          onSelectedKeysChange={() => undefined}
+        />
+      )
+      await delay()
+      t.false(
+        warnings.some((message) =>
+          message.includes(
+            'selectedKeys was provided without onSelectedKeysChange'
+          )
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'controlled selectedIndex: out-of-range value syncs back via onIndexChange',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    const onIndexChangeCalls: number[] = []
+    render(
+      <HookHarness
+        items={items}
+        selectedIndex={99}
+        onIndexChange={(index) => {
+          onIndexChangeCalls.push(index)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await waitFor(() => onIndexChangeCalls.length > 0)
+    t.deepEqual(onIndexChangeCalls, [2])
+  }
+)
+
+test.serial(
+  'controlled selectedIndex: syncs back via onIndexChange when items shrink below the controlled index',
+  async (t) => {
+    let items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    const onIndexChangeCalls: number[] = []
+    const { rerender } = render(
+      <HookHarness
+        items={items}
+        selectedIndex={2}
+        onIndexChange={(index) => {
+          onIndexChangeCalls.push(index)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await delay()
+    t.deepEqual(onIndexChangeCalls, [])
+
+    items = [{ label: 'A', value: 'a' }]
+    rerender(
+      <HookHarness
+        items={items}
+        selectedIndex={2}
+        onIndexChange={(index) => {
+          onIndexChangeCalls.push(index)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await waitFor(() => onIndexChangeCalls.length > 0)
+    t.deepEqual(onIndexChangeCalls, [0])
+  }
+)
+
+test.serial(
+  'controlled selectedKeys: syncs back via onSelectedKeysChange when a checked key becomes disabled',
+  async (t) => {
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    const onSelectedKeysChangeCalls: string[][] = []
+    const { rerender } = render(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await delay()
+    t.deepEqual(onSelectedKeysChangeCalls, [])
+
+    items = [
+      { label: 'A', value: 'a', key: 'a', disabled: true },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await waitFor(() => onSelectedKeysChangeCalls.length > 0)
+    t.deepEqual(onSelectedKeysChangeCalls, [['b']])
+  }
+)
+
+test.serial(
+  'controlled selectedIndex: setSelectedIndex() notifies via onIndexChange without moving state',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const onIndexChangeCalls: number[] = []
+    render(
+      <HookHarness
+        items={items}
+        selectedIndex={0}
+        onIndexChange={(index) => {
+          onIndexChangeCalls.push(index)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    result?.setSelectedIndex(2)
+    await waitFor(() => onIndexChangeCalls.length > 0)
+    t.deepEqual(onIndexChangeCalls, [2])
+    // The hook must not move on its own — the parent hasn't fed the new
+    // index back through the selectedIndex prop.
+    t.is(result?.selectedIndex, 0)
+  }
+)
+
+test.serial(
+  'controlled selectedKeys: toggle() notifies via onSelectedKeysChange without moving state',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const onSelectedKeysChangeCalls: string[][] = []
+    render(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={[]}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    result?.toggle(items[1])
+    await waitFor(() => onSelectedKeysChangeCalls.length > 0)
+    t.deepEqual(onSelectedKeysChangeCalls, [['b']])
+    // The hook must not move on its own — the parent hasn't fed the new
+    // keys back through the selectedKeys prop.
+    t.false(result?.checkedKeys.has('b'))
+  }
+)

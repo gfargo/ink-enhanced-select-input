@@ -157,7 +157,9 @@ function ControlledDemo() {
 render(<ControlledDemo />)
 ```
 
-Don't pass `initialIndex` alongside `selectedIndex`, or `defaultSelectedKeys` alongside `selectedKeys` — the uncontrolled prop is ignored once its controlled counterpart is set, and a dev warning is logged if both are supplied.
+Don't pass `initialIndex` alongside `selectedIndex`, or `defaultSelectedKeys` alongside `selectedKeys` — the uncontrolled prop is ignored once its controlled counterpart is set, and a dev warning is logged if both are supplied. A dev warning is also logged if `selectedIndex`/`selectedKeys` is supplied without its `on*Change` handler, since that freezes the highlight/checkboxes entirely.
+
+If a controlled `selectedIndex`/`selectedKeys` value resolves to something different than what was passed in — e.g. `items` shrinks and the index falls out of range, or a checked key's item becomes `disabled` — the resolved value is fed straight back through `onIndexChange`/`onSelectedKeysChange` so the parent's state never silently diverges from what's rendered.
 
 ### Per-Item Indicators
 
