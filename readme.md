@@ -14,7 +14,8 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Custom Indicators & Items:** Easily swap out the default indicator and item rendering.
 - **Hotkey Support:** Assign single-character hotkeys for quick selection.
 - **Disabled Items:** Gracefully skip unselectable items during navigation.
-- **Keyboard Navigation:** Arrow keys, Vim-like keys (`h/j/k/l`), Home/End supported.
+- **Keyboard Navigation:** Arrow keys, Vim-like keys (`h/j/k/l`), Home/End, Page Up/Down supported.
+- **Configurable Wrap-Around:** `loop` (default `true`) controls whether navigation wraps at the list boundary or clamps.
 - **Hooks for Highlight & Selection:** Run custom logic on highlight and selection changes.
 - **Limit Displayed Items:** Restrict how many options to show at once, with optional scroll indicators.
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
@@ -367,6 +368,7 @@ Because Ink does not support event propagation stopping, every `useInput` handle
 | `arrows`       | `↑` `↓` `←` `→`                                                            | `true`  |
 | `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                  | `true`  |
 | `homeEnd`      | `Home` · `End`                                                             | `true`  |
+| `pageKeys`     | `Page Up` · `Page Down`                                                    | `true`  |
 | `cancel`       | `Escape` → `onCancel`                                                      | `true`  |
 | `select`       | `Enter` → `onSelect` / `onConfirm`                                         | `true`  |
 | `toggle`       | `Space` toggle in multi-select mode                                        | `true`  |
@@ -516,6 +518,7 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `keyMap`               | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                  |
 | `typeahead`            | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                               |
 | `typeaheadTimeout`     | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                   |
+| `loop`                 | `boolean`                                   | `true`                        | Whether arrow/vim/Page Up/Down navigation wraps around at the list boundary; `false` clamps instead. `Home`/`End` are unaffected                                                                                            |
 | `theme`                | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                                                                            |
 
 ### Item Shape
@@ -540,16 +543,24 @@ type Item<V> = {
 
 ## Keyboard Navigation
 
-| Orientation | Previous  | Next      | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
-| ----------- | --------- | --------- | ------ | ----- | ---------------- | -------------- | -------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
+| ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
 
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 
-Disabled items are automatically skipped during navigation, including by `Home` and `End`.
+`Page Up`/`Page Down` move the highlight by a page at a time — the number of items currently visible in the `limit` window, or 10 when `limit` is not set.
+
+Disabled items are automatically skipped during navigation, including by `Home`, `End`, `Page Up`, and `Page Down`.
 
 `Escape` calls the `onCancel` prop when provided — useful for multi-step CLI flows that need a "go back" action.
+
+By default, navigation wraps around at the list boundary (pressing `↓`/`Page Down` on the last item jumps back to the first). Set `loop={false}` to clamp instead — the highlight stops at the first/last item rather than wrapping, which can feel less disorienting in long lists. `Home`/`End` always jump to the absolute boundary regardless of `loop`.
+
+```tsx
+<EnhancedSelectInput items={items} loop={false} onSelect={onSelect} />
+```
 
 > **Hotkey constraints:** Navigation keys take priority over hotkeys. In vertical
 > orientation the characters `j` and `k` are reserved for navigation — an item

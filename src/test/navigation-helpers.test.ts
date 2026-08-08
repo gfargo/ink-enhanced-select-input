@@ -4,6 +4,7 @@ import {
   findFirstValidIndex,
   findLastValidIndex,
   findNextValidIndex,
+  findPageIndex,
   pageIndexOfStart,
   pageStartFor,
   resolveInitialIndex,
@@ -108,6 +109,81 @@ test('findNextValidIndex: skips disabled item when stepping backward', (t) => {
 test('findNextValidIndex: all disabled returns currentIndex (stay put)', (t) => {
   const items = [mkItem('a', true), mkItem('b', true), mkItem('c', true)]
   t.is(findNextValidIndex(items, 1, 1), 1)
+})
+
+// ── findNextValidIndex (loop=false clamp mode) ─────────────────────────────────
+
+test('findNextValidIndex: loop=false clamps at the last item instead of wrapping', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(findNextValidIndex(items, 2, 1, false), 2)
+})
+
+test('findNextValidIndex: loop=false clamps at the first item instead of wrapping', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(findNextValidIndex(items, 0, -1, false), 0)
+})
+
+test('findNextValidIndex: loop=false still skips disabled items without wrapping', (t) => {
+  const items = [mkItem('a'), mkItem('b', true), mkItem('c')]
+  t.is(findNextValidIndex(items, 0, 1, false), 2)
+})
+
+test('findNextValidIndex: loop=false stays put when nothing enabled remains before the boundary', (t) => {
+  const items = [mkItem('a'), mkItem('b', true), mkItem('c', true)]
+  t.is(findNextValidIndex(items, 0, 1, false), 0)
+})
+
+test('findNextValidIndex: loop=true (explicit) matches default wrap behaviour', (t) => {
+  const items = [mkItem('a'), mkItem('b'), mkItem('c')]
+  t.is(findNextValidIndex(items, 2, 1, true), 0)
+})
+
+// ── findPageIndex ───────────────────────────────────────────────────────────────
+
+test('findPageIndex: empty list returns 0', (t) => {
+  t.is(findPageIndex<string>([], 0, 5, true), 0)
+})
+
+test('findPageIndex: steps forward by delta', (t) => {
+  const items = Array.from({ length: 10 }, (_, i) => mkItem(String(i)))
+  t.is(findPageIndex(items, 2, 3, true), 5)
+})
+
+test('findPageIndex: steps backward by |delta| when delta is negative', (t) => {
+  const items = Array.from({ length: 10 }, (_, i) => mkItem(String(i)))
+  t.is(findPageIndex(items, 5, -3, true), 2)
+})
+
+test('findPageIndex: loop=true wraps past the end', (t) => {
+  const items = Array.from({ length: 5 }, (_, i) => mkItem(String(i)))
+  t.is(findPageIndex(items, 3, 3, true), 1)
+})
+
+test('findPageIndex: loop=false clamps at the last item instead of wrapping', (t) => {
+  const items = Array.from({ length: 5 }, (_, i) => mkItem(String(i)))
+  t.is(findPageIndex(items, 3, 3, false), 4)
+})
+
+test('findPageIndex: loop=false clamps at the first item instead of wrapping', (t) => {
+  const items = Array.from({ length: 5 }, (_, i) => mkItem(String(i)))
+  t.is(findPageIndex(items, 1, -3, false), 0)
+})
+
+test('findPageIndex: skips disabled items along the way', (t) => {
+  // Hops a(0) -> b(1) -> skips disabled c(2) -> d(3) -> e(4): 3 valid hops lands on e.
+  const items = [
+    mkItem('a'),
+    mkItem('b'),
+    mkItem('c', true),
+    mkItem('d'),
+    mkItem('e'),
+  ]
+  t.is(findPageIndex(items, 0, 3, true), 4)
+})
+
+test('findPageIndex: all disabled returns currentIndex (stay put)', (t) => {
+  const items = [mkItem('a', true), mkItem('b', true), mkItem('c', true)]
+  t.is(findPageIndex(items, 1, 3, true), 1)
 })
 
 // ── findFirstValidIndex ────────────────────────────────────────────────────────

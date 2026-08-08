@@ -56,6 +56,8 @@ export type KeyMap = {
   readonly vimKeys?: boolean
   /** Home / End jump-to-boundary keys. Default: true. */
   readonly homeEnd?: boolean
+  /** Page Up / Page Down keys — jump by a page of items. Default: true. */
+  readonly pageKeys?: boolean
   /** Escape → onCancel. Default: true. */
   readonly cancel?: boolean
   /** Enter → onSelect / onConfirm. Default: true. */
@@ -180,6 +182,14 @@ export type UseEnhancedSelectInputProperties<V> = {
   readonly typeahead?: boolean
   /** Idle window (ms) after which the type-ahead buffer resets. Default: 500. */
   readonly typeaheadTimeout?: number
+  /**
+   * Whether navigation (arrows, vim keys, Page Up/Down) wraps around at the
+   * first/last item. When `false`, navigation clamps at the boundary instead
+   * — pressing "down" on the last item keeps the highlight there rather than
+   * jumping back to the top. Home/End are unaffected; they always jump to
+   * the absolute boundary. Default: true.
+   */
+  readonly loop?: boolean
 }
 
 /**
@@ -312,22 +322,68 @@ export function resolveInitialIndex<V>(
 export function findNextValidIndex<V>(
   items: Array<Item<V>>,
   currentIndex: number,
-  step: number
+  step: number,
+  loop = true
 ): number {
   const itemCount = items.length
   if (itemCount === 0) return 0
 
-  let nextIndex = currentIndex
+  if (loop) {
+    let nextIndex = currentIndex
+    for (let i = 0; i < itemCount; i++) {
+      nextIndex = (nextIndex + step + itemCount) % itemCount
+      if (!items[nextIndex]?.disabled) {
+        return nextIndex
+      }
+    }
 
+    // All items are disabled — stay put
+    return currentIndex
+  }
+
+  // Clamp mode: step without wrapping, skipping disabled items along the
+  // way. Stops (stays put) once stepping again would run past the boundary.
+  let nextIndex = currentIndex
   for (let i = 0; i < itemCount; i++) {
-    nextIndex = (nextIndex + step + itemCount) % itemCount
+    const candidate = nextIndex + step
+    if (candidate < 0 || candidate >= itemCount) break
+    nextIndex = candidate
     if (!items[nextIndex]?.disabled) {
       return nextIndex
     }
   }
 
-  // All items are disabled — stay put
   return currentIndex
+}
+
+/** Default Page Up/Down step size when `limit` is not set (no visible window to size the page from). */
+const DEFAULT_PAGE_SIZE = 10
+
+/**
+ * Moves `abs(delta)` valid steps in the direction of `delta`'s sign, skipping
+ * disabled items exactly like {@link findNextValidIndex} at each step and
+ * honouring `loop`. Stops early if a step doesn't move the index (boundary
+ * reached in clamp mode, or every item disabled) rather than spinning
+ * `abs(delta)` times for nothing.
+ */
+export function findPageIndex<V>(
+  items: Array<Item<V>>,
+  currentIndex: number,
+  delta: number,
+  loop: boolean
+): number {
+  if (items.length === 0) return 0
+
+  const step = delta < 0 ? -1 : 1
+  const pageSize = Math.abs(delta)
+  let index = currentIndex
+  for (let i = 0; i < pageSize; i++) {
+    const next = findNextValidIndex(items, index, step, loop)
+    if (next === index) break
+    index = next
+  }
+
+  return index
 }
 
 export function findFirstValidIndex<V>(items: Array<Item<V>>): number {
@@ -560,6 +616,10 @@ export type InputIntentContext<V> = {
   typeahead?: boolean
   /** Whether the type-ahead buffer is currently active (non-empty, not yet idle-expired). Defaults to false. */
   typeaheadActive?: boolean
+  /** Whether navigation wraps around at the first/last item. Defaults to true. */
+  loop?: boolean
+  /** Number of items a Page Up/Down press moves. Defaults to {@link DEFAULT_PAGE_SIZE}. */
+  pageSize?: number
 }
 
 /**
@@ -621,6 +681,32 @@ function resolveJumpIntent<V>(
   return undefined
 }
 
+/** Page Up/Down, gated on `km.pageKeys` — moves a page of items at a time, honoring `loop`. */
+function resolvePageIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, filteredItems, selectedIndex } = context
+  const loop = context.loop ?? true
+  const pageSize = context.pageSize ?? DEFAULT_PAGE_SIZE
+
+  if (km.pageKeys && key.pageUp) {
+    return {
+      type: 'navigate',
+      index: findPageIndex(filteredItems, selectedIndex, -pageSize, loop),
+    }
+  }
+
+  if (km.pageKeys && key.pageDown) {
+    return {
+      type: 'navigate',
+      index: findPageIndex(filteredItems, selectedIndex, pageSize, loop),
+    }
+  }
+
+  return undefined
+}
+
 /** -1 (backward) / +1 (forward) for the arrow or vim key pressed, orientation-aware. */
 function resolveNavigateStep<V>(
   input: string,
@@ -665,7 +751,8 @@ function resolveNavigateIntent<V>(
     index: findNextValidIndex(
       context.filteredItems,
       context.selectedIndex,
-      step
+      step,
+      context.loop ?? true
     ),
   }
 }
@@ -754,6 +841,7 @@ function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
     arrows: keyMap?.arrows ?? true,
     vimKeys: keyMap?.vimKeys ?? true,
     homeEnd: keyMap?.homeEnd ?? true,
+    pageKeys: keyMap?.pageKeys ?? true,
     cancel: keyMap?.cancel ?? true,
     select: keyMap?.select ?? true,
     toggle: keyMap?.toggle ?? true,
@@ -869,6 +957,9 @@ export function resolveInputIntent<V>(
 
   const jump = resolveJumpIntent(key, context)
   if (jump) return jump
+
+  const page = resolvePageIntent(key, context)
+  if (page) return page
 
   if (isToggleIntent(input, context)) {
     return { type: 'toggle' }
@@ -1004,6 +1095,7 @@ export function useEnhancedSelectInput<V>({
   keyMap,
   typeahead = false,
   typeaheadTimeout = 500,
+  loop = true,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
@@ -1093,6 +1185,11 @@ export function useEnhancedSelectInput<V>({
     : 0
   const selectedItem = hasItems ? filteredItems[selectedIndex] : undefined
   const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
+  // Page Up/Down step by the number of items currently on screen — matching
+  // what the user actually sees scroll by a "page" — falling back to a fixed
+  // size when there's no `limit` (the whole list is already visible, so
+  // there's no on-screen page to size the step from).
+  const pageSize = limit ? Math.max(1, visibleItems.length) : DEFAULT_PAGE_SIZE
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
@@ -1359,6 +1456,8 @@ export function useEnhancedSelectInput<V>({
         filteredItems,
         typeahead,
         typeaheadActive: typeaheadIsActive,
+        loop,
+        pageSize,
       })
 
       switch (intent.type) {
