@@ -17,6 +17,7 @@ export type {
   KeyMap,
   MatchMode,
   Properties,
+  Theme,
   UseEnhancedSelectInputProperties,
   UseEnhancedSelectInputResult,
   IndicatorProperties,
