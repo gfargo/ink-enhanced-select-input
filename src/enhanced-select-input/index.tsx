@@ -937,6 +937,15 @@ function resolveSearchDeleteIntent<V>(
 ): Intent<V> | undefined {
   const { searchQuery } = context
 
+  // Ink's terminal parser cannot tell the physical Backspace key apart from
+  // the physical (forward-)Delete key here: most terminals send \x7F for
+  // Backspace, and xterm-style terminals send the CSI "\x1B[3~" sequence for
+  // Delete — Ink maps *both* to `key.delete` (only literal `\b`/Ctrl+H sets
+  // `key.backspace`), with no other field on the public `Key` type to
+  // disambiguate them. So both keys intentionally perform the same
+  // delete-before-cursor edit; there is no way to give forward-Delete a
+  // distinct "delete character after cursor" behavior without reading raw
+  // stdin bytes ourselves. See https://github.com/vadimdemedes/ink/blob/main/src/parse-keypress.ts.
   if (key.backspace || key.delete) {
     return { type: 'search-backspace' }
   }

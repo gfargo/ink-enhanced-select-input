@@ -371,7 +371,7 @@ When typing:
 **Key behavior in searchable mode:**
 
 - Printable characters are inserted into the query at the cursor position, shown as an inverse-video block
-- `Backspace`/`Delete` removes the character before the cursor
+- `Backspace`/`Delete` both remove the character before the cursor. This is intentional, not a bug: most terminals send the same byte sequence for a physical Backspace press that xterm-style terminals use for forward-Delete, and [Ink can't tell them apart](https://github.com/vadimdemedes/ink/blob/main/src/parse-keypress.ts) — so there's no reliable signal available to give forward-Delete a distinct "remove character after cursor" behavior
 - `Escape` clears the query; if already empty, calls `onCancel`
 - In vertical orientation (the default), `←`/`→` and `Home`/`End` move the search cursor; `Ctrl+A`/`Ctrl+E` do the same in either orientation
 - `Ctrl+W` deletes the word before the cursor; `Ctrl+U` deletes from the start of the query up to the cursor
