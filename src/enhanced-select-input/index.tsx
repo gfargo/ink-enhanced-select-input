@@ -132,7 +132,8 @@ export type KeyMap = {
 export type MatchMode = 'includes' | 'fuzzy'
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
-export type UseEnhancedSelectInputProperties<V> = {
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type UseEnhancedSelectInputProps<V> = {
   readonly items: Array<ItemOrSeparator<V>>
   readonly isFocused?: boolean
   /**
@@ -312,6 +313,12 @@ export type UseEnhancedSelectInputProperties<V> = {
 }
 
 /**
+ * @deprecated Renamed to {@link UseEnhancedSelectInputProps}. Kept as an
+ * alias for backward compatibility; will be removed in a future minor.
+ */
+export type UseEnhancedSelectInputProperties<V> = UseEnhancedSelectInputProps<V>
+
+/**
  * Colors used by the default render components. Any slot left unset falls
  * back to the built-in default (which reproduces the component's original,
  * pre-theming appearance). Set a slot to `undefined` explicitly to disable
@@ -346,12 +353,13 @@ type ThemeColors = {
 type ResolvedTheme = ThemeColors & { readonly dim: boolean }
 
 /** Full component props — hook props plus rendering customisation. */
-export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
-  readonly indicatorComponent?: FC<IndicatorProperties>
-  readonly itemComponent?: FC<ItemProperties>
-  readonly groupHeaderComponent?: FC<GroupHeaderProperties>
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
+  readonly indicatorComponent?: FC<IndicatorProps>
+  readonly itemComponent?: FC<ItemProps>
+  readonly groupHeaderComponent?: FC<GroupHeaderProps>
   /** Custom renderer for `{ type: 'separator' }` rows. */
-  readonly separatorComponent?: FC<SeparatorProperties>
+  readonly separatorComponent?: FC<SeparatorProps>
   /**
    * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
    * when the limit window doesn't cover the full list. Only meaningful when
@@ -394,10 +402,22 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
   readonly theme?: Partial<Theme>
 }
 
-export type IndicatorProperties = {
+/**
+ * @deprecated Renamed to {@link EnhancedSelectInputProps}. Kept as an alias
+ * for backward compatibility; will be removed in a future minor.
+ */
+export type Properties<V> = EnhancedSelectInputProps<V>
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type IndicatorProps = {
   readonly isSelected: boolean
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   readonly isChecked?: boolean
+  /**
+   * The item being rendered. Pass-through for custom indicator components
+   * that want to key their rendering off item data (e.g. `item.value`); the
+   * default renderer doesn't read it.
+   */
   // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
   /** Glyph shown when `isChecked` is true. Falls back to `'[x]'`. */
@@ -408,7 +428,14 @@ export type IndicatorProperties = {
   readonly theme?: ResolvedTheme
 }
 
-export type ItemProperties = {
+/**
+ * @deprecated Renamed to {@link IndicatorProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type IndicatorProperties = IndicatorProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type ItemProps = {
   readonly isSelected: boolean
   readonly label: string
   readonly isDisabled: boolean
@@ -433,13 +460,33 @@ export type ItemProperties = {
   readonly theme?: ResolvedTheme
 }
 
-export type GroupHeaderProperties = {
+/**
+ * @deprecated Renamed to {@link ItemProps}. Kept as an alias for backward
+ * compatibility; will be removed in a future minor.
+ */
+export type ItemProperties = ItemProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type GroupHeaderProps = {
   readonly label: string
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
 
-export type SeparatorProperties = Record<string, unknown>
+/**
+ * @deprecated Renamed to {@link GroupHeaderProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type GroupHeaderProperties = GroupHeaderProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type SeparatorProps = Record<string, unknown>
+
+/**
+ * @deprecated Renamed to {@link SeparatorProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type SeparatorProperties = SeparatorProps
 
 // Vim navigation keys that take precedence over hotkeys.
 // An item hotkey that matches one of these values will never fire in the
@@ -1603,7 +1650,7 @@ export function useEnhancedSelectInput<V>({
   typeahead = false,
   typeaheadTimeout = 500,
   loop = true,
-}: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
+}: UseEnhancedSelectInputProps<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
   const [searchQuery, setSearchQueryState] = useState('')
@@ -2315,7 +2362,7 @@ export function DefaultIndicatorComponent({
   checkedIndicator = '[x]',
   uncheckedIndicator = '[ ]',
   theme,
-}: IndicatorProperties) {
+}: IndicatorProps) {
   const resolvedTheme = theme ?? resolveTheme()
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
@@ -2344,7 +2391,7 @@ export function DefaultItemComponent({
   isDisabled,
   matches,
   theme,
-}: ItemProperties) {
+}: ItemProps) {
   const resolvedTheme = theme ?? resolveTheme()
   let color: string | undefined
   if (isDisabled) {
@@ -2393,7 +2440,7 @@ export function DefaultItemComponent({
 export function DefaultGroupHeaderComponent({
   label,
   theme,
-}: GroupHeaderProperties) {
+}: GroupHeaderProps) {
   const resolvedTheme = theme ?? resolveTheme()
   return (
     <Box>
@@ -2446,7 +2493,7 @@ export function EnhancedSelectInput<V>({
   theme,
   // All remaining props are forwarded to the hook
   ...hookProperties
-}: Properties<V>) {
+}: EnhancedSelectInputProps<V>) {
   const {
     selectedIndex,
     rotateIndex,
