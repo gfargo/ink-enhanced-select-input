@@ -2144,6 +2144,18 @@ export function useEnhancedSelectInput<V>({
 
   useInput(
     (input, key) => {
+      // Terminals that negotiate the Kitty keyboard protocol (Kitty, Ghostty,
+      // WezTerm, ...) report `key.eventType: 'press' | 'repeat' | 'release'`
+      // for every keystroke; terminals that don't leave it `undefined`. A
+      // 'release' event is the same physical keystroke Ink already handled
+      // on 'press' — acting on it too would double-navigate/double-toggle,
+      // so it's dropped unconditionally. 'repeat' (a held key) is allowed
+      // through only for navigation, mirroring how holding an arrow key
+      // already free-scrolls on non-Kitty terminals; other intents (toggle,
+      // submit, hotkeys, search input, ...) ignore repeats to avoid
+      // re-firing side effects for a single held keystroke.
+      if (key.eventType === 'release') return
+
       const now = Date.now()
       const typeaheadIsActive =
         typeaheadBuffer.current.text !== '' &&
@@ -2164,6 +2176,14 @@ export function useEnhancedSelectInput<V>({
         loop,
         pageSize,
       })
+
+      if (
+        key.eventType === 'repeat' &&
+        intent.type !== 'navigate' &&
+        intent.type !== 'jump'
+      ) {
+        return
+      }
 
       if (isSearchEditIntent(intent)) {
         const edit = computeSearchEdit(
