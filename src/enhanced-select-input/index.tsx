@@ -292,6 +292,36 @@ export type UseEnhancedSelectInputProperties<V> = {
    */
   readonly searchFields?: (item: Item<V>) => string | string[]
   /**
+   * Called with the next search query whenever it would change — via typing,
+   * backspace, word/line delete, Escape-clear, or the imperative
+   * `setSearchQuery`. Only used when `searchable` is true; never fires
+   * otherwise. Combine with `searchQuery` to drive remote/async filtering
+   * from outside the component.
+   */
+  readonly onSearchChange?: (query: string) => void
+  /**
+   * Controls the search query from outside the component. When provided,
+   * search-editing keypresses call `onSearchChange` instead of mutating the
+   * query internally — the parent owns the value and must feed it back for
+   * the displayed query to change. Built-in filtering is also skipped while
+   * controlled (`filteredItems` is `items` verbatim) since the parent is
+   * expected to supply an already-filtered `items` array. Combine with
+   * `onSearchChange` for a fully controlled search — a dev warning is logged
+   * if it's supplied without a handler. Only used when `searchable` is true.
+   */
+  readonly searchQuery?: string
+  /**
+   * Debounces `onSearchChange` calls by this many milliseconds — useful when
+   * the parent drives an expensive/remote search off the query. The
+   * displayed query (and cursor) still updates immediately; only the
+   * `onSearchChange` notification is delayed/coalesced. Unset or `0` fires
+   * synchronously. Intended for an uncontrolled `searchQuery` — a controlled
+   * `searchQuery` already lags behind the parent's own state, so debouncing
+   * the notification on top of that just adds latency; debounce on the
+   * parent's side instead. Only used when `searchable` is true.
+   */
+  readonly searchDebounce?: number
+  /**
    * Selectively disable built-in key groups to avoid conflicts with
    * keybindings registered elsewhere in your application.
    * See {@link KeyMap} for available groups and defaults.
@@ -392,6 +422,23 @@ export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
    * `NO_COLOR` environment variable is set. See {@link Theme}.
    */
   readonly theme?: Partial<Theme>
+  /**
+   * Render-only loading indicator, e.g. while a parent-driven async search
+   * (see `onSearchChange`) is in flight. Renders a loading row beneath the
+   * search input; when the current item list is empty, the loading row
+   * replaces "No matches" instead of appearing alongside it. Default: false.
+   */
+  readonly isLoading?: boolean
+  /** Text shown by the default loading row. Only used when `isLoading` is true. Default: `'Searching…'`. */
+  readonly loadingText?: string
+  /** Custom renderer for the loading row. Only used when `isLoading` is true. */
+  readonly loadingComponent?: FC<LoadingProperties>
+}
+
+export type LoadingProperties = {
+  readonly loadingText: string
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
 }
 
 export type IndicatorProperties = {
@@ -444,8 +491,39 @@ export type SeparatorProperties = Record<string, unknown>
 // Vim navigation keys that take precedence over hotkeys.
 // An item hotkey that matches one of these values will never fire in the
 // corresponding orientation — document this constraint at the call site.
-const VERTICAL_NAV_KEYS = new Set(['j', 'k'])
-const HORIZONTAL_NAV_KEYS = new Set(['h', 'l'])
+const NAV_CONFIG = {
+  vertical: {
+    backwardArrow: 'upArrow',
+    forwardArrow: 'downArrow',
+    backwardVimKey: 'k',
+    forwardVimKey: 'j',
+  },
+  horizontal: {
+    backwardArrow: 'leftArrow',
+    forwardArrow: 'rightArrow',
+    backwardVimKey: 'h',
+    forwardVimKey: 'l',
+  },
+} as const satisfies Record<
+  'vertical' | 'horizontal',
+  {
+    backwardArrow: keyof Key
+    forwardArrow: keyof Key
+    backwardVimKey: string
+    forwardVimKey: string
+  }
+>
+
+const NAV_VIM_KEYS: Record<'vertical' | 'horizontal', Set<string>> = {
+  vertical: new Set([
+    NAV_CONFIG.vertical.backwardVimKey,
+    NAV_CONFIG.vertical.forwardVimKey,
+  ]),
+  horizontal: new Set([
+    NAV_CONFIG.horizontal.backwardVimKey,
+    NAV_CONFIG.horizontal.forwardVimKey,
+  ]),
+}
 
 export function resolveInitialIndex<V>(
   items: Array<ItemOrSeparator<V>>,
@@ -1086,20 +1164,18 @@ function resolveNavigateStep<V>(
   isModifiedChord: boolean
 ): -1 | 1 | undefined {
   const { km, orientation, searchable } = context
-  const [backwardArrow, forwardArrow, backwardVimKey, forwardVimKey] =
-    orientation === 'vertical'
-      ? [key.upArrow, key.downArrow, 'k', 'j']
-      : [key.leftArrow, key.rightArrow, 'h', 'l']
+  const { backwardArrow, forwardArrow, backwardVimKey, forwardVimKey } =
+    NAV_CONFIG[orientation]
 
   if (
-    (km.arrows && backwardArrow) ||
+    (km.arrows && key[backwardArrow]) ||
     (km.vimKeys && !searchable && !isModifiedChord && input === backwardVimKey)
   ) {
     return -1
   }
 
   if (
-    (km.arrows && forwardArrow) ||
+    (km.arrows && key[forwardArrow]) ||
     (km.vimKeys && !searchable && !isModifiedChord && input === forwardVimKey)
   ) {
     return 1
@@ -1250,10 +1326,11 @@ function resolveModifierState<V>(
 ): { isModifiedChord: boolean; isActiveVimKey: boolean } {
   const { km, searchable, orientation } = context
   const isModifiedChord = key.ctrl || key.meta
-  const navigationKeys =
-    orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
   const isActiveVimKey =
-    km.vimKeys && !searchable && !isModifiedChord && navigationKeys.has(input)
+    km.vimKeys &&
+    !searchable &&
+    !isModifiedChord &&
+    NAV_VIM_KEYS[orientation].has(input)
   return { isModifiedChord, isActiveVimKey }
 }
 
@@ -1541,7 +1618,10 @@ export type UseEnhancedSelectInputResult<V> = {
   itemsBelow: number
   /** Keys of checked items. Only populated in multi-select mode. */
   checkedKeys: Set<string>
-  /** Current search query. Empty string when searchable is false or no input yet. */
+  /**
+   * Current search query. Empty string when searchable is false or no input
+   * yet. Mirrors the `searchQuery` prop verbatim when it's controlled.
+   */
   searchQuery: string
   /**
    * Cursor position within `searchQuery`, clamped to `[0, searchQuery.length]`.
@@ -1564,7 +1644,9 @@ export type UseEnhancedSelectInputResult<V> = {
   setSelectedIndex: (index: number) => void
   /**
    * Imperatively set the search query, resetting the highlighted selection
-   * back to the top. No-op filtering effect unless `searchable` is true.
+   * back to the top. No-op filtering effect unless `searchable` is true. In
+   * controlled `searchQuery` mode, this only calls `onSearchChange` — the
+   * parent must feed the value back for the displayed query to change.
    */
   setSearchQuery: (query: string) => void
   /**
@@ -1631,15 +1713,19 @@ export function useEnhancedSelectInput<V>({
   filter,
   matchMode = 'includes',
   searchFields,
+  onSearchChange,
+  searchQuery: controlledQuery,
+  searchDebounce,
   keyMap,
   typeahead = false,
   typeaheadTimeout = 500,
   loop = true,
 }: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
-  // eslint-disable-next-line react/hook-use-state -- public API name (setSearchQuery) is reserved for the wrapper below
-  const [searchQuery, setSearchQueryState] = useState('')
+  const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const [searchCursor, setSearchCursor] = useState(0)
+  const isQueryControlled = controlledQuery !== undefined
+  const searchQuery = isQueryControlled ? controlledQuery : internalSearchQuery
 
   // Mirror searchQuery/searchCursor synchronously so the useInput handler can
   // read-and-update both together within a single keypress, and so a burst of
@@ -1647,7 +1733,8 @@ export function useEnhancedSelectInput<V>({
   // correctly — React coalesces same-tick setState calls, so a later call in
   // the same burst would otherwise still see this render's (stale) query and
   // cursor rather than the previous call's result. Resynced at the top of
-  // every render so external updates (e.g. setSearchQueryPublic) stay authoritative.
+  // every render so external updates (e.g. setSearchQueryPublic, or the
+  // parent feeding back a controlled `searchQuery`) stay authoritative.
   const searchQueryReference = useRef(searchQuery)
   searchQueryReference.current = searchQuery
   const searchCursorReference = useRef(searchCursor)
@@ -1660,12 +1747,50 @@ export function useEnhancedSelectInput<V>({
   const onHighlightReference = useRef(onHighlight)
   onHighlightReference.current = onHighlight
 
+  // Same pattern for onSearchChange — read from a ref so notifySearchChange
+  // (and its debounce timer closure) always calls the latest callback
+  // without needing it as an effect/callback dependency.
+  const onSearchChangeReference = useRef(onSearchChange)
+  onSearchChangeReference.current = onSearchChange
+  const debounceTimerReference = useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined)
+
+  // Fires onSearchChange, coalescing rapid calls into one when searchDebounce
+  // is set. Only the notification is delayed — the displayed query/cursor
+  // above always updates synchronously with the keypress.
+  const notifySearchChange = (query: string) => {
+    if (!searchDebounce) {
+      onSearchChangeReference.current?.(query)
+      return
+    }
+
+    if (debounceTimerReference.current !== undefined) {
+      clearTimeout(debounceTimerReference.current)
+    }
+
+    debounceTimerReference.current = setTimeout(() => {
+      debounceTimerReference.current = undefined
+      onSearchChangeReference.current?.(query)
+    }, searchDebounce)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerReference.current !== undefined) {
+        clearTimeout(debounceTimerReference.current)
+      }
+    }
+  }, [])
+
   // Filter items based on search query. Memoized so the reference is stable
   // across renders that don't actually change the item set — downstream
   // effects depend on this reference to distinguish "items changed" from
-  // "parent re-rendered with a new-but-equivalent array".
+  // "parent re-rendered with a new-but-equivalent array". Skipped entirely
+  // while `searchQuery` is controlled — the parent is expected to pass an
+  // already-filtered `items` array, so filtering here would double-filter.
   const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(() => {
-    if (!searchable || !searchQuery) return items
+    if (!searchable || isQueryControlled || !searchQuery) return items
     const nonSeparatorItems = items.filter(
       (item): item is Item<V> => !isSeparator(item)
     )
@@ -1678,7 +1803,15 @@ export function useEnhancedSelectInput<V>({
         matchesQuery(field, searchQuery, matchMode)
       )
     })
-  }, [items, searchable, searchQuery, filter, matchMode, searchFields])
+  }, [
+    items,
+    searchable,
+    isQueryControlled,
+    searchQuery,
+    filter,
+    matchMode,
+    searchFields,
+  ])
 
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
@@ -1688,13 +1821,14 @@ export function useEnhancedSelectInput<V>({
     [filteredItems, limit]
   )
 
-  const safeInitialIndex = resolveInitialSelection(filteredItems, {
-    initialKey,
-    initialValue,
-    initialIndex: rawInitialIndex,
-    autoSelectFirstEnabled,
-  })
-  const [uncontrolledIndex, setUncontrolledIndex] = useState(safeInitialIndex)
+  const [uncontrolledIndex, setUncontrolledIndex] = useState(() =>
+    resolveInitialSelection(filteredItems, {
+      initialKey,
+      initialValue,
+      initialIndex: rawInitialIndex,
+      autoSelectFirstEnabled,
+    })
+  )
   const isIndexControlled = controlledIndex !== undefined
   const selectedIndex = isIndexControlled
     ? resolveInitialIndex(filteredItems, controlledIndex)
@@ -1730,24 +1864,82 @@ export function useEnhancedSelectInput<V>({
       (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
     )
   })
+  // Shared by both the controlled and uncontrolled pruning below so a single
+  // pass over `items` serves both paths.
+  const itemKeySets = useMemo(() => {
+    const disabledKeys = new Set<string>()
+    const validKeys = new Set<string>()
+    for (const item of items) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      validKeys.add(k)
+      if (item.disabled) disabledKeys.add(k)
+    }
+
+    return { validKeys, disabledKeys }
+  }, [items])
   const controlledCheckedKeys = useMemo(() => {
     if (!isKeysControlled) return undefined
-    const disabledKeys = new Set(
-      items
-        .filter(
-          (item): item is Item<V> =>
-            !isSeparator(item) && Boolean(item.disabled)
-        )
-        .map((item) => itemKey(item))
+    // Drop keys for items that no longer exist in `items` at all — not just
+    // ones that became disabled — otherwise a checked item removed from
+    // `items` (e.g. a remote search results page being replaced) leaves a
+    // phantom key behind, and a later `items` array that happens to reuse
+    // the same key would render pre-checked despite the user never checking
+    // it this time.
+    return new Set(
+      controlledKeys.filter(
+        (key) =>
+          itemKeySets.validKeys.has(key) && !itemKeySets.disabledKeys.has(key)
+      )
     )
-    return new Set(controlledKeys.filter((key) => !disabledKeys.has(key)))
-  }, [isKeysControlled, controlledKeys, items])
-  const checkedKeys = controlledCheckedKeys ?? uncontrolledCheckedKeys
+  }, [isKeysControlled, controlledKeys, itemKeySets])
+  // Uncontrolled counterpart of the pruning above, computed synchronously
+  // (mirroring `controlledCheckedKeys`) rather than via a `useEffect` —
+  // otherwise a same-tick `items` change followed by Enter would read
+  // `checkedKeysReference.current` before the effect flushed the prune,
+  // letting a phantom key still count toward `handleSubmit`'s min/max gate
+  // (B18). Returns `uncontrolledCheckedKeys` unchanged (same reference) when
+  // nothing needs pruning, so the persistence effect below is a no-op.
+  const prunedUncontrolledCheckedKeys = useMemo(() => {
+    if (isKeysControlled) return uncontrolledCheckedKeys
+    let changed = false
+    const next = new Set<string>()
+    for (const key of uncontrolledCheckedKeys) {
+      if (itemKeySets.validKeys.has(key)) {
+        next.add(key)
+      } else {
+        changed = true
+      }
+    }
+
+    return changed ? next : uncontrolledCheckedKeys
+  }, [isKeysControlled, uncontrolledCheckedKeys, itemKeySets])
+  const checkedKeys = controlledCheckedKeys ?? prunedUncontrolledCheckedKeys
   // Mirrors `checkedKeys` synchronously so the Enter branch below can read
   // the committed set even when a Space toggle and Enter are written in the
   // same tick (no intervening render to flush the `checkedKeys` state).
   const checkedKeysReference = useRef(checkedKeys)
   checkedKeysReference.current = checkedKeys
+  // Caches the full Item for every currently-checked key, keyed by itemKey.
+  // `items` can churn entirely (e.g. a parent-driven async search replacing
+  // the result set — see onSearchChange/isLoading) while a key stays
+  // checked; without this, onConfirm's `confirmScope: 'all'` lookup below
+  // would silently drop a checked item once it's no longer present in
+  // `items` to look up. Backfilled from `items` below and pruned to the
+  // current `checkedKeys` so it never grows unbounded.
+  const checkedItemsCacheReference = useRef<Map<string, Item<V>>>(new Map())
+  useEffect(() => {
+    const cache = checkedItemsCacheReference.current
+    for (const item of items) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      if (checkedKeys.has(k)) cache.set(k, item)
+    }
+
+    for (const k of cache.keys()) {
+      if (!checkedKeys.has(k)) cache.delete(k)
+    }
+  }, [items, checkedKeys])
   const typeaheadBuffer = useRef<{ text: string; time: number }>({
     text: '',
     time: 0,
@@ -1760,15 +1952,28 @@ export function useEnhancedSelectInput<V>({
 
   // Keep the parent in sync when a controlled selectedKeys resolves to a
   // smaller set than what was passed in — e.g. a previously-checked item
-  // became disabled and is now filtered out of `controlledCheckedKeys`
-  // above. Without this the parent's own copy of the keys would silently
-  // include a key that no longer renders as checked.
+  // became disabled, or was removed from `items` entirely, and is now
+  // filtered out of `controlledCheckedKeys` above. Without this the parent's
+  // own copy of the keys would silently include a key that no longer renders
+  // as checked.
   useEffect(() => {
     if (!isKeysControlled || !controlledCheckedKeys) return
     if (controlledCheckedKeys.size !== controlledKeys.length) {
       onSelectedKeysChangeReference.current?.([...controlledCheckedKeys])
     }
   }, [isKeysControlled, controlledCheckedKeys, controlledKeys])
+
+  // Persists the synchronously-pruned set (above) back into
+  // `uncontrolledCheckedKeys` state so it's what future renders start from.
+  // `prunedUncontrolledCheckedKeys` already equals `checkedKeys` this render
+  // — via `checkedKeysReference` — so this effect is bookkeeping, not the
+  // thing closing the same-tick gap.
+  useEffect(() => {
+    if (isKeysControlled) return
+    if (prunedUncontrolledCheckedKeys !== uncontrolledCheckedKeys) {
+      setUncontrolledCheckedKeys(prunedUncontrolledCheckedKeys)
+    }
+  }, [isKeysControlled, prunedUncontrolledCheckedKeys, uncontrolledCheckedKeys])
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex (plus,
@@ -1998,6 +2203,17 @@ export function useEnhancedSelectInput<V>({
     }
   }, [isKeysControlled, onSelectedKeysChange])
 
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (isQueryControlled && onSearchChange === undefined) {
+      console.warn(
+        '[ink-enhanced-select-input] searchQuery was provided without onSearchChange — ' +
+          'the query will not respond to typing. Pass onSearchChange to update it.'
+      )
+    }
+  }, [isQueryControlled, onSearchChange])
+
   // Re-fire whenever the highlighted item's *identity* changes, not just its
   // index — filtering can swap in a different item at the same index (e.g.
   // typing resets selectedIndex to 0, which was already 0), and that must
@@ -2029,6 +2245,15 @@ export function useEnhancedSelectInput<V>({
   // uncontrolled mode, updates internal state directly.
   const updateCheckedKeys = (next: Set<string>) => {
     checkedKeysReference.current = next
+    // Cache newly-checked items synchronously (not just via the effect
+    // above) so a same-tick check-then-Enter reads a warm cache — see
+    // checkedItemsCacheReference.
+    for (const item of filteredItems) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      if (next.has(k)) checkedItemsCacheReference.current.set(k, item)
+    }
+
     onSelectedKeysChange?.([...next])
     if (!isKeysControlled) setUncontrolledCheckedKeys(next)
   }
@@ -2122,10 +2347,12 @@ export function useEnhancedSelectInput<V>({
   }
 
   const setSearchQueryPublic = (query: string) => {
+    const previousQuery = searchQueryReference.current
     searchQueryReference.current = query
     searchCursorReference.current = query.length
-    setSearchQueryState(query)
+    if (!isQueryControlled) setInternalSearchQuery(query)
     setSearchCursor(query.length)
+    if (searchable && query !== previousQuery) notifySearchChange(query)
     resetSelectionToTopUnlessUnselected()
   }
 
@@ -2150,6 +2377,20 @@ export function useEnhancedSelectInput<V>({
         (item): item is Item<V> =>
           !isSeparator(item) && checkedKeysReference.current.has(itemKey(item))
       )
+
+      if (confirmScope === 'all') {
+        // A checked key can survive result churn (e.g. async search replaced
+        // `items` entirely — B18) with no matching item left in `items` to
+        // filter from above. Fall back to the cached Item for those keys so
+        // they still make it into onConfirm.
+        const confirmedKeys = new Set(confirmed.map((item) => itemKey(item)))
+        for (const k of checkedKeysReference.current) {
+          if (confirmedKeys.has(k)) continue
+          const cached = checkedItemsCacheReference.current.get(k)
+          if (cached) confirmed.push(cached)
+        }
+      }
+
       onConfirm?.(confirmed)
       return
     }
@@ -2198,15 +2439,17 @@ export function useEnhancedSelectInput<V>({
       })
 
       if (isSearchEditIntent(intent)) {
+        const previousQuery = searchQueryReference.current
         const edit = computeSearchEdit(
           intent,
-          searchQueryReference.current,
+          previousQuery,
           searchCursorReference.current
         )
         searchQueryReference.current = edit.query
         searchCursorReference.current = edit.cursor
-        setSearchQueryState(edit.query)
+        if (!isQueryControlled) setInternalSearchQuery(edit.query)
         setSearchCursor(edit.cursor)
+        if (edit.query !== previousQuery) notifySearchChange(edit.query)
         if (edit.resetSelection) resetSelectionToTopUnlessUnselected()
         return
       }
@@ -2446,6 +2689,18 @@ export function DefaultSeparatorComponent() {
   )
 }
 
+export function DefaultLoadingComponent({
+  loadingText,
+  theme,
+}: LoadingProperties) {
+  const resolvedTheme = theme ?? resolveTheme()
+  return (
+    <Box>
+      <Text dimColor={resolvedTheme.dim}>{`⠋ ${loadingText}`}</Text>
+    </Box>
+  )
+}
+
 /** The "n selected[/bound]" line shown above the list in multi-select mode, or `null` when hidden. */
 function resolveSelectionCountLine(
   show: boolean,
@@ -2476,6 +2731,9 @@ export function EnhancedSelectInput<V>({
   uncheckedIndicator = '[ ]',
   showSelectionCount = false,
   theme,
+  isLoading = false,
+  loadingText = 'Searching…',
+  loadingComponent = DefaultLoadingComponent,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: Properties<V>) {
@@ -2546,15 +2804,24 @@ export function EnhancedSelectInput<V>({
     selectionBound
   )
 
+  const LoadingComponent = loadingComponent
+  const loadingRow = isLoading ? (
+    <LoadingComponent loadingText={loadingText} theme={resolvedTheme} />
+  ) : null
+
   if (!hasItems) {
-    // Searchable mode with no matching results
+    // Searchable mode with no matching results — while a search is loading,
+    // the loading row replaces "No matches" rather than appearing above it.
     return (
       <Box flexDirection="column">
         {searchInput}
         {selectionCountLine}
-        <Box>
-          <Text dimColor={resolvedTheme.dim}>No matches</Text>
-        </Box>
+        {loadingRow}
+        {!isLoading && (
+          <Box>
+            <Text dimColor={resolvedTheme.dim}>No matches</Text>
+          </Box>
+        )}
       </Box>
     )
   }
@@ -2563,6 +2830,7 @@ export function EnhancedSelectInput<V>({
     <Box flexDirection="column">
       {searchInput}
       {selectionCountLine}
+      {loadingRow}
       <Box flexDirection={isVertical ? 'column' : 'row'}>
         {showScrollIndicators && itemsAbove > 0 && (
           <Box marginRight={isVertical ? 0 : 1}>
