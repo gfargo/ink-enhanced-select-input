@@ -8972,3 +8972,60 @@ test.serial(
     t.is(selectCount, 1)
   }
 )
+
+test.serial(
+  'kitty protocol repeat event continues appending to a held search character',
+  async (t) => {
+    const items = [
+      { label: 'Jam', value: 'jam' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write(KITTY_DOWN_PRESS) // 'j'
+    await delay()
+    t.true(lastFrame()!.includes('/ j'))
+
+    // Holding the key down sends 'repeat' events — typing keeps appending,
+    // same as autorepeat on a non-Kitty terminal.
+    stdin.write(KITTY_DOWN_REPEAT)
+    await delay()
+    stdin.write(KITTY_DOWN_REPEAT)
+    await delay()
+
+    t.true(lastFrame()!.includes('/ jjj'))
+  }
+)
+
+test.serial(
+  'kitty protocol repeat event continues deleting a held backspace in search',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('app')
+    await delay()
+    t.true(lastFrame()!.includes('/ app'))
+
+    // Holding Backspace down sends 'repeat' events — deletion keeps going,
+    // same as autorepeat on a non-Kitty terminal.
+    stdin.write(kittyKey(127, 1)) // Press
+    await delay()
+    stdin.write(kittyKey(127, 2)) // Repeat
+    await delay()
+
+    t.true(lastFrame()!.includes('/ a'))
+    t.false(lastFrame()!.includes('/ ap'))
+  }
+)

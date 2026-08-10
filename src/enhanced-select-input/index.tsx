@@ -2150,10 +2150,11 @@ export function useEnhancedSelectInput<V>({
       // 'release' event is the same physical keystroke Ink already handled
       // on 'press' — acting on it too would double-navigate/double-toggle,
       // so it's dropped unconditionally. 'repeat' (a held key) is allowed
-      // through only for navigation, mirroring how holding an arrow key
-      // already free-scrolls on non-Kitty terminals; other intents (toggle,
-      // submit, hotkeys, search input, ...) ignore repeats to avoid
-      // re-firing side effects for a single held keystroke.
+      // through for navigation and for search editing, mirroring how
+      // holding a key already free-scrolls or auto-repeats-types on
+      // non-Kitty terminals; other one-shot intents (toggle, submit,
+      // hotkeys, select-all/none, cancel, ...) ignore repeats so a held
+      // Enter or Space doesn't re-fire its side effect.
       if (key.eventType === 'release') return
 
       const now = Date.now()
@@ -2180,7 +2181,8 @@ export function useEnhancedSelectInput<V>({
       if (
         key.eventType === 'repeat' &&
         intent.type !== 'navigate' &&
-        intent.type !== 'jump'
+        intent.type !== 'jump' &&
+        !isSearchEditIntent(intent)
       ) {
         return
       }
