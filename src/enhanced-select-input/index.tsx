@@ -1699,8 +1699,9 @@ export function useEnhancedSelectInput<V>({
       (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
     )
   })
-  const controlledCheckedKeys = useMemo(() => {
-    if (!isKeysControlled) return undefined
+  // Shared by both the controlled and uncontrolled pruning below so a single
+  // pass over `items` serves both paths.
+  const itemKeySets = useMemo(() => {
     const disabledKeys = new Set<string>()
     const validKeys = new Set<string>()
     for (const item of items) {
@@ -1710,6 +1711,10 @@ export function useEnhancedSelectInput<V>({
       if (item.disabled) disabledKeys.add(k)
     }
 
+    return { validKeys, disabledKeys }
+  }, [items])
+  const controlledCheckedKeys = useMemo(() => {
+    if (!isKeysControlled) return undefined
     // Drop keys for items that no longer exist in `items` at all — not just
     // ones that became disabled — otherwise a checked item removed from
     // `items` (e.g. a remote search results page being replaced) leaves a
@@ -1718,11 +1723,33 @@ export function useEnhancedSelectInput<V>({
     // it this time.
     return new Set(
       controlledKeys.filter(
-        (key) => validKeys.has(key) && !disabledKeys.has(key)
+        (key) =>
+          itemKeySets.validKeys.has(key) && !itemKeySets.disabledKeys.has(key)
       )
     )
-  }, [isKeysControlled, controlledKeys, items])
-  const checkedKeys = controlledCheckedKeys ?? uncontrolledCheckedKeys
+  }, [isKeysControlled, controlledKeys, itemKeySets])
+  // Uncontrolled counterpart of the pruning above, computed synchronously
+  // (mirroring `controlledCheckedKeys`) rather than via a `useEffect` —
+  // otherwise a same-tick `items` change followed by Enter would read
+  // `checkedKeysReference.current` before the effect flushed the prune,
+  // letting a phantom key still count toward `handleSubmit`'s min/max gate
+  // (B18). Returns `uncontrolledCheckedKeys` unchanged (same reference) when
+  // nothing needs pruning, so the persistence effect below is a no-op.
+  const prunedUncontrolledCheckedKeys = useMemo(() => {
+    if (isKeysControlled) return uncontrolledCheckedKeys
+    let changed = false
+    const next = new Set<string>()
+    for (const key of uncontrolledCheckedKeys) {
+      if (itemKeySets.validKeys.has(key)) {
+        next.add(key)
+      } else {
+        changed = true
+      }
+    }
+
+    return changed ? next : uncontrolledCheckedKeys
+  }, [isKeysControlled, uncontrolledCheckedKeys, itemKeySets])
+  const checkedKeys = controlledCheckedKeys ?? prunedUncontrolledCheckedKeys
   // Mirrors `checkedKeys` synchronously so the Enter branch below can read
   // the committed set even when a Space toggle and Enter are written in the
   // same tick (no intervening render to flush the `checkedKeys` state).
@@ -1751,34 +1778,17 @@ export function useEnhancedSelectInput<V>({
     }
   }, [isKeysControlled, controlledCheckedKeys, controlledKeys])
 
-  // Uncontrolled counterpart of the pruning above: drop checkedKeys entries
-  // for items that no longer exist in `items` at all. Without this, checking
-  // an item, then having the parent replace `items` without it (e.g. a new
-  // page of remote search results), leaves a phantom key in
-  // uncontrolledCheckedKeys — and if an item with that same key reappears in
-  // a later `items` array, it renders pre-checked despite the user never
-  // having checked it this time (B18).
+  // Persists the synchronously-pruned set (above) back into
+  // `uncontrolledCheckedKeys` state so it's what future renders start from.
+  // `prunedUncontrolledCheckedKeys` already equals `checkedKeys` this render
+  // — via `checkedKeysReference` — so this effect is bookkeeping, not the
+  // thing closing the same-tick gap.
   useEffect(() => {
     if (isKeysControlled) return
-    const validKeys = new Set<string>()
-    for (const item of items) {
-      if (!isSeparator(item)) validKeys.add(itemKey(item))
+    if (prunedUncontrolledCheckedKeys !== uncontrolledCheckedKeys) {
+      setUncontrolledCheckedKeys(prunedUncontrolledCheckedKeys)
     }
-
-    setUncontrolledCheckedKeys((previous) => {
-      let changed = false
-      const next = new Set<string>()
-      for (const key of previous) {
-        if (validKeys.has(key)) {
-          next.add(key)
-        } else {
-          changed = true
-        }
-      }
-
-      return changed ? next : previous
-    })
-  }, [items, isKeysControlled])
+  }, [isKeysControlled, prunedUncontrolledCheckedKeys, uncontrolledCheckedKeys])
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex (plus,

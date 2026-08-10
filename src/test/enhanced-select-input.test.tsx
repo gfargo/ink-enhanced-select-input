@@ -8419,6 +8419,55 @@ test.serial(
 )
 
 test.serial(
+  'uncontrolled multi-select: same-tick items removal then Enter does not count a pruned phantom key (B18)',
+  async (t) => {
+    // The prune runs in a `useMemo` (synchronous, during render) rather than
+    // a `useEffect` (deferred), so `checkedKeysReference` can never observe
+    // a phantom-inflated count — even when `items` changes and Enter is
+    // submitted in the same synchronous block, with no intervening render.
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+      { label: 'C', value: 'c', key: 'c' },
+    ]
+
+    let confirmed: Array<Item<unknown>> | undefined
+    const { stdin, rerender } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(confirmedItems) => {
+          confirmed = confirmedItems
+        }}
+      />
+    )
+
+    await delay()
+
+    // Remove the checked item "a" from items, then submit in the same tick —
+    // no `await delay()` between them — so any deferred prune would not have
+    // flushed yet.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        onConfirm={(confirmedItems) => {
+          confirmed = confirmedItems
+        }}
+      />
+    )
+    stdin.write(ENTER)
+
+    await delay()
+    t.is(confirmed, undefined)
+  }
+)
+
+test.serial(
   'controlled selectedIndex: setSelectedIndex() notifies via onIndexChange without moving state',
   async (t) => {
     const items = [
