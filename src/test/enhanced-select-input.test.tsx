@@ -13,6 +13,7 @@ import {
   type Item,
   type ItemOrSeparator,
   type ItemProperties,
+  type KeyMap,
   type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
 
@@ -22,6 +23,7 @@ const ARROW_DOWN = '\u001B[B'
 const ARROW_RIGHT = '\u001B[C'
 const ARROW_LEFT = '\u001B[D'
 const ENTER = '\r'
+const TAB = '\t'
 const ESCAPE = '\u001B'
 const HOME = '\u001B[H'
 const END = '\u001B[F'
@@ -2148,6 +2150,7 @@ type HookHarnessProperties = {
   readonly searchFields?: (item: Item<unknown>) => string | string[]
   readonly minSelections?: number
   readonly maxSelections?: number
+  readonly keyMap?: KeyMap
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -6849,6 +6852,61 @@ test.serial('keyMap.select=false disables Enter → onSelect', async (t) => {
   await delay()
   t.is(selected, '')
 })
+
+test.serial(
+  'keyMap.select=false + searchable: Enter never enters the search query',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        keyMap={{ select: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+    stdin.write('a')
+    await waitFor(() => result?.searchQuery === 'a')
+    stdin.write(ENTER)
+    await delay()
+    t.is(result?.searchQuery, 'a')
+    t.is(result?.filteredItems.length, 2)
+  }
+)
+
+test.serial(
+  'keyMap.select=false + searchable: Tab never enters the search query',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        keyMap={{ select: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+    stdin.write('a')
+    await waitFor(() => result?.searchQuery === 'a')
+    stdin.write(TAB)
+    await delay()
+    t.is(result?.searchQuery, 'a')
+  }
+)
 
 test.serial(
   'keyMap.toggle=false disables Space in multi-select mode',
