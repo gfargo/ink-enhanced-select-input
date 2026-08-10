@@ -2148,6 +2148,9 @@ type HookHarnessProperties = {
   readonly searchFields?: (item: Item<unknown>) => string | string[]
   readonly minSelections?: number
   readonly maxSelections?: number
+  readonly onSearchChange?: (query: string) => void
+  readonly searchQuery?: string
+  readonly searchDebounce?: number
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -8314,6 +8317,160 @@ test.serial(
 )
 
 test.serial(
+  'controlled selectedKeys: syncs back via onSelectedKeysChange when a checked item is removed from items (B18)',
+  async (t) => {
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    const onSelectedKeysChangeCalls: string[][] = []
+    const { rerender } = render(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await delay()
+    t.deepEqual(onSelectedKeysChangeCalls, [])
+
+    // Remove A from items entirely — its checked key is now a phantom.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await waitFor(() => onSelectedKeysChangeCalls.length > 0)
+    t.deepEqual(onSelectedKeysChangeCalls, [['b']])
+  }
+)
+
+test.serial(
+  'uncontrolled multi-select: checkedKeys drops entries for items removed from items, and a returning item is not pre-checked (B18)',
+  async (t) => {
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { rerender } = render(
+      <HookHarness
+        multiple
+        items={items}
+        defaultSelectedKeys={['a', 'b']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.checkedKeys.size, 2)
+
+    // Remove A from items (e.g. a fresh page of remote search results) — the
+    // phantom "a" key must be pruned from checkedKeys.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await waitFor(() => result?.checkedKeys.size === 1)
+    t.false(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('b'))
+
+    // A reappears later with the same key — it must not silently come back
+    // pre-checked, since the user never checked it this time around.
+    items = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.false(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('b'))
+  }
+)
+
+test.serial(
+  'uncontrolled multi-select: same-tick items removal then Enter does not count a pruned phantom key (B18)',
+  async (t) => {
+    // The prune runs in a `useMemo` (synchronous, during render) rather than
+    // a `useEffect` (deferred), so `checkedKeysReference` can never observe
+    // a phantom-inflated count — even when `items` changes and Enter is
+    // submitted in the same synchronous block, with no intervening render.
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+      { label: 'C', value: 'c', key: 'c' },
+    ]
+
+    let confirmed: Array<Item<unknown>> | undefined
+    const { stdin, rerender } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(confirmedItems) => {
+          confirmed = confirmedItems
+        }}
+      />
+    )
+
+    await delay()
+
+    // Remove the checked item "a" from items, then submit in the same tick —
+    // no `await delay()` between them — so any deferred prune would not have
+    // flushed yet.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        minSelections={2}
+        onConfirm={(confirmedItems) => {
+          confirmed = confirmedItems
+        }}
+      />
+    )
+    stdin.write(ENTER)
+
+    await delay()
+    t.is(confirmed, undefined)
+  }
+)
+
+test.serial(
   'controlled selectedIndex: setSelectedIndex() notifies via onIndexChange without moving state',
   async (t) => {
     const items = [
@@ -9027,5 +9184,372 @@ test.serial(
 
     t.true(lastFrame()!.includes('/ a'))
     t.false(lastFrame()!.includes('/ ap'))
+  }
+)
+
+// --- F4: onSearchChange, controlled searchQuery, isLoading, searchDebounce ---
+
+test.serial(
+  'onSearchChange fires with the next query on typing, backspace, clear, and setSearchQuery',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const calls: string[] = []
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('ap')
+    await waitFor(() => result?.searchQuery === 'ap')
+    t.deepEqual(calls, ['ap'])
+
+    stdin.write('\u007F')
+    await waitFor(() => result?.searchQuery === 'a')
+    t.deepEqual(calls, ['ap', 'a'])
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.searchQuery === '')
+    t.deepEqual(calls, ['ap', 'a', ''])
+
+    result?.setSearchQuery('xyz')
+    await waitFor(() => result?.searchQuery === 'xyz')
+    t.deepEqual(calls, ['ap', 'a', '', 'xyz'])
+  }
+)
+
+test.serial(
+  'onSearchChange never fires when searchable is false',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    await delay()
+    t.is(calls.length, 0)
+  }
+)
+
+test.serial(
+  'setSearchQuery does not fire onSearchChange when searchable is false',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    render(
+      <HookHarness
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    result?.setSearchQuery('xyz')
+    await waitFor(() => result?.searchQuery === 'xyz')
+    t.is(calls.length, 0)
+  }
+)
+
+test.serial(
+  'onSearchChange does not fire for a no-op backspace on an empty query',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('\u007F')
+    await delay()
+    t.is(calls.length, 0)
+  }
+)
+
+test.serial(
+  'controlled searchQuery: typing does not change the displayed query until the parent feeds it back',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const calls: string[] = []
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        searchQuery=""
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    await delay()
+
+    t.deepEqual(calls, ['a'])
+    // The prop was never fed back, so the displayed query is still frozen at
+    // "" — the placeholder renders, not "/ a".
+    t.false(lastFrame()!.includes('/ a'))
+  }
+)
+
+test.serial(
+  'controlled searchQuery: parent feeding the value back updates the display, and built-in filtering is skipped',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    function ControlledSearch() {
+      const [query, setQuery] = React.useState('')
+      return (
+        <EnhancedSelectInput
+          searchable
+          items={items}
+          searchQuery={query}
+          onSearchChange={setQuery}
+        />
+      )
+    }
+
+    const { stdin, lastFrame } = render(<ControlledSearch />)
+
+    await delay()
+    // "xyz" matches neither item's label — if built-in filtering ran, this
+    // would produce "No matches"; since the query is controlled, the parent
+    // owns filtering and both items must remain visible verbatim.
+    stdin.write('xyz')
+    await waitFor(() => lastFrame()!.includes('/ xyz'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('Apple'))
+    t.true(frame.includes('Banana'))
+    t.false(frame.includes('No matches'))
+  }
+)
+
+test.serial(
+  'dev warning: searchQuery without onSearchChange logs a warning',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput searchable items={items} searchQuery="" />)
+      await delay()
+      t.true(
+        warnings.some((message) =>
+          message.includes('searchQuery was provided without onSearchChange')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: searchQuery with onSearchChange does not log the missing-handler warning',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          searchable
+          items={items}
+          searchQuery=""
+          onSearchChange={() => undefined}
+        />
+      )
+      await delay()
+      t.false(
+        warnings.some((message) =>
+          message.includes('searchQuery was provided without onSearchChange')
+        )
+      )
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'isLoading: renders a loading row beneath the search input',
+  (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const { lastFrame } = render(
+      <EnhancedSelectInput isLoading searchable items={items} />
+    )
+
+    t.true(lastFrame()!.includes('Searching'))
+  }
+)
+
+test.serial(
+  'isLoading: empty filtered results show the loading row instead of "No matches"',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput isLoading searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('zzz')
+    await waitFor(() => !lastFrame()!.includes('Apple'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('Searching'))
+    t.false(frame.includes('No matches'))
+  }
+)
+
+test.serial(
+  'isLoading=false (default): "No matches" still renders, with no loading row',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('zzz')
+    await waitFor(() => lastFrame()!.includes('No matches'))
+    t.false(lastFrame()!.includes('Searching'))
+  }
+)
+
+test.serial('loadingText customizes the loading row text', (t) => {
+  const items = [{ label: 'Apple', value: 'apple' }]
+  const { lastFrame } = render(
+    <EnhancedSelectInput
+      isLoading
+      searchable
+      items={items}
+      loadingText="Loading results..."
+    />
+  )
+
+  t.true(lastFrame()!.includes('Loading results...'))
+  t.false(lastFrame()!.includes('Searching'))
+})
+
+test.serial(
+  'searchDebounce: coalesces rapid keystrokes into fewer onSearchChange calls, but the displayed query updates immediately',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={items}
+        searchDebounce={300}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    stdin.write('p')
+    stdin.write('p')
+
+    await waitFor(() => result?.searchQuery === 'app')
+    // The debounce window hasn't elapsed yet — no notification fired.
+    t.is(calls.length, 0)
+
+    await waitFor(() => calls.length > 0, 2000)
+    t.deepEqual(calls, ['app'])
+  }
+)
+
+test.serial(
+  'searchDebounce unset (default): onSearchChange fires synchronously for every edit',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        searchable
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write('a')
+    await waitFor(() => calls.length > 0)
+    t.deepEqual(calls, ['a'])
   }
 )
