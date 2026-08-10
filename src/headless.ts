@@ -12,6 +12,9 @@ export type {
   ItemOrSeparator,
   KeyMap,
   MatchMode,
-  UseEnhancedSelectInputProperties,
+  UseEnhancedSelectInputProps,
   UseEnhancedSelectInputResult,
+  // Deprecated alias — kept for backward compatibility, will be removed in
+  // a future minor. Prefer `UseEnhancedSelectInputProps`.
+  UseEnhancedSelectInputProperties,
 } from './enhanced-select-input/index.js'

@@ -132,7 +132,8 @@ export type KeyMap = {
 export type MatchMode = 'includes' | 'fuzzy'
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
-export type UseEnhancedSelectInputProperties<V> = {
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type UseEnhancedSelectInputProps<V> = {
   readonly items: Array<ItemOrSeparator<V>>
   readonly isFocused?: boolean
   /**
@@ -342,6 +343,12 @@ export type UseEnhancedSelectInputProperties<V> = {
 }
 
 /**
+ * @deprecated Renamed to {@link UseEnhancedSelectInputProps}. Kept as an
+ * alias for backward compatibility; will be removed in a future minor.
+ */
+export type UseEnhancedSelectInputProperties<V> = UseEnhancedSelectInputProps<V>
+
+/**
  * Colors used by the default render components. Any slot left unset falls
  * back to the built-in default (which reproduces the component's original,
  * pre-theming appearance). Set a slot to `undefined` explicitly to disable
@@ -376,12 +383,13 @@ type ThemeColors = {
 type ResolvedTheme = ThemeColors & { readonly dim: boolean }
 
 /** Full component props — hook props plus rendering customisation. */
-export type Properties<V> = UseEnhancedSelectInputProperties<V> & {
-  readonly indicatorComponent?: FC<IndicatorProperties>
-  readonly itemComponent?: FC<ItemProperties>
-  readonly groupHeaderComponent?: FC<GroupHeaderProperties>
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
+  readonly indicatorComponent?: FC<IndicatorProps>
+  readonly itemComponent?: FC<ItemProps>
+  readonly groupHeaderComponent?: FC<GroupHeaderProps>
   /** Custom renderer for `{ type: 'separator' }` rows. */
-  readonly separatorComponent?: FC<SeparatorProperties>
+  readonly separatorComponent?: FC<SeparatorProps>
   /**
    * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
    * when the limit window doesn't cover the full list. Only meaningful when
@@ -441,10 +449,22 @@ export type LoadingProperties = {
   readonly theme?: ResolvedTheme
 }
 
-export type IndicatorProperties = {
+/**
+ * @deprecated Renamed to {@link EnhancedSelectInputProps}. Kept as an alias
+ * for backward compatibility; will be removed in a future minor.
+ */
+export type Properties<V> = EnhancedSelectInputProps<V>
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type IndicatorProps = {
   readonly isSelected: boolean
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
   readonly isChecked?: boolean
+  /**
+   * The item being rendered. Pass-through for custom indicator components
+   * that want to key their rendering off item data (e.g. `item.value`); the
+   * default renderer doesn't read it.
+   */
   // eslint-disable-next-line react/no-unused-prop-types
   readonly item: Item<unknown>
   /** Glyph shown when `isChecked` is true. Falls back to `'[x]'`. */
@@ -455,7 +475,14 @@ export type IndicatorProperties = {
   readonly theme?: ResolvedTheme
 }
 
-export type ItemProperties = {
+/**
+ * @deprecated Renamed to {@link IndicatorProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type IndicatorProperties = IndicatorProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type ItemProps = {
   readonly isSelected: boolean
   readonly label: string
   readonly isDisabled: boolean
@@ -480,13 +507,33 @@ export type ItemProperties = {
   readonly theme?: ResolvedTheme
 }
 
-export type GroupHeaderProperties = {
+/**
+ * @deprecated Renamed to {@link ItemProps}. Kept as an alias for backward
+ * compatibility; will be removed in a future minor.
+ */
+export type ItemProperties = ItemProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type GroupHeaderProps = {
   readonly label: string
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
 
-export type SeparatorProperties = Record<string, unknown>
+/**
+ * @deprecated Renamed to {@link GroupHeaderProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type GroupHeaderProperties = GroupHeaderProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type SeparatorProps = Record<string, unknown>
+
+/**
+ * @deprecated Renamed to {@link SeparatorProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type SeparatorProperties = SeparatorProps
 
 // Vim navigation keys that take precedence over hotkeys.
 // An item hotkey that matches one of these values will never fire in the
@@ -1688,7 +1735,7 @@ export function useEnhancedSelectInput<V>({
   typeahead = false,
   typeaheadTimeout = 500,
   loop = true,
-}: UseEnhancedSelectInputProperties<V>): UseEnhancedSelectInputResult<V> {
+}: UseEnhancedSelectInputProps<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const [searchCursor, setSearchCursor] = useState(0)
@@ -1888,6 +1935,31 @@ export function useEnhancedSelectInput<V>({
   // same tick (no intervening render to flush the `checkedKeys` state).
   const checkedKeysReference = useRef(checkedKeys)
   checkedKeysReference.current = checkedKeys
+  // Caches the full Item for every currently-checked key, keyed by itemKey.
+  // `items` can churn entirely (e.g. a parent-driven async search replacing
+  // the result set — see onSearchChange/isLoading) while a key stays
+  // checked; without this, onConfirm's `confirmScope: 'all'` lookup below
+  // would silently drop a checked item once it's no longer present in
+  // `items` to look up. Backfilled from `items` below. Eviction is split in
+  // two: `updateCheckedKeys` (the toggle/selectAll/selectNone/invertSelection
+  // choke point) drops any key it no longer includes, covering explicit
+  // uncheck even for an item that has already churned out of `items`; the
+  // effect below additionally evicts a key that became unchecked via some
+  // other path (e.g. a controlled `selectedKeys` prop update, or the item
+  // going disabled) while its item is still present in `items`.
+  const checkedItemsCacheReference = useRef<Map<string, Item<V>>>(new Map())
+  useEffect(() => {
+    const cache = checkedItemsCacheReference.current
+    for (const item of items) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      if (checkedKeys.has(k)) cache.set(k, item)
+    }
+
+    for (const k of cache.keys()) {
+      if (itemKeySets.validKeys.has(k) && !checkedKeys.has(k)) cache.delete(k)
+    }
+  }, [items, checkedKeys, itemKeySets])
   const typeaheadBuffer = useRef<{ text: string; time: number }>({
     text: '',
     time: 0,
@@ -2193,6 +2265,26 @@ export function useEnhancedSelectInput<V>({
   // uncontrolled mode, updates internal state directly.
   const updateCheckedKeys = (next: Set<string>) => {
     checkedKeysReference.current = next
+    // Cache newly-checked items synchronously (not just via the effect
+    // above) so a same-tick check-then-Enter reads a warm cache — see
+    // checkedItemsCacheReference.
+    for (const item of filteredItems) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      if (next.has(k)) checkedItemsCacheReference.current.set(k, item)
+    }
+
+    // `next` is the new source of truth for "what's checked" — drop any
+    // cache entry it no longer includes, even for a key whose item has
+    // already churned out of `items` entirely. Without this, selectNone()/
+    // invertSelection()/an explicit uncheck can't ever clear a cache entry
+    // for a churned-out item (the eviction effect above requires the item
+    // to still be present in `items` to evict it), so a key the user just
+    // cleared could resurface in the confirmScope: 'all' fallback anyway.
+    for (const k of checkedItemsCacheReference.current.keys()) {
+      if (!next.has(k)) checkedItemsCacheReference.current.delete(k)
+    }
+
     onSelectedKeysChange?.([...next])
     if (!isKeysControlled) setUncontrolledCheckedKeys(next)
   }
@@ -2316,6 +2408,20 @@ export function useEnhancedSelectInput<V>({
         (item): item is Item<V> =>
           !isSeparator(item) && checkedKeysReference.current.has(itemKey(item))
       )
+
+      if (confirmScope === 'all') {
+        // A checked key can survive result churn (e.g. async search replaced
+        // `items` entirely — B18) with no matching item left in `items` to
+        // filter from above — `checkedKeysReference` itself is pruned of
+        // such keys (they'd otherwise count toward min/max selection). The
+        // cache is the only remaining record of them, so it — not
+        // `checkedKeysReference` — is what's iterated here to still include
+        // them in the confirmed set.
+        const confirmedKeys = new Set(confirmed.map((item) => itemKey(item)))
+        for (const [k, cached] of checkedItemsCacheReference.current) {
+          if (!confirmedKeys.has(k)) confirmed.push(cached)
+        }
+      }
 
       onConfirm?.(confirmed)
       return
@@ -2538,7 +2644,7 @@ export function DefaultIndicatorComponent({
   checkedIndicator = '[x]',
   uncheckedIndicator = '[ ]',
   theme,
-}: IndicatorProperties) {
+}: IndicatorProps) {
   const resolvedTheme = theme ?? resolveTheme()
   if (isChecked !== undefined) {
     // Multi-select mode: show checkbox + cursor
@@ -2567,7 +2673,7 @@ export function DefaultItemComponent({
   isDisabled,
   matches,
   theme,
-}: ItemProperties) {
+}: ItemProps) {
   const resolvedTheme = theme ?? resolveTheme()
   let color: string | undefined
   if (isDisabled) {
@@ -2616,7 +2722,7 @@ export function DefaultItemComponent({
 export function DefaultGroupHeaderComponent({
   label,
   theme,
-}: GroupHeaderProperties) {
+}: GroupHeaderProps) {
   const resolvedTheme = theme ?? resolveTheme()
   return (
     <Box>
@@ -2684,7 +2790,7 @@ export function EnhancedSelectInput<V>({
   loadingComponent = DefaultLoadingComponent,
   // All remaining props are forwarded to the hook
   ...hookProperties
-}: Properties<V>) {
+}: EnhancedSelectInputProps<V>) {
   const {
     selectedIndex,
     rotateIndex,
