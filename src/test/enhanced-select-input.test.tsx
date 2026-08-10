@@ -9377,3 +9377,57 @@ test.serial(
     t.true(confirmed.includes('apple'))
   }
 )
+
+test.serial(
+  'select-none clears a checked key even after its item has churned out of items entirely',
+  async (t) => {
+    const itemsRoundOne = [
+      { label: 'Apple', value: 'apple', key: 'apple' },
+      { label: 'Banana', value: 'banana', key: 'banana' },
+    ]
+    const itemsRoundTwo = [
+      { label: 'Cherry', value: 'cherry', key: 'cherry' },
+      { label: 'Date', value: 'date', key: 'date' },
+    ]
+
+    let confirmed: string[] | undefined
+    const onConfirm = (selected: Array<Item<unknown>>) => {
+      confirmed = selected.map((item) => String(item.value))
+    }
+
+    const { stdin, rerender } = render(
+      <EnhancedSelectInput
+        multiple
+        items={itemsRoundOne}
+        onConfirm={onConfirm}
+      />
+    )
+
+    await delay()
+    // Check the highlighted item ("Apple").
+    stdin.write(SPACE)
+    await delay()
+
+    // Simulate an async search replacing the result set entirely — "Apple"
+    // (and its key) is no longer anywhere in `items`, but it survives in the
+    // confirmScope: 'all' cache per the test above.
+    rerender(
+      <EnhancedSelectInput
+        multiple
+        items={itemsRoundTwo}
+        onConfirm={onConfirm}
+      />
+    )
+    await delay()
+
+    // Explicitly clear the selection — this must also drop "apple" from the
+    // cache, not just from checkedKeys, or it resurfaces below.
+    stdin.write(CTRL_D)
+    await delay()
+
+    stdin.write(ENTER)
+    await waitFor(() => confirmed !== undefined)
+
+    t.deepEqual(confirmed, [])
+  }
+)
