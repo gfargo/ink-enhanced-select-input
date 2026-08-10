@@ -1940,8 +1940,10 @@ export function useEnhancedSelectInput<V>({
   // the result set — see onSearchChange/isLoading) while a key stays
   // checked; without this, onConfirm's `confirmScope: 'all'` lookup below
   // would silently drop a checked item once it's no longer present in
-  // `items` to look up. Backfilled from `items` below and pruned to the
-  // current `checkedKeys` so it never grows unbounded.
+  // `items` to look up. Backfilled from `items` below and only evicted once
+  // its key is both still present in `items` (so we know it wasn't just
+  // churned out) and no longer checked — an explicit uncheck, or the item
+  // going disabled — so it never grows unbounded.
   const checkedItemsCacheReference = useRef<Map<string, Item<V>>>(new Map())
   useEffect(() => {
     const cache = checkedItemsCacheReference.current
@@ -1952,9 +1954,9 @@ export function useEnhancedSelectInput<V>({
     }
 
     for (const k of cache.keys()) {
-      if (!checkedKeys.has(k)) cache.delete(k)
+      if (itemKeySets.validKeys.has(k) && !checkedKeys.has(k)) cache.delete(k)
     }
-  }, [items, checkedKeys])
+  }, [items, checkedKeys, itemKeySets])
   const typeaheadBuffer = useRef<{ text: string; time: number }>({
     text: '',
     time: 0,
@@ -2396,13 +2398,14 @@ export function useEnhancedSelectInput<V>({
       if (confirmScope === 'all') {
         // A checked key can survive result churn (e.g. async search replaced
         // `items` entirely — B18) with no matching item left in `items` to
-        // filter from above. Fall back to the cached Item for those keys so
-        // they still make it into onConfirm.
+        // filter from above — `checkedKeysReference` itself is pruned of
+        // such keys (they'd otherwise count toward min/max selection). The
+        // cache is the only remaining record of them, so it — not
+        // `checkedKeysReference` — is what's iterated here to still include
+        // them in the confirmed set.
         const confirmedKeys = new Set(confirmed.map((item) => itemKey(item)))
-        for (const k of checkedKeysReference.current) {
-          if (confirmedKeys.has(k)) continue
-          const cached = checkedItemsCacheReference.current.get(k)
-          if (cached) confirmed.push(cached)
+        for (const [k, cached] of checkedItemsCacheReference.current) {
+          if (!confirmedKeys.has(k)) confirmed.push(cached)
         }
       }
 
