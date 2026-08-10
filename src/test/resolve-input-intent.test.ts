@@ -84,6 +84,20 @@ test('searchable backspace beats navigation and hotkey resolution', (t) => {
   t.deepEqual(intent, { type: 'search-backspace' })
 })
 
+// Ink can't distinguish a physical Backspace press from a physical
+// (forward-)Delete press: both usually arrive as `key.delete` (see the
+// comment on resolveSearchDeleteIntent). So forward-Delete intentionally
+// performs the same delete-before-cursor edit as Backspace, rather than
+// deleting the character after the cursor.
+test('searchable forward-delete also performs delete-before-cursor, matching backspace', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ delete: true }),
+    context({ searchable: true, searchQuery: 'abc', searchCursor: 2 })
+  )
+  t.deepEqual(intent, { type: 'search-backspace' })
+})
+
 test('searchable escape with a query clears search rather than cancelling', (t) => {
   const intent = resolveInputIntent(
     '',
