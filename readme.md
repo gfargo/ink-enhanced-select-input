@@ -203,6 +203,8 @@ Don't pass `initialIndex` alongside `selectedIndex`, or `defaultSelectedKeys` al
 
 If a controlled `selectedIndex`/`selectedKeys` value resolves to something different than what was passed in — e.g. `items` shrinks and the index falls out of range, or a checked key's item becomes `disabled` — the resolved value is fed straight back through `onIndexChange`/`onSelectedKeysChange` so the parent's state never silently diverges from what's rendered.
 
+The search query follows the same contract: pass `searchQuery`/`onSearchChange` to drive it from outside the component — see [Live/Async Search](#liveasync-search) for the full picture, including why controlling the query also disables built-in filtering.
+
 ### Per-Item Indicators
 
 ```tsx
@@ -423,6 +425,63 @@ function MyItem({ label, matches, isSelected }: ItemProperties) {
   return <Text color={isSelected ? 'green' : undefined}>{label}</Text>
 }
 ```
+
+#### Live/Async Search
+
+Pass `onSearchChange` to observe the query as the user types — this is what turns searchable mode into a live-search picker (package search, branch picker, remote API lookup). Combine it with `isLoading` to show a loading row while a request is in flight:
+
+```tsx
+function RemoteSearch() {
+  const [items, setItems] = useState<Array<Item<string>>>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  return (
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      isLoading={isLoading}
+      searchDebounce={200}
+      onSearchChange={async (query) => {
+        setIsLoading(true)
+        const results = await searchPackages(query)
+        setItems(results.map((r) => ({ label: r.name, value: r.name })))
+        setIsLoading(false)
+      }}
+      onSelect={(item) => console.log(item.value)}
+    />
+  )
+}
+```
+
+By default the query is uncontrolled — the query displayed in the search line, and the built-in `matchMode`/`filter`/`searchFields` matching against `items`, both still work exactly as described above; `onSearchChange` is just an extra notification on top. `searchDebounce` (ms) coalesces rapid `onSearchChange` calls so you're not firing a request per keystroke — the displayed query still updates immediately, only the notification is delayed.
+
+For full control over filtering (e.g. the parent already returned a pre-filtered result set from a remote API), pass `searchQuery` to make the query itself controlled — the same contract as `selectedIndex`/`onIndexChange`: search-editing keypresses call `onSearchChange` instead of mutating the query internally, and the parent must feed the value back through `searchQuery` for the displayed query to change. Built-in filtering is also skipped while controlled — `items` is rendered verbatim (match highlighting still works against `label`), since the parent is expected to already have filtered it:
+
+```tsx
+function ControlledRemoteSearch() {
+  const [query, setQuery] = useState('')
+  const [items, setItems] = useState<Array<Item<string>>>([])
+
+  useEffect(() => {
+    searchPackages(query).then((results) =>
+      setItems(results.map((r) => ({ label: r.name, value: r.name })))
+    )
+  }, [query])
+
+  return (
+    <EnhancedSelectInput
+      searchable
+      items={items}
+      searchQuery={query}
+      onSearchChange={setQuery}
+    />
+  )
+}
+```
+
+A dev warning is logged if `searchQuery` is supplied without `onSearchChange`, since that freezes the displayed query — the same pattern as the other controlled props.
+
+> **Checked keys survive result churn:** in multi-select mode, a key stays in `checkedKeys` even after the item it belonged to disappears from `items` entirely (e.g. a fresh page of async search results replaced the old one) — `onConfirm` with the default `confirmScope: 'all'` still includes it. `confirmScope: 'filtered'` is unaffected by this, since it only ever confirms keys present in the current `filteredItems`.
 
 ### Type-ahead Jump
 
@@ -672,6 +731,12 @@ These setters give you the hooks needed to wire up custom keybindings on top of 
 | `matchMode`              | `'includes' \| 'fuzzy'`                     | `'includes'`                  | Built-in search matcher; `'fuzzy'` matches an ordered, non-contiguous subsequence. Ignored when `filter` is supplied                                                                                                                                                           |
 | `searchFields`           | `(item: Item<V>) => string \| string[]`     | `item.label`                  | Selects which text field(s) the built-in matcher searches. Ignored when `filter` is supplied                                                                                                                                                                                   |
 | `filter`                 | `(item: Item<V>, query: string) => boolean` | —                             | Fully overrides the built-in search matching; `matchMode` and `searchFields` are ignored                                                                                                                                                                                       |
+| `onSearchChange`         | `(query: string) => void`                   | —                             | Called with the next search query whenever it would change. Only used when `searchable` is true; see [Live/Async Search](#liveasync-search)                                                                                                                                    |
+| `searchQuery`            | `string`                                    | —                             | Controls the search query from outside the component. Combine with `onSearchChange`; also disables built-in filtering (the parent supplies an already-filtered `items`) — see [Live/Async Search](#liveasync-search)                                                           |
+| `searchDebounce`         | `number`                                    | —                             | Debounces `onSearchChange` by this many ms; the displayed query still updates immediately. Intended for an uncontrolled `searchQuery`                                                                                                                                          |
+| `isLoading`              | `boolean`                                   | `false`                       | Renders a loading row beneath the search input; replaces "No matches" when the current item list is also empty                                                                                                                                                                 |
+| `loadingText`            | `string`                                    | `'Searching…'`                | Text shown by the default loading row. Only used when `isLoading` is true                                                                                                                                                                                                      |
+| `loadingComponent`       | `FC<LoadingProperties>`                     | `DefaultLoadingComponent`     | Custom renderer for the loading row. Only used when `isLoading` is true                                                                                                                                                                                                        |
 | `keyMap`                 | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                                                                     |
 | `typeahead`              | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                                                                                  |
 | `typeaheadTimeout`       | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                                                                      |

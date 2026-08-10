@@ -5,6 +5,7 @@ export {
   DefaultItemComponent,
   DefaultGroupHeaderComponent,
   DefaultSeparatorComponent,
+  DefaultLoadingComponent,
   resolveInitialIndex,
   resolveInitialSelection,
   findNextValidIndex,
@@ -30,6 +31,7 @@ export type {
   IndicatorProperties,
   ItemProperties,
   GroupHeaderProperties,
+  LoadingProperties,
   TruncateMode,
   SeparatorProperties,
 } from './enhanced-select-input/index.js'
