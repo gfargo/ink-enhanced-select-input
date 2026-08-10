@@ -1647,13 +1647,14 @@ export function useEnhancedSelectInput<V>({
     [filteredItems, limit]
   )
 
-  const safeInitialIndex = resolveInitialSelection(filteredItems, {
-    initialKey,
-    initialValue,
-    initialIndex: rawInitialIndex,
-    autoSelectFirstEnabled,
-  })
-  const [uncontrolledIndex, setUncontrolledIndex] = useState(safeInitialIndex)
+  const [uncontrolledIndex, setUncontrolledIndex] = useState(() =>
+    resolveInitialSelection(filteredItems, {
+      initialKey,
+      initialValue,
+      initialIndex: rawInitialIndex,
+      autoSelectFirstEnabled,
+    })
+  )
   const isIndexControlled = controlledIndex !== undefined
   const selectedIndex = isIndexControlled
     ? resolveInitialIndex(filteredItems, controlledIndex)
