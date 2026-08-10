@@ -8314,6 +8314,111 @@ test.serial(
 )
 
 test.serial(
+  'controlled selectedKeys: syncs back via onSelectedKeysChange when a checked item is removed from items (B18)',
+  async (t) => {
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    const onSelectedKeysChangeCalls: string[][] = []
+    const { rerender } = render(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await delay()
+    t.deepEqual(onSelectedKeysChangeCalls, [])
+
+    // Remove A from items entirely — its checked key is now a phantom.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        selectedKeys={['a', 'b']}
+        onSelectedKeysChange={(keys) => {
+          onSelectedKeysChangeCalls.push(keys)
+        }}
+        onResult={() => undefined}
+      />
+    )
+
+    await waitFor(() => onSelectedKeysChangeCalls.length > 0)
+    t.deepEqual(onSelectedKeysChangeCalls, [['b']])
+  }
+)
+
+test.serial(
+  'uncontrolled multi-select: checkedKeys drops entries for items removed from items, and a returning item is not pre-checked (B18)',
+  async (t) => {
+    let items: Array<Item<string>> = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { rerender } = render(
+      <HookHarness
+        multiple
+        items={items}
+        defaultSelectedKeys={['a', 'b']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.checkedKeys.size, 2)
+
+    // Remove A from items (e.g. a fresh page of remote search results) — the
+    // phantom "a" key must be pruned from checkedKeys.
+    items = [{ label: 'B', value: 'b', key: 'b' }]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await waitFor(() => result?.checkedKeys.size === 1)
+    t.false(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('b'))
+
+    // A reappears later with the same key — it must not silently come back
+    // pre-checked, since the user never checked it this time around.
+    items = [
+      { label: 'A', value: 'a', key: 'a' },
+      { label: 'B', value: 'b', key: 'b' },
+    ]
+    rerender(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.false(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('b'))
+  }
+)
+
+test.serial(
   'controlled selectedIndex: setSelectedIndex() notifies via onIndexChange without moving state',
   async (t) => {
     const items = [

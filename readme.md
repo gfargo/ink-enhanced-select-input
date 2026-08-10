@@ -201,7 +201,9 @@ render(<ControlledDemo />)
 
 Don't pass `initialIndex` alongside `selectedIndex`, or `defaultSelectedKeys` alongside `selectedKeys` — the uncontrolled prop is ignored once its controlled counterpart is set, and a dev warning is logged if both are supplied. A dev warning is also logged if `selectedIndex`/`selectedKeys` is supplied without its `on*Change` handler, since that freezes the highlight/checkboxes entirely.
 
-If a controlled `selectedIndex`/`selectedKeys` value resolves to something different than what was passed in — e.g. `items` shrinks and the index falls out of range, or a checked key's item becomes `disabled` — the resolved value is fed straight back through `onIndexChange`/`onSelectedKeysChange` so the parent's state never silently diverges from what's rendered.
+If a controlled `selectedIndex`/`selectedKeys` value resolves to something different than what was passed in — e.g. `items` shrinks and the index falls out of range, or a checked key's item becomes `disabled` or is removed from `items` entirely — the resolved value is fed straight back through `onIndexChange`/`onSelectedKeysChange` so the parent's state never silently diverges from what's rendered.
+
+**Checked keys are pruned when `items` changes.** In both controlled and uncontrolled multi-select, a key in `checkedKeys`/`selectedKeys` is dropped as soon as `items` no longer contains an item with that key — e.g. a page of remote search results replacing `items` without the previously-checked entry. This is deliberate: without it, a stale key would silently pre-check a _different_ item that later happens to reuse the same key. If you're driving `items` from paginated/remote data and want checked items to persist across pages, keep every checked item present in `items` (merge new results into the existing array rather than replacing it) instead of relying on the checked state to survive its item's absence.
 
 ### Per-Item Indicators
 

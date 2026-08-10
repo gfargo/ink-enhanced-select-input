@@ -1701,15 +1701,26 @@ export function useEnhancedSelectInput<V>({
   })
   const controlledCheckedKeys = useMemo(() => {
     if (!isKeysControlled) return undefined
-    const disabledKeys = new Set(
-      items
-        .filter(
-          (item): item is Item<V> =>
-            !isSeparator(item) && Boolean(item.disabled)
-        )
-        .map((item) => itemKey(item))
+    const disabledKeys = new Set<string>()
+    const validKeys = new Set<string>()
+    for (const item of items) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      validKeys.add(k)
+      if (item.disabled) disabledKeys.add(k)
+    }
+
+    // Drop keys for items that no longer exist in `items` at all — not just
+    // ones that became disabled — otherwise a checked item removed from
+    // `items` (e.g. a remote search results page being replaced) leaves a
+    // phantom key behind, and a later `items` array that happens to reuse
+    // the same key would render pre-checked despite the user never checking
+    // it this time.
+    return new Set(
+      controlledKeys.filter(
+        (key) => validKeys.has(key) && !disabledKeys.has(key)
+      )
     )
-    return new Set(controlledKeys.filter((key) => !disabledKeys.has(key)))
   }, [isKeysControlled, controlledKeys, items])
   const checkedKeys = controlledCheckedKeys ?? uncontrolledCheckedKeys
   // Mirrors `checkedKeys` synchronously so the Enter branch below can read
@@ -1729,15 +1740,45 @@ export function useEnhancedSelectInput<V>({
 
   // Keep the parent in sync when a controlled selectedKeys resolves to a
   // smaller set than what was passed in — e.g. a previously-checked item
-  // became disabled and is now filtered out of `controlledCheckedKeys`
-  // above. Without this the parent's own copy of the keys would silently
-  // include a key that no longer renders as checked.
+  // became disabled, or was removed from `items` entirely, and is now
+  // filtered out of `controlledCheckedKeys` above. Without this the parent's
+  // own copy of the keys would silently include a key that no longer renders
+  // as checked.
   useEffect(() => {
     if (!isKeysControlled || !controlledCheckedKeys) return
     if (controlledCheckedKeys.size !== controlledKeys.length) {
       onSelectedKeysChangeReference.current?.([...controlledCheckedKeys])
     }
   }, [isKeysControlled, controlledCheckedKeys, controlledKeys])
+
+  // Uncontrolled counterpart of the pruning above: drop checkedKeys entries
+  // for items that no longer exist in `items` at all. Without this, checking
+  // an item, then having the parent replace `items` without it (e.g. a new
+  // page of remote search results), leaves a phantom key in
+  // uncontrolledCheckedKeys — and if an item with that same key reappears in
+  // a later `items` array, it renders pre-checked despite the user never
+  // having checked it this time (B18).
+  useEffect(() => {
+    if (isKeysControlled) return
+    const validKeys = new Set<string>()
+    for (const item of items) {
+      if (!isSeparator(item)) validKeys.add(itemKey(item))
+    }
+
+    setUncontrolledCheckedKeys((previous) => {
+      let changed = false
+      const next = new Set<string>()
+      for (const key of previous) {
+        if (validKeys.has(key)) {
+          next.add(key)
+        } else {
+          changed = true
+        }
+      }
+
+      return changed ? next : previous
+    })
+  }, [items, isKeysControlled])
 
   const hasItems = filteredItems.length > 0
   // Derive the pagination window offset directly from selectedIndex (plus,
