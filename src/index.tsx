@@ -5,6 +5,7 @@ export {
   DefaultItemComponent,
   DefaultGroupHeaderComponent,
   DefaultSeparatorComponent,
+  DefaultLoadingComponent,
   resolveInitialIndex,
   resolveInitialSelection,
   findNextValidIndex,
@@ -32,6 +33,7 @@ export type {
   GroupHeaderProps,
   TruncateMode,
   SeparatorProps,
+  LoadingProperties,
   // Deprecated aliases — kept for backward compatibility, will be removed
   // in a future minor. Prefer the `*Props` names above.
   Properties,
