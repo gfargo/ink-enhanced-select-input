@@ -444,8 +444,39 @@ export type SeparatorProperties = Record<string, unknown>
 // Vim navigation keys that take precedence over hotkeys.
 // An item hotkey that matches one of these values will never fire in the
 // corresponding orientation — document this constraint at the call site.
-const VERTICAL_NAV_KEYS = new Set(['j', 'k'])
-const HORIZONTAL_NAV_KEYS = new Set(['h', 'l'])
+const NAV_CONFIG = {
+  vertical: {
+    backwardArrow: 'upArrow',
+    forwardArrow: 'downArrow',
+    backwardVimKey: 'k',
+    forwardVimKey: 'j',
+  },
+  horizontal: {
+    backwardArrow: 'leftArrow',
+    forwardArrow: 'rightArrow',
+    backwardVimKey: 'h',
+    forwardVimKey: 'l',
+  },
+} as const satisfies Record<
+  'vertical' | 'horizontal',
+  {
+    backwardArrow: keyof Key
+    forwardArrow: keyof Key
+    backwardVimKey: string
+    forwardVimKey: string
+  }
+>
+
+const NAV_VIM_KEYS: Record<'vertical' | 'horizontal', Set<string>> = {
+  vertical: new Set([
+    NAV_CONFIG.vertical.backwardVimKey,
+    NAV_CONFIG.vertical.forwardVimKey,
+  ]),
+  horizontal: new Set([
+    NAV_CONFIG.horizontal.backwardVimKey,
+    NAV_CONFIG.horizontal.forwardVimKey,
+  ]),
+}
 
 export function resolveInitialIndex<V>(
   items: Array<ItemOrSeparator<V>>,
@@ -1086,20 +1117,18 @@ function resolveNavigateStep<V>(
   isModifiedChord: boolean
 ): -1 | 1 | undefined {
   const { km, orientation, searchable } = context
-  const [backwardArrow, forwardArrow, backwardVimKey, forwardVimKey] =
-    orientation === 'vertical'
-      ? [key.upArrow, key.downArrow, 'k', 'j']
-      : [key.leftArrow, key.rightArrow, 'h', 'l']
+  const { backwardArrow, forwardArrow, backwardVimKey, forwardVimKey } =
+    NAV_CONFIG[orientation]
 
   if (
-    (km.arrows && backwardArrow) ||
+    (km.arrows && key[backwardArrow]) ||
     (km.vimKeys && !searchable && !isModifiedChord && input === backwardVimKey)
   ) {
     return -1
   }
 
   if (
-    (km.arrows && forwardArrow) ||
+    (km.arrows && key[forwardArrow]) ||
     (km.vimKeys && !searchable && !isModifiedChord && input === forwardVimKey)
   ) {
     return 1
@@ -1250,10 +1279,11 @@ function resolveModifierState<V>(
 ): { isModifiedChord: boolean; isActiveVimKey: boolean } {
   const { km, searchable, orientation } = context
   const isModifiedChord = key.ctrl || key.meta
-  const navigationKeys =
-    orientation === 'vertical' ? VERTICAL_NAV_KEYS : HORIZONTAL_NAV_KEYS
   const isActiveVimKey =
-    km.vimKeys && !searchable && !isModifiedChord && navigationKeys.has(input)
+    km.vimKeys &&
+    !searchable &&
+    !isModifiedChord &&
+    NAV_VIM_KEYS[orientation].has(input)
   return { isModifiedChord, isActiveVimKey }
 }
 
