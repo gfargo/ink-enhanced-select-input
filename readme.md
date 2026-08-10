@@ -483,8 +483,6 @@ function ControlledRemoteSearch() {
 
 A dev warning is logged if `searchQuery` is supplied without `onSearchChange`, since that freezes the displayed query — the same pattern as the other controlled props.
 
-> **Checked keys survive result churn:** in multi-select mode, a key stays in `checkedKeys` even after the item it belonged to disappears from `items` entirely (e.g. a fresh page of async search results replaced the old one) — `onConfirm` with the default `confirmScope: 'all'` still includes it. `confirmScope: 'filtered'` is unaffected by this, since it only ever confirms keys present in the current `filteredItems`.
-
 ### Type-ahead Jump
 
 Enable listbox-style type-ahead jump with the `typeahead` prop. It's opt-in and only takes effect when `searchable` is off. Typing printable characters builds a short-lived buffer and jumps the highlight to the first non-disabled item whose label starts with it (case-insensitive) — it moves the highlight only, it never calls `onSelect`/`onConfirm`. The buffer resets after `typeaheadTimeout` ms of inactivity (default `500`).

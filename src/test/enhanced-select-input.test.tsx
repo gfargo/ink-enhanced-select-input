@@ -8963,6 +8963,230 @@ test.serial(
   }
 )
 
+// Kitty keyboard protocol (B24): terminals that negotiate it (Kitty, Ghostty,
+// WezTerm, ...) report a `key.eventType` of 'press' | 'repeat' | 'release'
+// for every keystroke via the CSI-u escape sequence below, which Ink parses
+// unconditionally regardless of whether the terminal actually negotiated the
+// protocol — so it's reproducible in ink-testing-library after all, contrary
+// to the audit finding that flagged this as untestable. Format:
+// `CSI codepoint ; modifiers : eventType u` (eventType 1 = press, 2 = repeat,
+// 3 = release); modifiers is 1-indexed with 0 held, so "no modifiers" is 1.
+function kittyKey(codepoint: number, eventType: 1 | 2 | 3): string {
+  return `[${codepoint};1:${eventType}u`
+}
+
+const KITTY_DOWN_PRESS = kittyKey(106, 1) // 'j'
+const KITTY_DOWN_RELEASE = kittyKey(106, 3)
+const KITTY_ENTER_PRESS = kittyKey(13, 1)
+const KITTY_ENTER_RELEASE = kittyKey(13, 3)
+const KITTY_SPACE_PRESS = kittyKey(32, 1)
+const KITTY_SPACE_RELEASE = kittyKey(32, 3)
+const KITTY_DOWN_REPEAT = kittyKey(106, 2)
+
+test.serial(
+  'kitty protocol release event does not double-navigate',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'A')
+
+    // A real keystroke under the kitty protocol arrives as press then
+    // release — only the press should move the highlight.
+    stdin.write(KITTY_DOWN_PRESS)
+    await delay()
+    t.is(highlighted, 'B')
+
+    stdin.write(KITTY_DOWN_RELEASE)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'kitty protocol release event does not double-submit',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
+
+    let selectCount = 0
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onSelect={() => {
+          selectCount++
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(KITTY_ENTER_PRESS)
+    await delay()
+    stdin.write(KITTY_ENTER_RELEASE)
+    await delay()
+
+    t.is(selectCount, 1)
+  }
+)
+
+test.serial(
+  'kitty protocol release event does not double-toggle in multi-select mode',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(KITTY_SPACE_PRESS)
+    await delay()
+    t.deepEqual([...(result?.checkedKeys ?? [])], ['a'])
+
+    // A release of the same physical spacebar press must not toggle it back off.
+    stdin.write(KITTY_SPACE_RELEASE)
+    await delay()
+    t.deepEqual([...(result?.checkedKeys ?? [])], ['a'])
+  }
+)
+
+test.serial(
+  'kitty protocol repeat event continues navigation for a held key',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(KITTY_DOWN_PRESS)
+    await delay()
+    t.is(highlighted, 'B')
+
+    // Holding the key down sends 'repeat' events — navigation keeps moving.
+    stdin.write(KITTY_DOWN_REPEAT)
+    await delay()
+    t.is(highlighted, 'C')
+  }
+)
+
+test.serial(
+  'kitty protocol repeat event does not re-submit a held Enter',
+  async (t) => {
+    const items = [{ label: 'A', value: 'a' }]
+
+    let selectCount = 0
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        onSelect={() => {
+          selectCount++
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(KITTY_ENTER_PRESS)
+    await delay()
+    t.is(selectCount, 1)
+
+    stdin.write(kittyKey(13, 2))
+    await delay()
+    t.is(selectCount, 1)
+  }
+)
+
+test.serial(
+  'kitty protocol repeat event continues appending to a held search character',
+  async (t) => {
+    const items = [
+      { label: 'Jam', value: 'jam' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write(KITTY_DOWN_PRESS) // 'j'
+    await delay()
+    t.true(lastFrame()!.includes('/ j'))
+
+    // Holding the key down sends 'repeat' events — typing keeps appending,
+    // same as autorepeat on a non-Kitty terminal.
+    stdin.write(KITTY_DOWN_REPEAT)
+    await delay()
+    stdin.write(KITTY_DOWN_REPEAT)
+    await delay()
+
+    t.true(lastFrame()!.includes('/ jjj'))
+  }
+)
+
+test.serial(
+  'kitty protocol repeat event continues deleting a held backspace in search',
+  async (t) => {
+    const items = [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('app')
+    await delay()
+    t.true(lastFrame()!.includes('/ app'))
+
+    // Holding Backspace down sends 'repeat' events — deletion keeps going,
+    // same as autorepeat on a non-Kitty terminal.
+    stdin.write(kittyKey(127, 1)) // Press
+    await delay()
+    stdin.write(kittyKey(127, 2)) // Repeat
+    await delay()
+
+    t.true(lastFrame()!.includes('/ a'))
+    t.false(lastFrame()!.includes('/ ap'))
+  }
+)
+
 // --- F4: onSearchChange, controlled searchQuery, isLoading, searchDebounce ---
 
 test.serial(
