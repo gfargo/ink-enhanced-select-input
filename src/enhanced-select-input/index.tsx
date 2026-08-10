@@ -2239,7 +2239,7 @@ export function useEnhancedSelectInput<V>({
     searchCursorReference.current = query.length
     if (!isQueryControlled) setInternalSearchQuery(query)
     setSearchCursor(query.length)
-    if (query !== previousQuery) notifySearchChange(query)
+    if (searchable && query !== previousQuery) notifySearchChange(query)
     resetSelectionToTopUnlessUnselected()
   }
 

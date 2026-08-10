@@ -6194,7 +6194,7 @@ test.serial(
     await delay()
     stdin.write(END)
     await delay()
-    stdin.write('\u007F')
+    stdin.write('')
     await waitFor(() => !lastFrame()!.includes('/ Xapp'))
 
     t.true(lastFrame()!.includes('/ Xap'))
@@ -6219,7 +6219,7 @@ test.serial(
     stdin.write(ARROW_LEFT)
     await delay()
     // Cursor is now before "b" (between "a" and "bc") — backspace removes "a".
-    stdin.write('\u007F')
+    stdin.write('')
     await waitFor(() => lastFrame()!.includes('/ bc'))
 
     t.true(lastFrame()!.includes('/ bc'))
@@ -8870,6 +8870,32 @@ test.serial(
     await delay()
     stdin.write('a')
     await delay()
+    t.is(calls.length, 0)
+  }
+)
+
+test.serial(
+  'setSearchQuery does not fire onSearchChange when searchable is false',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+    const calls: string[] = []
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    render(
+      <HookHarness
+        items={items}
+        onSearchChange={(query) => {
+          calls.push(query)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    result?.setSearchQuery('xyz')
+    await waitFor(() => result?.searchQuery === 'xyz')
     t.is(calls.length, 0)
   }
 )
