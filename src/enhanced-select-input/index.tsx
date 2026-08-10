@@ -1940,10 +1940,13 @@ export function useEnhancedSelectInput<V>({
   // the result set — see onSearchChange/isLoading) while a key stays
   // checked; without this, onConfirm's `confirmScope: 'all'` lookup below
   // would silently drop a checked item once it's no longer present in
-  // `items` to look up. Backfilled from `items` below and only evicted once
-  // its key is both still present in `items` (so we know it wasn't just
-  // churned out) and no longer checked — an explicit uncheck, or the item
-  // going disabled — so it never grows unbounded.
+  // `items` to look up. Backfilled from `items` below. Eviction is split in
+  // two: `updateCheckedKeys` (the toggle/selectAll/selectNone/invertSelection
+  // choke point) drops any key it no longer includes, covering explicit
+  // uncheck even for an item that has already churned out of `items`; the
+  // effect below additionally evicts a key that became unchecked via some
+  // other path (e.g. a controlled `selectedKeys` prop update, or the item
+  // going disabled) while its item is still present in `items`.
   const checkedItemsCacheReference = useRef<Map<string, Item<V>>>(new Map())
   useEffect(() => {
     const cache = checkedItemsCacheReference.current
@@ -2269,6 +2272,17 @@ export function useEnhancedSelectInput<V>({
       if (isSeparator(item)) continue
       const k = itemKey(item)
       if (next.has(k)) checkedItemsCacheReference.current.set(k, item)
+    }
+
+    // `next` is the new source of truth for "what's checked" — drop any
+    // cache entry it no longer includes, even for a key whose item has
+    // already churned out of `items` entirely. Without this, selectNone()/
+    // invertSelection()/an explicit uncheck can't ever clear a cache entry
+    // for a churned-out item (the eviction effect above requires the item
+    // to still be present in `items` to evict it), so a key the user just
+    // cleared could resurface in the confirmScope: 'all' fallback anyway.
+    for (const k of checkedItemsCacheReference.current.keys()) {
+      if (!next.has(k)) checkedItemsCacheReference.current.delete(k)
     }
 
     onSelectedKeysChange?.([...next])
