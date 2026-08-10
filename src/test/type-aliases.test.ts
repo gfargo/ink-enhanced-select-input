@@ -40,6 +40,11 @@ type UseHookAliasLock = AssertEqual<
   UseEnhancedSelectInputProps<string>
 >
 
+// Negative control: proves `AssertEqual` actually distinguishes structurally
+// different types rather than degenerating to `true` for any pair — without
+// this, the locks above would pass even if `AssertEqual` were broken.
+type NegativeControlLock = AssertEqual<ItemProps, GroupHeaderProps>
+
 export const aliasLocks: {
   properties: PropertiesAliasLock
   indicator: IndicatorAliasLock
@@ -47,6 +52,7 @@ export const aliasLocks: {
   groupHeader: GroupHeaderAliasLock
   separator: SeparatorAliasLock
   useHook: UseHookAliasLock
+  negativeControl: NegativeControlLock
 } = {
   properties: true,
   indicator: true,
@@ -54,6 +60,7 @@ export const aliasLocks: {
   groupHeader: true,
   separator: true,
   useHook: true,
+  negativeControl: false,
 }
 
 test('deprecated *Properties aliases stay structurally identical to their *Props primaries', (t) => {
@@ -64,5 +71,6 @@ test('deprecated *Properties aliases stay structurally identical to their *Props
     groupHeader: true,
     separator: true,
     useHook: true,
+    negativeControl: false,
   })
 })
