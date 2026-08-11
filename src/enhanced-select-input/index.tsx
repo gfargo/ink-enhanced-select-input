@@ -1413,15 +1413,46 @@ function resolveBulkIntent<V>(
 }
 
 /**
+ * True for keys Ink reports with a non-empty `input` string even though
+ * they aren't real search text — notably Return, which sends `\r`. Earlier
+ * handlers (submit, jump, page, navigate, cancel) only intercept these when
+ * their corresponding `keyMap` flag is enabled, so a disabled flag (e.g.
+ * `keyMap.select: false`) must not let the key fall through to search
+ * capture instead — it must be excluded here unconditionally.
+ */
+function isNonPrintableKey(key: Key): boolean {
+  return (
+    key.return ||
+    key.tab ||
+    key.escape ||
+    key.upArrow ||
+    key.downArrow ||
+    key.leftArrow ||
+    key.rightArrow ||
+    key.pageUp ||
+    key.pageDown ||
+    key.home ||
+    key.end ||
+    key.backspace ||
+    key.delete
+  )
+}
+
+/**
  * Printable characters captured as search input in searchable mode. Must be
  * resolved after navigation-key handling.
  */
 function resolveSearchAppendIntent<V>(
   input: string,
+  key: Key,
   context: InputIntentContext<V>,
   isModifiedChord: boolean
 ): Intent<V> | undefined {
-  return context.searchable && context.km.search && input && !isModifiedChord
+  return context.searchable &&
+    context.km.search &&
+    input &&
+    !isModifiedChord &&
+    !isNonPrintableKey(key)
     ? { type: 'search-append', char: input }
     : undefined
 }
@@ -1484,6 +1515,7 @@ export function resolveInputIntent<V>(
 
   const searchAppend = resolveSearchAppendIntent(
     input,
+    key,
     context,
     isModifiedChord
   )
