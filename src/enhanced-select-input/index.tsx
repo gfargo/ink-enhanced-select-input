@@ -1916,14 +1916,19 @@ export function useEnhancedSelectInput<V>({
   const itemKeySets = useMemo(() => {
     const disabledKeys = new Set<string>()
     const validKeys = new Set<string>()
+    const duplicateKeys = new Set<string>()
     for (const item of items) {
       if (isSeparator(item)) continue
       const k = itemKey(item)
+      if (validKeys.has(k)) duplicateKeys.add(k)
       validKeys.add(k)
       if (item.disabled) disabledKeys.add(k)
     }
 
-    return { validKeys, disabledKeys }
+    const duplicateSignature =
+      duplicateKeys.size > 0 ? [...duplicateKeys].sort().join(', ') : undefined
+
+    return { validKeys, disabledKeys, duplicateSignature }
   }, [items])
   const controlledCheckedKeys = useMemo(() => {
     if (!isKeysControlled) return undefined
@@ -2081,45 +2086,24 @@ export function useEnhancedSelectInput<V>({
 
   // Warn in development when duplicate React keys are detected — this
   // happens when V is an object and item.key is not set, causing
-  // String(value) to produce "[object Object]" for every item. `items` is
-  // frequently an inline array literal from the caller, so it's a new
-  // reference every render even when its content is identical — comparing
-  // the computed duplicate set by value (via lastWarnedDuplicatesReference)
-  // and only warning when it actually changes keeps this from spamming the
-  // console on every re-render.
-  const lastWarnedDuplicatesReference = useRef<string | undefined>(undefined)
+  // String(value) to produce "[object Object]" for every item. Duplicate
+  // detection itself piggybacks on the `itemKeySets` pass above (which
+  // already scans every item for pruning), so no separate O(n) scan runs
+  // here. `duplicateSignature` is a primitive that stays value-stable across
+  // re-renders with an equivalent but new `items` reference — e.g. an inline
+  // array literal from the caller — so this effect only re-fires when the
+  // actual duplicate set changes, not on every render.
+  const { duplicateSignature } = itemKeySets
   useEffect(() => {
+    if (duplicateSignature === undefined) return
     // eslint-disable-next-line n/prefer-global/process
-    if (process.env['NODE_ENV'] === 'production' || items.length === 0) return
+    if (process.env['NODE_ENV'] === 'production') return
 
-    const keys = items
-      .filter((item): item is Item<V> => !isSeparator(item))
-      .map((item) => itemKey(item))
-    const seen = new Set<string>()
-    const duplicates = new Set<string>()
-    for (const k of keys) {
-      if (seen.has(k)) duplicates.add(k)
-      else seen.add(k)
-    }
-
-    const signature =
-      duplicates.size > 0 ? [...duplicates].sort().join(',') : undefined
-
-    if (
-      signature !== undefined &&
-      signature !== lastWarnedDuplicatesReference.current
-    ) {
-      lastWarnedDuplicatesReference.current = signature
-      console.warn(
-        `[ink-enhanced-select-input] Duplicate item keys detected: ${[
-          ...duplicates,
-        ].join(', ')}. ` +
-          'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
-      )
-    } else if (signature === undefined) {
-      lastWarnedDuplicatesReference.current = undefined
-    }
-  }, [items])
+    console.warn(
+      `[ink-enhanced-select-input] Duplicate item keys detected: ${duplicateSignature}. ` +
+        'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
+    )
+  }, [duplicateSignature])
 
   // When the filtered item set changes, re-validate the current
   // selectedIndex. If the item at that position is still enabled we keep
