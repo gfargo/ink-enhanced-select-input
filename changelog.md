@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.2.0...v1.2.1) (2026-08-11)
+
+
+### 🐞 Bug Fixes
+
+* **release-please:** match existing plain v-prefixed tag convention ([3848ae6](https://github.com/gfargo/ink-enhanced-select-input/commit/3848ae64fe22ab30babcbce893fce3753201fa4c))
+
 ## [1.2.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.1.1...v1.2.0) (2026-08-11)
 
 ### 🌟 New Features
