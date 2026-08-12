@@ -11,6 +11,7 @@ type StorybookView =
   | 'multi-select'
   | 'searchable'
   | 'scroll-indicators'
+  | 'nested'
   | undefined
 
 export function Storybook() {
@@ -109,6 +110,11 @@ export function Storybook() {
                 group: 'New in 1.0',
               },
               {
+                label: 'Nested Items (Breadcrumb)',
+                value: 'nested',
+                group: 'New in 1.0',
+              },
+              {
                 label: 'Disabled Item',
                 value: 'disabled-item',
                 disabled: true,
@@ -144,6 +150,49 @@ export function Storybook() {
               if (item.value === 'back') {
                 setCurrentView(undefined)
               }
+            }}
+          />
+        </Box>
+      )}
+
+      {currentView === 'nested' && orientation && (
+        <Box flexDirection="column">
+          <Text dimColor>
+            Nested Items — Enter/→ descends into a submenu, Escape/← ascends
+            back, with a breadcrumb shown above the list:
+          </Text>
+          <EnhancedSelectInput
+            orientation={orientation}
+            items={[
+              {
+                label: 'Fruits',
+                value: 'fruits',
+                children: [
+                  { label: 'Apple', value: 'apple' },
+                  { label: 'Banana', value: 'banana' },
+                  { label: 'Cherry', value: 'cherry' },
+                ],
+              },
+              {
+                label: 'Vegetables',
+                value: 'vegetables',
+                children: [
+                  { label: 'Carrot', value: 'carrot' },
+                  { label: 'Potato', value: 'potato' },
+                ],
+              },
+              { label: 'Go Back', value: 'back', hotkey: 'b' },
+            ]}
+            onSelect={(item) => {
+              if (item.value === 'back') {
+                setCurrentView(undefined)
+                return
+              }
+
+              console.log('Selected:', item.label)
+            }}
+            onCancel={() => {
+              setCurrentView(undefined)
             }}
           />
         </Box>

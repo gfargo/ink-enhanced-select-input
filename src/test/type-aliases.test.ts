@@ -1,5 +1,7 @@
 import test from 'ava'
 import type {
+  BreadcrumbProperties,
+  BreadcrumbProps,
   EnhancedSelectInputProps,
   GroupHeaderProperties,
   GroupHeaderProps,
@@ -34,6 +36,7 @@ type PropertiesAliasLock = AssertEqual<
 type IndicatorAliasLock = AssertEqual<IndicatorProperties, IndicatorProps>
 type ItemAliasLock = AssertEqual<ItemProperties, ItemProps>
 type GroupHeaderAliasLock = AssertEqual<GroupHeaderProperties, GroupHeaderProps>
+type BreadcrumbAliasLock = AssertEqual<BreadcrumbProperties, BreadcrumbProps>
 type SeparatorAliasLock = AssertEqual<SeparatorProperties, SeparatorProps>
 type UseHookAliasLock = AssertEqual<
   UseEnhancedSelectInputProperties<string>,
@@ -50,6 +53,7 @@ export const aliasLocks: {
   indicator: IndicatorAliasLock
   item: ItemAliasLock
   groupHeader: GroupHeaderAliasLock
+  breadcrumb: BreadcrumbAliasLock
   separator: SeparatorAliasLock
   useHook: UseHookAliasLock
   negativeControl: NegativeControlLock
@@ -58,6 +62,7 @@ export const aliasLocks: {
   indicator: true,
   item: true,
   groupHeader: true,
+  breadcrumb: true,
   separator: true,
   useHook: true,
   negativeControl: false,
@@ -69,6 +74,7 @@ test('deprecated *Properties aliases stay structurally identical to their *Props
     indicator: true,
     item: true,
     groupHeader: true,
+    breadcrumb: true,
     separator: true,
     useHook: true,
     negativeControl: false,

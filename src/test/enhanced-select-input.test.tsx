@@ -2660,6 +2660,66 @@ test.serial(
   }
 )
 
+// --- Breadcrumb (EnhancedSelectInput) ---
+
+test.serial('breadcrumb is hidden at depth 0', (t) => {
+  const { lastFrame } = render(<EnhancedSelectInput items={nestedItems()} />)
+
+  const frame = lastFrame()!
+  t.false(frame.includes('›'))
+})
+
+test.serial(
+  'default breadcrumb renders the current path after descending',
+  async (t) => {
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput items={nestedItems()} />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => lastFrame()!.includes('Apple'))
+
+    const frame = lastFrame()!
+    t.true(frame.includes('Fruits'))
+    t.true(frame.split('\n')[0]!.includes('Fruits'))
+  }
+)
+
+test.serial(
+  'showBreadcrumb={false} hides the breadcrumb even when nested',
+  async (t) => {
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput items={nestedItems()} showBreadcrumb={false} />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => lastFrame()!.includes('Apple'))
+
+    const frame = lastFrame()!
+    t.false(frame.split('\n')[0]!.includes('Fruits'))
+  }
+)
+
+test.serial('custom breadcrumbComponent is used when provided', async (t) => {
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      items={nestedItems()}
+      breadcrumbComponent={({ path }) => (
+        <Text>{`CRUMB:${path.map((p) => p.label).join('/')}`}</Text>
+      )}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await waitFor(() => lastFrame()!.includes('Apple'))
+
+  const frame = lastFrame()!
+  t.true(frame.includes('CRUMB:Fruits'))
+})
+
 // --- Home / End keys ---
 
 test.serial('Home key jumps to first enabled item', async (t) => {
