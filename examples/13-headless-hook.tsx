@@ -1,6 +1,12 @@
 // `useEnhancedSelectInput` — fully custom renderer with built-in navigation,
 // hotkeys, and pagination.
-// Run: node --loader ts-node/esm examples/13-headless-hook.tsx
+// Run: TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm examples/13-headless-hook.tsx
+//
+// The TS_NODE_TRANSPILE_ONLY=true is required for this example specifically:
+// ts-node/esm's type-checking pass races with ESM module loading when a
+// component calls both `useApp` and `useEnhancedSelectInput`, intermittently
+// throwing before any output. Transpile-only mode skips that race. See
+// examples/README.md for details.
 import React from 'react'
 import { Box, render, Text, useApp } from 'ink'
 import { useEnhancedSelectInput } from '../src/enhanced-select-input/index.js'
