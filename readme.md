@@ -25,6 +25,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
+- **Nested Items (Headless):** `children` on an `Item` lets Enter/→ drill into a submenu and Escape/← back out, with cursor memory — vertical, single-select only, no built-in breadcrumb UI.
 - **Theming:** Override the default component colors with a `theme` prop; automatically disabled when [`NO_COLOR`](https://no-color.org/) is set.
 
 ## Compatibility
@@ -692,6 +693,56 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 
 These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
+### Nested Items (Headless)
+
+Give an item a non-empty `children` array to make it a submenu. In the headless hook, Enter or `→` on a highlighted item with `children` descends into that list instead of firing `onSelect`; Escape or `←` ascends back to the parent list, restoring the parent's highlighted index, pagination window, and search query:
+
+```tsx
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
+
+const items = [
+  {
+    label: 'Fruits',
+    value: 'fruits',
+    children: [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ],
+  },
+  { label: 'Vegetables', value: 'vegetables', children: [] },
+]
+
+function MyCustomMenu({ onSelect }) {
+  const { visibleItems, windowIndex, path, depth } = useEnhancedSelectInput({
+    items,
+    onSelect,
+  })
+
+  // path/depth let you render your own breadcrumb — there's no built-in one.
+  return (
+    <Box flexDirection="column">
+      {depth > 0 && (
+        <Text dimColor>{path.map((p) => p.label).join(' › ')}</Text>
+      )}
+      {visibleItems.map((item, i) => (
+        <Text
+          key={item.key ?? String(item.value)}
+          color={i === windowIndex ? 'cyan' : undefined}
+        >
+          {item.label}
+          {item.children?.length ? ' →' : ''}
+        </Text>
+      ))}
+    </Box>
+  )
+}
+```
+
+- `path` — the chain of parent items descended into to reach the current level, root-to-leaf; empty at the root.
+- `depth` — current nesting depth, `0` at the root, incrementing on each descend.
+
+Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends). There's no built-in breadcrumb UI — render one yourself from `path`/`depth` as shown above.
+
 ### Focus Management
 
 By default, focus is a manual boolean — the parent decides who's active by passing `isFocused`. Set `focusable` to opt a select into Ink's own focus manager instead, so multiple selects on one screen can Tab between each other without any hand-rolled focus state:
@@ -795,6 +846,7 @@ type Item<V> = {
   description?: string // Rendered dimmed on its own line beneath the label
   hint?: string // Rendered dimmed to the right of the label
   disabledReason?: string // Rendered dimmed beside the label when `disabled` is true
+  children?: Item<V>[] // Submenu items — see [Nested Items](#nested-items-headless)
 }
 
 type SeparatorItem = {

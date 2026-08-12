@@ -2404,6 +2404,64 @@ test.serial(
   }
 )
 
+test.serial(
+  'pagination window restores on ascend after navigating deep into the parent list (scroll mode)',
+  async (t) => {
+    const items: Array<Item<string>> = Array.from({ length: 6 }, (_, i) =>
+      i === 5
+        ? {
+            label: 'Parent',
+            value: 'parent',
+            children: [
+              { label: 'A', value: 'a' },
+              { label: 'B', value: 'b' },
+              { label: 'C', value: 'c' },
+              { label: 'D', value: 'd' },
+            ],
+          }
+        : { label: `Root ${i}`, value: `root-${i}` }
+    )
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        paginationMode="scroll"
+        initialIndex={5}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Root-level window follows the cursor to the bottom row: [Root 4, Parent].
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.windowIndex, 1)
+
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.selectedIndex, 0)
+
+    // Scroll the child level's own window before ascending, to confirm
+    // ascend restores the parent's saved window rather than the child's.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.rotateIndex === 1)
+    t.is(result?.selectedIndex, 2)
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.windowIndex, 1)
+    t.is(result?.selectedIndex, 5)
+  }
+)
+
 test.serial('disabled parent items are not descendable', async (t) => {
   const items: Array<Item<string>> = [
     {
