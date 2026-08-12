@@ -17,6 +17,7 @@ export {
   matchesQuery,
   computeMatchRanges,
   buildHelpSegments,
+  resolveKeyMap,
 } from './enhanced-select-input/index.js'
 
 export type {
@@ -35,6 +36,7 @@ export type {
   TruncateMode,
   SeparatorProps,
   LoadingProperties,
+  ResolvedKeyMap,
   // Deprecated aliases — kept for backward compatibility, will be removed
   // in a future minor. Prefer the `*Props` names above.
   Properties,
