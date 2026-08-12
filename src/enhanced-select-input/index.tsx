@@ -37,6 +37,21 @@ export type Item<V> = {
    * can't be selected. Ignored when the item isn't disabled.
    */
   disabledReason?: string
+  /**
+   * Submenu items. When non-empty, Enter/→ "descends" into this list instead
+   * of firing `onSelect`, and Escape/← "ascends" back to the parent list,
+   * restoring the parent's highlighted index and search query. Only honored
+   * in vertical, single-select mode — nesting is mutually exclusive with
+   * `multiple` in v1, and is ignored entirely in horizontal orientation and
+   * when `selectedIndex` (controlled highlight) is supplied. A `disabled`
+   * item is never descendable, even with `children` set.
+   *
+   * In `searchable` mode, ←/→ are claimed by search-cursor movement instead
+   * of descend/ascend, so descending is Enter-only; ascending is Escape-only,
+   * and if there's a non-empty search query, the first Escape clears the
+   * query rather than ascending.
+   */
+  children?: Array<Item<V>>
 }
 
 /**
@@ -1034,6 +1049,14 @@ export type InputIntentContext<V> = {
   orientation: 'vertical' | 'horizontal'
   selectedIndex: number
   filteredItems: Array<ItemOrSeparator<V>>
+  /** Current depth in the nested-item level stack. 0 at the root. */
+  depth: number
+  /**
+   * Whether descend/ascend intents may be resolved at all — false when
+   * `multiple` or the highlighted index is controlled (nesting is
+   * unsupported in both, see {@link Item.children}).
+   */
+  nestingEnabled: boolean
   /** Enable type-ahead jump resolution in non-searchable mode. Defaults to false. */
   typeahead?: boolean
   /** Whether the type-ahead buffer is currently active (non-empty, not yet idle-expired). Defaults to false. */
@@ -1072,6 +1095,8 @@ export type Intent<V> =
   | { type: 'search-append'; char: string }
   | { type: 'typeahead'; char: string }
   | { type: 'hotkey'; item: Item<V>; index: number }
+  | { type: 'descend'; item: Item<V> }
+  | { type: 'ascend' }
 
 /**
  * Search-line word/line delete, backspace, and Escape-while-querying,
@@ -1480,6 +1505,55 @@ function resolveSearchAppendIntent<V>(
 }
 
 /**
+ * Ascend out of a nested item list back to its parent, vertical orientation
+ * only. Resolved between search-editing (which already claims a non-empty
+ * query's Escape, and a searchable list's ← for cursor movement) and the
+ * plain cancel branch below — so at depth 0 this always falls through to
+ * `cancel` → `onCancel`, matching pre-nesting behavior exactly.
+ */
+function resolveAscendIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, orientation, depth, nestingEnabled } = context
+  if (!nestingEnabled || orientation !== 'vertical' || depth === 0) {
+    return undefined
+  }
+
+  if ((km.cancel && key.escape) || (km.arrows && key.leftArrow)) {
+    return { type: 'ascend' }
+  }
+
+  return undefined
+}
+
+/**
+ * Descend into the highlighted item's `children`, vertical orientation only.
+ * Resolved just before `submit` so a parent item (non-empty `children`)
+ * never reaches `submit` and never fires `onSelect` — only a leaf Enter
+ * does. `isSelectable` already excludes disabled/separator entries, so a
+ * disabled parent is never descendable.
+ */
+function resolveDescendIntent<V>(
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, orientation, filteredItems, selectedIndex, nestingEnabled } =
+    context
+  if (!nestingEnabled || orientation !== 'vertical') return undefined
+  if (!((km.select && key.return) || (km.arrows && key.rightArrow))) {
+    return undefined
+  }
+
+  const highlighted = filteredItems[selectedIndex]
+  if (!isSelectable(highlighted) || !highlighted.children?.length) {
+    return undefined
+  }
+
+  return { type: 'descend', item: highlighted }
+}
+
+/**
  * Normalizes a raw `(input, key)` keypress plus the current selection state
  * into a single {@link Intent}. Pure — reads only `context`, never touches
  * React state — so branch order (which is load-bearing) can be reasoned
@@ -1497,6 +1571,9 @@ export function resolveInputIntent<V>(
 
   const searchEdit = resolveSearchEditIntent(key, input, context)
   if (searchEdit) return searchEdit
+
+  const ascend = resolveAscendIntent(key, context)
+  if (ascend) return ascend
 
   // Escape → onCancel is a global key: it must work even when the list has
   // no items (e.g. an empty/loading state), so it's resolved before the
@@ -1530,6 +1607,9 @@ export function resolveInputIntent<V>(
 
   const navigate = resolveNavigateIntent(input, key, context, isModifiedChord)
   if (navigate) return navigate
+
+  const descend = resolveDescendIntent(key, context)
+  if (descend) return descend
 
   if (km.select && key.return) {
     return { type: 'submit' }
@@ -1707,6 +1787,13 @@ export type UseEnhancedSelectInputResult<V> = {
    */
   windowIndex: number
   /**
+   * The chain of parent items descended into to reach the current level,
+   * root-to-leaf. Empty at the root (`depth === 0`). See {@link Item.children}.
+   */
+  path: Array<Item<V>>
+  /** Current nesting depth — 0 at the root, incrementing on each descend. */
+  depth: number
+  /**
    * Imperatively move the highlighted item to `index` (clamped into range,
    * resolved to the nearest enabled item). Keeps the pagination window in sync.
    */
@@ -1746,6 +1833,64 @@ export type UseEnhancedSelectInputResult<V> = {
    * `multiple` mode.
    */
   invertSelection: () => void
+}
+
+/**
+ * One frame of the nested-navigation level stack. The root frame (index 0)
+ * has no `parent` and its `items`/`selectedIndex`/`rotateIndex` are derived
+ * live from the hook's own props/state rather than read from this frame —
+ * see `activeItems` in {@link useEnhancedSelectInput}. Frames pushed by a
+ * descend snapshot the parent item's `children` and carry cursor/scroll
+ * memory (`selectedIndex`/`rotateIndex`) so ascending restores exactly where
+ * the user left off.
+ */
+type Level<V> = {
+  parent?: Item<V>
+  items: Array<ItemOrSeparator<V>>
+  selectedIndex: number
+  rotateIndex: number
+}
+
+/** Options bag for {@link computeFilteredItems} — see its parameters for details. */
+type FilterOptions<V> = {
+  searchable: boolean
+  isQueryControlled: boolean
+  searchQuery: string
+  filter: ((item: Item<V>, query: string) => boolean) | undefined
+  searchFields: ((item: Item<V>) => string | string[]) | undefined
+  matchMode: MatchMode
+}
+
+/**
+ * Pure search-filter step shared by the `filteredItems` memo and the initial
+ * `stack` state (which needs a filtered result before `filteredItems` itself
+ * exists, to resolve the root's initial highlighted index).
+ */
+function computeFilteredItems<V>(
+  items: Array<ItemOrSeparator<V>>,
+  options: FilterOptions<V>
+): Array<ItemOrSeparator<V>> {
+  const {
+    searchable,
+    isQueryControlled,
+    searchQuery,
+    filter,
+    searchFields,
+    matchMode,
+  } = options
+  if (!searchable || isQueryControlled || !searchQuery) return items
+  const nonSeparatorItems = items.filter(
+    (item): item is Item<V> => !isSeparator(item)
+  )
+  if (filter)
+    return nonSeparatorItems.filter((item) => filter(item, searchQuery))
+  return nonSeparatorItems.filter((item) => {
+    const fields = searchFields ? searchFields(item) : item.label
+    const fieldList = Array.isArray(fields) ? fields : [fields]
+    return fieldList.some((field) =>
+      matchesQuery(field, searchQuery, matchMode)
+    )
+  })
 }
 
 /**
@@ -1852,35 +1997,79 @@ export function useEnhancedSelectInput<V>({
     }
   }, [])
 
+  // Level stack for nested navigation (see Item.children). The root frame
+  // (index 0) is a placeholder — its items/selectedIndex are never read from
+  // the frame itself; the root instead reads live from the `items` prop and
+  // this frame's `selectedIndex`/`rotateIndex` slots (see `activeItems`
+  // below), so the root keeps behaving exactly like the pre-nesting
+  // single-level hook, including reacting to `items` prop churn. Frames at
+  // index >= 1 are pushed by descend and hold a snapshot of the parent
+  // item's `children` plus cursor/scroll memory for ascend to restore.
+  const [stack, setStack] = useState<Array<Level<V>>>(() => [
+    {
+      items,
+      selectedIndex: resolveInitialSelection(
+        computeFilteredItems(items, {
+          searchable,
+          isQueryControlled,
+          searchQuery,
+          filter,
+          searchFields,
+          matchMode,
+        }),
+        {
+          initialKey,
+          initialValue,
+          initialIndex: rawInitialIndex,
+          autoSelectFirstEnabled,
+        }
+      ),
+      rotateIndex: 0,
+    },
+  ])
+  const depth = stack.length - 1
+  const topFrame = stack[depth]!
+  // Depth 0 always reads the live `items` prop (not the frame's snapshot) so
+  // async/parent-driven updates to `items` keep flowing in exactly as they
+  // did before nesting existed; only a descended level uses its snapshot.
+  const activeItems = depth === 0 ? items : topFrame.items
+
+  // Updates the top-of-stack frame's selectedIndex immutably — the
+  // uncontrolled-mode counterpart of the pre-nesting flat `setUncontrolledIndex`.
+  const setTopSelectedIndex = (index: number) => {
+    setStack((previous) => {
+      const next = [...previous]
+      next[next.length - 1] = { ...next.at(-1)!, selectedIndex: index }
+      return next
+    })
+  }
+
   // Filter items based on search query. Memoized so the reference is stable
   // across renders that don't actually change the item set — downstream
   // effects depend on this reference to distinguish "items changed" from
   // "parent re-rendered with a new-but-equivalent array". Skipped entirely
   // while `searchQuery` is controlled — the parent is expected to pass an
   // already-filtered `items` array, so filtering here would double-filter.
-  const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(() => {
-    if (!searchable || isQueryControlled || !searchQuery) return items
-    const nonSeparatorItems = items.filter(
-      (item): item is Item<V> => !isSeparator(item)
-    )
-    if (filter)
-      return nonSeparatorItems.filter((item) => filter(item, searchQuery))
-    return nonSeparatorItems.filter((item) => {
-      const fields = searchFields ? searchFields(item) : item.label
-      const fieldList = Array.isArray(fields) ? fields : [fields]
-      return fieldList.some((field) =>
-        matchesQuery(field, searchQuery, matchMode)
-      )
-    })
-  }, [
-    items,
-    searchable,
-    isQueryControlled,
-    searchQuery,
-    filter,
-    matchMode,
-    searchFields,
-  ])
+  const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(
+    () =>
+      computeFilteredItems(activeItems, {
+        searchable,
+        isQueryControlled,
+        searchQuery,
+        filter,
+        searchFields,
+        matchMode,
+      }),
+    [
+      activeItems,
+      searchable,
+      isQueryControlled,
+      searchQuery,
+      filter,
+      matchMode,
+      searchFields,
+    ]
+  )
 
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
@@ -1890,18 +2079,14 @@ export function useEnhancedSelectInput<V>({
     [filteredItems, limit]
   )
 
-  const [uncontrolledIndex, setUncontrolledIndex] = useState(() =>
-    resolveInitialSelection(filteredItems, {
-      initialKey,
-      initialValue,
-      initialIndex: rawInitialIndex,
-      autoSelectFirstEnabled,
-    })
-  )
   const isIndexControlled = controlledIndex !== undefined
+  // Nesting is unsupported alongside `multiple` (checkedKeys stays a single
+  // flat set over the root `items`, see Item.children) or a controlled
+  // highlight (the level stack governs the uncontrolled cursor only).
+  const nestingEnabled = !multiple && !isIndexControlled
   const selectedIndex = isIndexControlled
     ? resolveInitialIndex(filteredItems, controlledIndex)
-    : uncontrolledIndex
+    : topFrame.selectedIndex
   // Latest-value ref so the revalidation effect can read the current
   // selectedIndex without listing it as a dependency (which would make the
   // effect re-run on every navigation keypress instead of only when the
@@ -2145,7 +2330,7 @@ export function useEnhancedSelectInput<V>({
     if (selectedIndexReference.current === -1) return
 
     if (filteredItems.length === 0) {
-      setUncontrolledIndex(0)
+      setTopSelectedIndex(0)
       return
     }
 
@@ -2155,7 +2340,7 @@ export function useEnhancedSelectInput<V>({
         filteredItems,
         selectedIndexReference.current
       )
-      setUncontrolledIndex(newIndex)
+      setTopSelectedIndex(newIndex)
     }
   }, [filteredItems, limit, pageStarts, isIndexControlled])
 
@@ -2294,7 +2479,7 @@ export function useEnhancedSelectInput<V>({
   // uncontrolled mode, updates internal state directly.
   const updateSelection = (nextIndex: number) => {
     onIndexChange?.(nextIndex)
-    if (!isIndexControlled) setUncontrolledIndex(nextIndex)
+    if (!isIndexControlled) setTopSelectedIndex(nextIndex)
   }
 
   // Commits the next checked-keys set. In controlled mode, only notifies the
@@ -2333,6 +2518,20 @@ export function useEnhancedSelectInput<V>({
   // filtered-items revalidation effect applies below.
   const resetSelectionToTopUnlessUnselected = () => {
     if (selectedIndex !== -1) updateSelection(0)
+  }
+
+  // Clears the search query on descend/ascend — search is per-level, so a
+  // query typed in one list must not carry into (or back out of) another.
+  // Mirrors the `search-clear` intent's query/cursor reset, but skips
+  // `resetSelectionToTopUnlessUnselected` since the caller already sets the
+  // new level's selectedIndex explicitly.
+  const resetSearchForLevelChange = () => {
+    const previousQuery = searchQueryReference.current
+    searchQueryReference.current = ''
+    searchCursorReference.current = 0
+    if (!isQueryControlled) setInternalSearchQuery('')
+    setSearchCursor(0)
+    if (previousQuery !== '') notifySearchChange('')
   }
 
   // Toggle the checked state of `item` (defaults to the highlighted item) in
@@ -2515,6 +2714,8 @@ export function useEnhancedSelectInput<V>({
         orientation,
         selectedIndex,
         filteredItems,
+        depth,
+        nestingEnabled,
         typeahead,
         typeaheadActive: typeaheadIsActive,
         loop,
@@ -2601,6 +2802,40 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
+        case 'descend': {
+          const children = intent.item.children!
+          setStack((previous) => {
+            const currentTop = previous.at(-1)!
+            const updatedCurrentTop: Level<V> = {
+              ...currentTop,
+              rotateIndex: windowStartReference.current,
+            }
+            const childFrame: Level<V> = {
+              parent: intent.item,
+              items: children,
+              selectedIndex: resolveInitialSelection(children, {
+                autoSelectFirstEnabled: true,
+              }),
+              rotateIndex: 0,
+            }
+            return [...previous.slice(0, -1), updatedCurrentTop, childFrame]
+          })
+          windowStartReference.current = 0
+          resetSearchForLevelChange()
+          break
+        }
+
+        case 'ascend': {
+          if (stack.length > 1) {
+            const parentFrame = stack.at(-2)!
+            windowStartReference.current = parentFrame.rotateIndex
+            setStack((previous) => previous.slice(0, -1))
+            resetSearchForLevelChange()
+          }
+
+          break
+        }
+
         case 'none': {
           break
         }
@@ -2622,6 +2857,8 @@ export function useEnhancedSelectInput<V>({
     selectedItem,
     filteredItems,
     windowIndex,
+    path: stack.slice(1).map((frame) => frame.parent!),
+    depth,
     setSelectedIndex: setSelectedIndexPublic,
     setSearchQuery: setSearchQueryPublic,
     toggle,
