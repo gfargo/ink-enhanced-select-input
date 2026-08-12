@@ -441,6 +441,14 @@ export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
   readonly loadingText?: string
   /** Custom renderer for the loading row. Only used when `isLoading` is true. */
   readonly loadingComponent?: FC<LoadingProperties>
+  /**
+   * Render a dim footer line listing the currently-active keybindings (e.g.
+   * `↑↓ navigate · enter select · esc cancel`), derived from `keyMap`,
+   * `multiple`, `searchable`, and `orientation` so it can never drift from
+   * actual behaviour. Default: false.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly showHelp?: boolean
 }
 
 export type LoadingProperties = {
@@ -2788,6 +2796,65 @@ function resolveSelectionCountLine(
   )
 }
 
+/**
+ * Builds the ordered list of active-keybinding segments for the `showHelp`
+ * footer, e.g. `['↑↓ navigate', 'enter select', 'esc cancel']`. Derived
+ * entirely from the resolved key map plus `multiple`/`searchable`/
+ * `isVertical` so the hint can never drift from actual behaviour.
+ * `homeEnd`/`pageKeys`/`bulk`/`hotkeys` are intentionally omitted to keep
+ * the line short.
+ */
+export function buildHelpSegments(
+  km: ResolvedKeyMap,
+  options: { multiple: boolean; searchable: boolean; isVertical: boolean }
+): string[] {
+  const { multiple, searchable, isVertical } = options
+  const segments: string[] = []
+
+  if (km.arrows || km.vimKeys) {
+    segments.push(isVertical ? '↑↓ navigate' : '←→ navigate')
+  }
+
+  if (searchable && km.search) {
+    segments.push('type to search')
+  }
+
+  if (multiple && km.toggle) {
+    segments.push('space toggle')
+  }
+
+  if (km.select) {
+    segments.push(multiple ? 'enter confirm' : 'enter select')
+  }
+
+  if (km.cancel) {
+    segments.push('esc cancel')
+  }
+
+  return segments
+}
+
+/** The auto-generated keybinding help/footer line, or `null` when hidden or empty. */
+function resolveHelpLine(
+  show: boolean,
+  km: ResolvedKeyMap,
+  options: {
+    multiple: boolean
+    searchable: boolean
+    isVertical: boolean
+    theme: ResolvedTheme
+  }
+): React.ReactNode {
+  if (!show) return null
+  const segments = buildHelpSegments(km, options)
+  if (segments.length === 0) return null
+  return (
+    <Box>
+      <Text dimColor={options.theme.dim}>{segments.join(' · ')}</Text>
+    </Box>
+  )
+}
+
 export function EnhancedSelectInput<V>({
   indicatorComponent = DefaultIndicatorComponent,
   itemComponent = DefaultItemComponent,
@@ -2804,6 +2871,7 @@ export function EnhancedSelectInput<V>({
   isLoading = false,
   loadingText = 'Searching…',
   loadingComponent = DefaultLoadingComponent,
+  showHelp = false,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: EnhancedSelectInputProps<V>) {
@@ -2874,6 +2942,14 @@ export function EnhancedSelectInput<V>({
     selectionBound
   )
 
+  const km = resolveKeyMap(hookProperties.keyMap)
+  const helpLine = resolveHelpLine(showHelp, km, {
+    multiple: isMultiple,
+    searchable,
+    isVertical,
+    theme: resolvedTheme,
+  })
+
   const LoadingComponent = loadingComponent
   const loadingRow = isLoading ? (
     <LoadingComponent loadingText={loadingText} theme={resolvedTheme} />
@@ -2892,6 +2968,7 @@ export function EnhancedSelectInput<V>({
             <Text dimColor={resolvedTheme.dim}>No matches</Text>
           </Box>
         )}
+        {helpLine}
       </Box>
     )
   }
@@ -3034,6 +3111,7 @@ export function EnhancedSelectInput<V>({
           </Box>
         )}
       </Box>
+      {helpLine}
     </Box>
   )
 }

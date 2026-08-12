@@ -16,6 +16,7 @@ export {
   isSelectable,
   matchesQuery,
   computeMatchRanges,
+  buildHelpSegments,
 } from './enhanced-select-input/index.js'
 
 export type {
