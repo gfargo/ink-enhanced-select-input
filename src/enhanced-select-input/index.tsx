@@ -1006,7 +1006,7 @@ export function computeMatchRanges(
 }
 
 /** Fully-resolved key map — every group explicitly enabled or disabled. */
-type ResolvedKeyMap = Required<KeyMap>
+export type ResolvedKeyMap = Required<KeyMap>
 
 /** Everything the intent resolver needs to read, without touching React state. */
 export type InputIntentContext<V> = {
@@ -1350,7 +1350,7 @@ function resolveHotkeyIntent<V>(
 }
 
 /** Resolves the full key map, defaulting any unsupplied flag to enabled (true). */
-function resolveKeyMap(keyMap: KeyMap | undefined): Required<KeyMap> {
+export function resolveKeyMap(keyMap: KeyMap | undefined): ResolvedKeyMap {
   return {
     arrows: keyMap?.arrows ?? true,
     vimKeys: keyMap?.vimKeys ?? true,

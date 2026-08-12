@@ -581,7 +581,17 @@ Set `showHelp` to render a dim footer line listing the currently-active keybindi
 <EnhancedSelectInput items={items} showHelp onSelect={onSelect} />
 ```
 
-The underlying builder is also exported as `buildHelpSegments(keyMap, { multiple, searchable, isVertical })` for custom footer rendering.
+The underlying builder is also exported for custom footer rendering. `buildHelpSegments` takes a fully-resolved key map, so pass your (possibly partial) `keyMap` through `resolveKeyMap` first:
+
+```tsx
+import { buildHelpSegments, resolveKeyMap } from 'ink-enhanced-select-input'
+
+const segments = buildHelpSegments(resolveKeyMap(keyMap), {
+  multiple,
+  searchable,
+  isVertical,
+})
+```
 
 ### Custom Components
 
