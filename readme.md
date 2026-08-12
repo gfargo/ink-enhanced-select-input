@@ -917,6 +917,14 @@ yarn install
 | `yarn lint`     | Check formatting and lint                    |
 | `yarn lint:fix` | Auto-fix formatting and lint issues          |
 
+### Examples
+
+Runnable, single-feature demos live in [`examples/`](./examples/README.md) — one `.tsx` file per feature, no build step required:
+
+```bash
+node --loader ts-node/esm examples/01-vertical.tsx
+```
+
 ## Contributing
 
 Contributions are welcome. Feel free to open [issues](https://github.com/gfargo/ink-enhanced-select-input/issues), submit pull requests, or provide feedback.
