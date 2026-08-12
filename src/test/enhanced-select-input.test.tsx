@@ -1,5 +1,5 @@
 import test from 'ava'
-import { Box, Text } from 'ink'
+import { Box, Text, useFocusManager, useInput } from 'ink'
 import { render } from 'ink-testing-library'
 import React from 'react'
 import {
@@ -999,6 +999,243 @@ test.serial('isFocused=false disables keyboard input', async (t) => {
   await delay()
   t.is(highlighted, 'A')
 })
+
+// --- focus manager integration (focusable/autoFocus/focusId) ---
+
+test.serial(
+  'not opted into focusable: Tab is inert, both selects stay independently active',
+  async (t) => {
+    const itemsA = [
+      { label: 'A1', value: 'a1' },
+      { label: 'A2', value: 'a2' },
+    ]
+    const itemsB = [
+      { label: 'B1', value: 'b1' },
+      { label: 'B2', value: 'b2' },
+    ]
+
+    let highlightedA = ''
+    let highlightedB = ''
+    const { stdin } = render(
+      <Box flexDirection="column">
+        <EnhancedSelectInput
+          items={itemsA}
+          onHighlight={(item) => {
+            highlightedA = item.label
+          }}
+        />
+        <EnhancedSelectInput
+          items={itemsB}
+          onHighlight={(item) => {
+            highlightedB = item.label
+          }}
+        />
+      </Box>
+    )
+
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B1')
+
+    // Neither select registered with Ink's focus manager, so Tab has no
+    // effect on either — both remain independently keyboard-active, as
+    // today (legacy behavior, `isFocused` defaults to true for both).
+    stdin.write(TAB)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A2')
+    t.is(highlightedB, 'B2')
+  }
+)
+
+test.serial(
+  'focusable + autoFocus focuses on mount without a manual isFocused',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'A')
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial('Tab cycles focus between two focusable selects', async (t) => {
+  const itemsA = [
+    { label: 'A1', value: 'a1' },
+    { label: 'A2', value: 'a2' },
+  ]
+  const itemsB = [
+    { label: 'B1', value: 'b1' },
+    { label: 'B2', value: 'b2' },
+  ]
+
+  let highlightedA = ''
+  let highlightedB = ''
+  const { stdin } = render(
+    <Box flexDirection="column">
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        items={itemsA}
+        onHighlight={(item) => {
+          highlightedA = item.label
+        }}
+      />
+      <EnhancedSelectInput
+        focusable
+        items={itemsB}
+        onHighlight={(item) => {
+          highlightedB = item.label
+        }}
+      />
+    </Box>
+  )
+
+  await delay()
+
+  // Only the auto-focused first select responds to arrow keys.
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlightedA, 'A2')
+  t.is(highlightedB, 'B1')
+
+  // Tab moves focus to the second select; the first stops responding.
+  stdin.write(TAB)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlightedA, 'A2')
+  t.is(highlightedB, 'B2')
+})
+
+test.serial(
+  'focusId lets a parent programmatically focus a select via useFocusManager',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlightedFirst = ''
+    let highlightedSecond = ''
+
+    function Harness() {
+      const { focus } = useFocusManager()
+      useInput((input) => {
+        if (input === 'f') focus('second')
+      })
+
+      return (
+        <Box flexDirection="column">
+          <EnhancedSelectInput
+            focusable
+            autoFocus
+            focusId="first"
+            items={items}
+            onHighlight={(item) => {
+              highlightedFirst = item.label
+            }}
+          />
+          <EnhancedSelectInput
+            focusable
+            focusId="second"
+            items={items}
+            onHighlight={(item) => {
+              highlightedSecond = item.label
+            }}
+          />
+        </Box>
+      )
+    }
+
+    const { stdin } = render(<Harness />)
+    await delay()
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedFirst, 'B')
+    t.is(highlightedSecond, 'A')
+
+    stdin.write('f')
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedFirst, 'B')
+    t.is(highlightedSecond, 'B')
+  }
+)
+
+test.serial(
+  'focusable + isFocused=false force-disables input and drops out of the Tab ring',
+  async (t) => {
+    const itemsA = [
+      { label: 'A1', value: 'a1' },
+      { label: 'A2', value: 'a2' },
+    ]
+    const itemsB = [
+      { label: 'B1', value: 'b1' },
+      { label: 'B2', value: 'b2' },
+    ]
+
+    let highlightedA = ''
+    let highlightedB = ''
+    const { stdin } = render(
+      <Box flexDirection="column">
+        <EnhancedSelectInput
+          focusable
+          autoFocus
+          isFocused={false}
+          items={itemsA}
+          onHighlight={(item) => {
+            highlightedA = item.label
+          }}
+        />
+        <EnhancedSelectInput
+          focusable
+          items={itemsB}
+          onHighlight={(item) => {
+            highlightedB = item.label
+          }}
+        />
+      </Box>
+    )
+
+    await delay()
+    // Force-disabled even though autoFocus is set: arrow keys are a no-op.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B1')
+
+    // Dropped from the Tab ring: Tab moves straight to the second select
+    // (the only remaining focusable), not back to the disabled first one.
+    stdin.write(TAB)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B2')
+  }
+)
 
 // --- limit prop pagination ---
 

@@ -692,6 +692,35 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 
 These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
+### Focus Management
+
+By default, focus is a manual boolean — the parent decides who's active by passing `isFocused`. Set `focusable` to opt a select into Ink's own focus manager instead, so multiple selects on one screen can Tab between each other without any hand-rolled focus state:
+
+```tsx
+import { Box } from 'ink'
+import { EnhancedSelectInput } from 'ink-enhanced-select-input'
+
+function App() {
+  return (
+    <Box flexDirection="column">
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        focusId="fruit"
+        items={fruitItems}
+      />
+      <EnhancedSelectInput focusable focusId="color" items={colorItems} />
+    </Box>
+  )
+}
+```
+
+Pressing Tab moves focus between the two selects; only the focused one responds to arrows/Enter/typing. `autoFocus` focuses a select on mount when nothing else is focused yet — set it on at most one instance. `focusId` lets a parent focus a specific select programmatically, via Ink's own `useFocusManager().focus(id)`.
+
+`isFocused` still works alongside `focusable` — `isFocused={false}` force-disables input and drops the component out of the Tab ring even if it's `autoFocus`ed, which is handy for conditionally excluding a select from the ring (e.g. while its data is loading). Omit `isFocused` in `focusable` mode and Ink's focus manager decides.
+
+`focusable` is a static/config-time prop — decide once whether a given select participates in Tab-cycling, rather than toggling it at runtime. The headless `useEnhancedSelectInput` hook is unaffected by any of this: it stays purely `isFocused`-driven, so headless consumers keep wiring up focus themselves.
+
 ## Props
 
 These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputProps<V>`). The individual render-component prop types (`IndicatorProps`, `ItemProps`, `GroupHeaderProps`, `SeparatorProps`) are documented in [Custom Components](#custom-components). Earlier `*Properties` names (`Properties`, `IndicatorProperties`, `ItemProperties`, `GroupHeaderProperties`, `SeparatorProperties`, `UseEnhancedSelectInputProperties`) are still exported as deprecated aliases for backward compatibility and will be removed in a future minor — prefer the `*Props` names above in new code.
@@ -699,7 +728,10 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | Prop                     | Type                                        | Default                       | Description                                                                                                                                                                                                                                                                    |
 | ------------------------ | ------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `items`                  | `Array<ItemOrSeparator<V>>`                 | _required_                    | List of selectable items, optionally interspersed with `{ type: 'separator' }` rows                                                                                                                                                                                            |
-| `isFocused`              | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                                                                                                                                        |
+| `isFocused`              | `boolean`                                   | `true`                        | Whether the component responds to input. When `focusable` is set, this instead gates eligibility (`false` force-disables and drops out of the Tab ring; otherwise Ink's focus manager decides)                                                                                 |
+| `focusable`              | `boolean`                                   | `false`                       | Opt into Ink's focus manager (`useFocus`) instead of the manual `isFocused` boolean alone, so Tab can cycle between several selects. Treat as a static/config-time prop — see [Focus management](#focus-management)                                                            |
+| `autoFocus`              | `boolean`                                   | `false`                       | Focus this select on mount when nothing else is focused yet. Only meaningful when `focusable` is set                                                                                                                                                                           |
+| `focusId`                | `string`                                    | —                             | Stable id for Ink's focus manager, so a parent can call `useFocusManager().focus(id)`. Only meaningful when `focusable` is set                                                                                                                                                 |
 | `initialIndex`           | `number`                                    | —                             | Index of the initially highlighted item (uncontrolled — ignored once `selectedIndex` is set)                                                                                                                                                                                   |
 | `initialKey`             | `string`                                    | —                             | Highlight the item whose `key` (or `String(value)` fallback) matches at mount. Wins over `initialValue` and `initialIndex`. Initial-only                                                                                                                                       |
 | `initialValue`           | `V`                                         | —                             | Highlight the first item whose `value` matches (`===`) at mount. Wins over `initialIndex`, loses to `initialKey`. Initial-only                                                                                                                                                 |

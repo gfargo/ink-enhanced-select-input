@@ -1,4 +1,4 @@
-import { Box, Text, useInput, type Key } from 'ink'
+import { Box, Text, useFocus, useInput, type Key } from 'ink'
 import React, { type FC, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Item<V> = {
@@ -441,6 +441,28 @@ export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
   readonly loadingText?: string
   /** Custom renderer for the loading row. Only used when `isLoading` is true. */
   readonly loadingComponent?: FC<LoadingProperties>
+  /**
+   * Opt into Ink's focus manager instead of relying solely on the manual
+   * `isFocused` prop. When true, effective focus is derived from Ink's
+   * `useFocus` (so Tab can cycle between several focusable selects on one
+   * screen); `isFocused={false}` still force-disables input and drops the
+   * component out of the Tab ring. Treat as a static/config-time prop.
+   * Default: false.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly focusable?: boolean
+  /**
+   * Focus this component on mount when nothing else is focused yet. Only
+   * meaningful when `focusable` is true. Default: false.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly autoFocus?: boolean
+  /**
+   * Stable id for Ink's focus manager, letting a parent programmatically
+   * focus this component via `useFocusManager().focus(id)`. Only meaningful
+   * when `focusable` is true.
+   */
+  readonly focusId?: string
 }
 
 export type LoadingProperties = {
@@ -2804,9 +2826,21 @@ export function EnhancedSelectInput<V>({
   isLoading = false,
   loadingText = 'Searching…',
   loadingComponent = DefaultLoadingComponent,
+  isFocused,
+  focusable = false,
+  autoFocus = false,
+  focusId,
   // All remaining props are forwarded to the hook
   ...hookProperties
 }: EnhancedSelectInputProps<V>) {
+  const { isFocused: managedIsFocused } = useFocus({
+    id: focusId,
+    autoFocus,
+    isActive: focusable ? isFocused !== false : false,
+  })
+  const manualIsFocused = isFocused ?? true
+  const effectiveIsFocused = focusable ? managedIsFocused : manualIsFocused
+
   const {
     selectedIndex,
     rotateIndex,
@@ -2818,7 +2852,10 @@ export function EnhancedSelectInput<V>({
     searchQuery,
     searchCursor,
     selectionCount,
-  } = useEnhancedSelectInput(hookProperties)
+  } = useEnhancedSelectInput({
+    ...hookProperties,
+    isFocused: effectiveIsFocused,
+  })
 
   const resolvedTheme = resolveTheme(theme)
   const searchable = hookProperties.searchable === true
