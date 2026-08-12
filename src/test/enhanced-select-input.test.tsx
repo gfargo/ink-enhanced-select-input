@@ -1002,75 +1002,81 @@ test.serial('isFocused=false disables keyboard input', async (t) => {
 
 // --- focus manager integration (focusable/autoFocus/focusId) ---
 
-test.serial('not opted into focusable: Tab is inert, both selects stay independently active', async (t) => {
-  const itemsA = [
-    { label: 'A1', value: 'a1' },
-    { label: 'A2', value: 'a2' },
-  ]
-  const itemsB = [
-    { label: 'B1', value: 'b1' },
-    { label: 'B2', value: 'b2' },
-  ]
+test.serial(
+  'not opted into focusable: Tab is inert, both selects stay independently active',
+  async (t) => {
+    const itemsA = [
+      { label: 'A1', value: 'a1' },
+      { label: 'A2', value: 'a2' },
+    ]
+    const itemsB = [
+      { label: 'B1', value: 'b1' },
+      { label: 'B2', value: 'b2' },
+    ]
 
-  let highlightedA = ''
-  let highlightedB = ''
-  const { stdin } = render(
-    <Box flexDirection="column">
+    let highlightedA = ''
+    let highlightedB = ''
+    const { stdin } = render(
+      <Box flexDirection="column">
+        <EnhancedSelectInput
+          items={itemsA}
+          onHighlight={(item) => {
+            highlightedA = item.label
+          }}
+        />
+        <EnhancedSelectInput
+          items={itemsB}
+          onHighlight={(item) => {
+            highlightedB = item.label
+          }}
+        />
+      </Box>
+    )
+
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B1')
+
+    // Neither select registered with Ink's focus manager, so Tab has no
+    // effect on either — both remain independently keyboard-active, as
+    // today (legacy behavior, `isFocused` defaults to true for both).
+    stdin.write(TAB)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A2')
+    t.is(highlightedB, 'B2')
+  }
+)
+
+test.serial(
+  'focusable + autoFocus focuses on mount without a manual isFocused',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
       <EnhancedSelectInput
-        items={itemsA}
+        focusable
+        autoFocus
+        items={items}
         onHighlight={(item) => {
-          highlightedA = item.label
+          highlighted = item.label
         }}
       />
-      <EnhancedSelectInput
-        items={itemsB}
-        onHighlight={(item) => {
-          highlightedB = item.label
-        }}
-      />
-    </Box>
-  )
+    )
 
-  await delay()
-  t.is(highlightedA, 'A1')
-  t.is(highlightedB, 'B1')
+    await delay()
+    t.is(highlighted, 'A')
 
-  // Neither select registered with Ink's focus manager, so Tab has no
-  // effect on either — both remain independently keyboard-active, as
-  // today (legacy behavior, `isFocused` defaults to true for both).
-  stdin.write(TAB)
-  await delay()
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlightedA, 'A2')
-  t.is(highlightedB, 'B2')
-})
-
-test.serial('focusable + autoFocus focuses on mount without a manual isFocused', async (t) => {
-  const items = [
-    { label: 'A', value: 'a' },
-    { label: 'B', value: 'b' },
-  ]
-
-  let highlighted = ''
-  const { stdin } = render(
-    <EnhancedSelectInput
-      focusable
-      autoFocus
-      items={items}
-      onHighlight={(item) => {
-        highlighted = item.label
-      }}
-    />
-  )
-
-  await delay()
-  t.is(highlighted, 'A')
-
-  stdin.write(ARROW_DOWN)
-  await delay()
-  t.is(highlighted, 'B')
-})
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
 
 test.serial('Tab cycles focus between two focusable selects', async (t) => {
   const itemsA = [
