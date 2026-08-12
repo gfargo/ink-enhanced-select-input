@@ -965,7 +965,7 @@ export function computeMatchRanges(
       const queryCodePoint = normalizedQuery.codePointAt(queryIndex)!
       let matchIndex = -1
       let matchEnd = -1
-      for (let i = searchFrom; i < normalizedText.length; ) {
+      for (let i = searchFrom; i < normalizedText.length;) {
         const textCodePoint = normalizedText.codePointAt(i)!
         const textCharLength = textCodePoint > 0xff_ff ? 2 : 1
         if (textCodePoint === queryCodePoint) {
