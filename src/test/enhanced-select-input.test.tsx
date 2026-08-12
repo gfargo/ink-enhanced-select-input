@@ -2660,6 +2660,164 @@ test.serial(
   }
 )
 
+test.serial(
+  'keyMap: select:false disables Enter-descend but → still descends',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let selected: string | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        keyMap={{ select: false }}
+        onSelect={(item) => {
+          selected = String(item.value)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(selected, undefined)
+
+    stdin.write(ARROW_RIGHT)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.depth, 1)
+  }
+)
+
+test.serial(
+  'keyMap: cancel:false disables Escape-ascend but ← still ascends',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let cancelled = false
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        keyMap={{ cancel: false }}
+        onCancel={() => {
+          cancelled = true
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write(ESCAPE)
+    await delay()
+    t.is(result?.depth, 1)
+    t.false(cancelled)
+
+    stdin.write(ARROW_LEFT)
+    await waitFor(() => result?.depth === 0)
+    t.is(result?.depth, 0)
+  }
+)
+
+test.serial(
+  'descend then search filters only within the active child level, and Escape clears the query before ascending',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={nestedItems()}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write('ba')
+    await waitFor(() => result?.searchQuery === 'ba')
+
+    t.is(result?.filteredItems.length, 1)
+    t.is(labelOf(result?.filteredItems[0]), 'Banana')
+
+    // First Escape clears the query and stays at depth 1...
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.searchQuery === '')
+    t.is(result?.depth, 1)
+
+    // ...second Escape ascends back to the parent list.
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+    t.is(result?.depth, 0)
+  }
+)
+
+test.serial(
+  'changing limit while nested snaps rotateIndex for the active (non-root) level',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: Array.from({ length: 6 }, (_, i) => ({
+          label: `Child ${i}`,
+          value: `child-${i}`,
+        })),
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin, rerender } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    for (let index = 0; index < 5; index++) {
+      stdin.write(ARROW_DOWN)
+      // eslint-disable-next-line no-await-in-loop
+      await delay()
+    }
+
+    t.is(result?.selectedIndex, 5)
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.visibleItems.length, 2)
+
+    rerender(
+      <HookHarness
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    t.is(result?.depth, 1)
+    t.is(result?.selectedIndex, 5)
+    t.is(result?.rotateIndex, 3)
+    t.is(result?.visibleItems.length, 3)
+    t.is(result?.windowIndex, 2)
+    t.is(labelOf(result?.visibleItems[0]), 'Child 3')
+  }
+)
+
 // --- Home / End keys ---
 
 test.serial('Home key jumps to first enabled item', async (t) => {
@@ -4247,6 +4405,54 @@ test.serial(
   }
 )
 
+test.serial(
+  'warns in development when a submenu (Item.children) has duplicate keys',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      const { stdin } = render(
+        <EnhancedSelectInput
+          items={[
+            {
+              label: 'Parent',
+              value: { id: 0 },
+              children: [
+                { label: 'A', value: { id: 1 } },
+                { label: 'B', value: { id: 2 } },
+              ],
+            },
+          ]}
+        />
+      )
+
+      await delay()
+      // No duplicates at the root — the submenu itself is a single item.
+      t.false(warnings.some((w) => w.includes('Duplicate item keys')))
+
+      stdin.write(ENTER)
+      await delay()
+
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
 // --- #44: item.indicator + multiple warning ---
 
 // These two tests stub the global console.warn — run them serially so they
@@ -4377,6 +4583,70 @@ test.serial(
     const frame = lastFrame()!
     t.true(frame.includes('[ ]'))
     t.false(frame.includes('★'))
+  }
+)
+
+// --- horizontal orientation + Item.children warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when children is combined with horizontal orientation',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput orientation="horizontal" items={nestedItems()} />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.children is ignored')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'no children/horizontal warning in vertical orientation',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput items={nestedItems()} />)
+
+      await delay()
+      t.false(warnings.some((w) => w.includes('item.children is ignored')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
   }
 )
 
