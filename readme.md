@@ -813,6 +813,8 @@ type ItemOrSeparator<V> = Item<V> | SeparatorItem
 
 ## Keyboard Navigation
 
+> Upgrading from `v0.2.0`? See [`MIGRATION.md`](./MIGRATION.md) for the keyboard-behavior changes since then (Home/End, vim keys, `Escape`/`onCancel`, multi-select `Space`, hotkey precedence, `keyMap`).
+
 | Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
 | ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- |
 | Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
