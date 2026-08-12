@@ -2300,17 +2300,37 @@ export function useEnhancedSelectInput<V>({
   // re-renders with an equivalent but new `items` reference — e.g. an inline
   // array literal from the caller — so this effect only re-fires when the
   // actual duplicate set changes, not on every render.
-  const { duplicateSignature } = itemKeySets
+  // A descended level scans its own `children` for duplicates too — the
+  // `itemKeySets` pass above only covers the root `items` prop, so a
+  // submenu's duplicate keys would otherwise go undetected. At depth 0
+  // `activeItems === items`, so this just reuses `itemKeySets`'s signature
+  // rather than re-scanning; only depth >= 1 pays for a second pass.
+  const activeDuplicateSignature = useMemo(() => {
+    if (depth === 0) return itemKeySets.duplicateSignature
+
+    const seenKeys = new Set<string>()
+    const duplicateKeys = new Set<string>()
+    for (const item of activeItems) {
+      if (isSeparator(item)) continue
+      const k = itemKey(item)
+      if (seenKeys.has(k)) duplicateKeys.add(k)
+      seenKeys.add(k)
+    }
+
+    return duplicateKeys.size > 0
+      ? [...duplicateKeys].sort().join(', ')
+      : undefined
+  }, [depth, activeItems, itemKeySets.duplicateSignature])
   useEffect(() => {
-    if (duplicateSignature === undefined) return
+    if (activeDuplicateSignature === undefined) return
     // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] === 'production') return
 
     console.warn(
-      `[ink-enhanced-select-input] Duplicate item keys detected: ${duplicateSignature}. ` +
+      `[ink-enhanced-select-input] Duplicate item keys detected: ${activeDuplicateSignature}. ` +
         'Set a unique "key" on each item — this is required when value is a non-primitive type (e.g. object).'
     )
-  }, [duplicateSignature])
+  }, [activeDuplicateSignature])
 
   // When the filtered item set changes, re-validate the current
   // selectedIndex. If the item at that position is still enabled we keep
@@ -2393,6 +2413,27 @@ export function useEnhancedSelectInput<V>({
         'customize indicators in multi-select mode.'
     )
   }, [hasIgnoredIndicator])
+
+  // Warn in development when `children` is combined with horizontal
+  // orientation — nesting (descend/ascend) is only wired up for `←/→` and
+  // Enter/Escape in vertical orientation (see `resolveDescendIntent`/
+  // `resolveAscendIntent`), so a submenu on a horizontal item is silently
+  // unreachable. Depend on this derived boolean (not `items`) so the warning
+  // doesn't re-fire on every parent re-render that passes a new-but-equivalent
+  // items array.
+  const hasIgnoredChildren =
+    orientation === 'horizontal' &&
+    items.some((item) => !isSeparator(item) && Boolean(item.children?.length))
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!hasIgnoredChildren) return
+    console.warn(
+      '[ink-enhanced-select-input] item.children is ignored in horizontal orientation — ' +
+        'nested navigation (descend/ascend) is only supported in vertical orientation.'
+    )
+  }, [hasIgnoredChildren])
 
   // Warn in development when a controlled prop is combined with its
   // uncontrolled counterpart — the uncontrolled prop is silently ignored

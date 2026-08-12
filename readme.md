@@ -557,18 +557,18 @@ Because Ink does not support event propagation stopping, every `useInput` handle
 />
 ```
 
-| `keyMap` field | Keys it controls                                                           | Default |
-| -------------- | -------------------------------------------------------------------------- | ------- |
-| `arrows`       | `↑` `↓` `←` `→`                                                            | `true`  |
-| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                  | `true`  |
-| `homeEnd`      | `Home` · `End`                                                             | `true`  |
-| `pageKeys`     | `Page Up` · `Page Down`                                                    | `true`  |
-| `cancel`       | `Escape` → `onCancel`                                                      | `true`  |
-| `select`       | `Enter` → `onSelect` / `onConfirm`                                         | `true`  |
-| `toggle`       | `Space` toggle in multi-select mode                                        | `true`  |
-| `bulk`         | `Ctrl+A`/`Ctrl+D`/`Ctrl+R` bulk select-all/none/invert (multi-select mode) | `true`  |
-| `hotkeys`      | Item `hotkey` chars (independent of `select`)                              | `true`  |
-| `search`       | Printable-character capture in searchable mode                             | `true`  |
+| `keyMap` field | Keys it controls                                                              | Default |
+| -------------- | ----------------------------------------------------------------------------- | ------- |
+| `arrows`       | `↑` `↓` `←` `→`; also `→`-descend / `←`-ascend for `item.children`            | `true`  |
+| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                     | `true`  |
+| `homeEnd`      | `Home` · `End`                                                                | `true`  |
+| `pageKeys`     | `Page Up` · `Page Down`                                                       | `true`  |
+| `cancel`       | `Escape` → `onCancel`; also `Escape`-ascend out of `item.children`            | `true`  |
+| `select`       | `Enter` → `onSelect` / `onConfirm`; also `Enter`-descend into `item.children` | `true`  |
+| `toggle`       | `Space` toggle in multi-select mode                                           | `true`  |
+| `bulk`         | `Ctrl+A`/`Ctrl+D`/`Ctrl+R` bulk select-all/none/invert (multi-select mode)    | `true`  |
+| `hotkeys`      | Item `hotkey` chars (independent of `select`)                                 | `true`  |
+| `search`       | Printable-character capture in searchable mode                                | `true`  |
 
 Any field not supplied stays enabled. `isFocused={false}` remains the way to disable all input at once.
 
@@ -741,7 +741,7 @@ function MyCustomMenu({ onSelect }) {
 - `path` — the chain of parent items descended into to reach the current level, root-to-leaf; empty at the root.
 - `depth` — current nesting depth, `0` at the root, incrementing on each descend.
 
-Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends). There's no built-in breadcrumb UI — render one yourself from `path`/`depth` as shown above.
+Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. In development, giving any item a non-empty `children` while `orientation="horizontal"` logs a `console.warn` once (since `←`/`→` are already claimed by horizontal navigation, the submenu would otherwise be silently unreachable). A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends); search filters within the active level only, so descending resets the query and searching in a submenu never matches items from the parent list or sibling submenus. `keyMap.select`/`keyMap.cancel` gate Enter-descend/Escape-ascend the same way they gate `onSelect`/`onCancel`; `keyMap.arrows` independently gates `→`-descend/`←`-ascend, so e.g. `keyMap={{ select: false }}` still allows descending via `→`. The duplicate-`key` dev warning (see below) also scans the active submenu level on each descend, not just the root `items`. There's no built-in breadcrumb UI — render one yourself from `path`/`depth` as shown above.
 
 ### Focus Management
 
