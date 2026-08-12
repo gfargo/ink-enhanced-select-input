@@ -67,6 +67,8 @@ const context = (
   orientation: overrides.orientation ?? ('vertical' as const),
   selectedIndex: overrides.selectedIndex ?? 0,
   filteredItems: overrides.filteredItems ?? items,
+  depth: overrides.depth ?? 0,
+  nestingEnabled: overrides.nestingEnabled ?? true,
   loop: overrides.loop,
   pageSize: overrides.pageSize,
   typeahead: overrides.typeahead ?? false,
@@ -671,4 +673,131 @@ test('backspace still beats search-cursor and navigation resolution', (t) => {
     context({ searchable: true, searchQuery: 'a', searchCursor: 1 })
   )
   t.deepEqual(intent, { type: 'search-backspace' })
+})
+
+// --- Nested navigation (descend/ascend) ---
+
+const parentItem: Item<string> = {
+  key: 'parent',
+  label: 'Parent',
+  value: 'parent',
+  children: [{ key: 'child', label: 'Child', value: 'child' }],
+}
+const disabledParentItem: Item<string> = {
+  key: 'disabled-parent',
+  label: 'Disabled parent',
+  value: 'disabled-parent',
+  disabled: true,
+  children: [{ key: 'child', label: 'Child', value: 'child' }],
+}
+const leafItem: Item<string> = { key: 'leaf', label: 'Leaf', value: 'leaf' }
+
+test('Enter on a parent item descends instead of submitting', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({ filteredItems: [parentItem, leafItem], selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'descend', item: parentItem })
+})
+
+test('rightArrow on a parent item descends in vertical orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ rightArrow: true }),
+    context({ filteredItems: [parentItem, leafItem], selectedIndex: 0 })
+  )
+  t.deepEqual(intent, { type: 'descend', item: parentItem })
+})
+
+test('Enter on a leaf item still submits, not descend', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({ filteredItems: [parentItem, leafItem], selectedIndex: 1 })
+  )
+  t.deepEqual(intent, { type: 'submit' })
+})
+
+test('Enter on a disabled parent item does not descend', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({
+      filteredItems: [disabledParentItem, leafItem],
+      selectedIndex: 0,
+    })
+  )
+  t.not(intent.type, 'descend')
+})
+
+test('descend is not resolved when nesting is disabled (multiple/controlled)', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({
+      filteredItems: [parentItem, leafItem],
+      selectedIndex: 0,
+      nestingEnabled: false,
+    })
+  )
+  t.not(intent.type, 'descend')
+})
+
+test('descend is not resolved in horizontal orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ return: true }),
+    context({
+      filteredItems: [parentItem, leafItem],
+      selectedIndex: 0,
+      orientation: 'horizontal',
+    })
+  )
+  t.not(intent.type, 'descend')
+})
+
+test('Escape at depth > 0 ascends instead of cancelling', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({ depth: 1 })
+  )
+  t.deepEqual(intent, { type: 'ascend' })
+})
+
+test('leftArrow at depth > 0 ascends in vertical orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ leftArrow: true }),
+    context({ depth: 1 })
+  )
+  t.deepEqual(intent, { type: 'ascend' })
+})
+
+test('Escape at depth 0 still falls through to cancel', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({ depth: 0 })
+  )
+  t.deepEqual(intent, { type: 'cancel' })
+})
+
+test('a non-empty search query still wins Escape over ascend', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({ depth: 1, searchable: true, searchQuery: 'a' })
+  )
+  t.deepEqual(intent, { type: 'search-clear' })
+})
+
+test('ascend is not resolved in horizontal orientation', (t) => {
+  const intent = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({ depth: 1, orientation: 'horizontal', km: { cancel: true } })
+  )
+  t.deepEqual(intent, { type: 'cancel' })
 })
