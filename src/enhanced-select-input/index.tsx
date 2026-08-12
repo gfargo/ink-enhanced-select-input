@@ -45,6 +45,11 @@ export type Item<V> = {
    * `multiple` in v1, and is ignored entirely in horizontal orientation and
    * when `selectedIndex` (controlled highlight) is supplied. A `disabled`
    * item is never descendable, even with `children` set.
+   *
+   * In `searchable` mode, ←/→ are claimed by search-cursor movement instead
+   * of descend/ascend, so descending is Enter-only; ascending is Escape-only,
+   * and if there's a non-empty search query, the first Escape clears the
+   * query rather than ascending.
    */
   children?: Array<Item<V>>
 }

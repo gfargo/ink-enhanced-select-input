@@ -2533,6 +2533,75 @@ test.serial(
   }
 )
 
+test.serial(
+  'multiple mode does not descend, Enter/→ are inert for nesting and multi-select still works',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let confirmed: Array<Item<unknown>> | undefined
+    const { stdin } = render(
+      <HookHarness
+        multiple
+        items={nestedItems()}
+        onConfirm={(items) => {
+          confirmed = items
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(result?.selectedIndex, 0)
+
+    stdin.write(SPACE)
+    await waitFor(() => result?.checkedKeys.size === 1)
+
+    stdin.write(ENTER)
+    await waitFor(() => confirmed !== undefined)
+
+    t.is(result?.depth, 0)
+    t.is(confirmed?.length, 1)
+    t.is(confirmed?.[0]?.label, 'Fruits')
+  }
+)
+
+test.serial(
+  'controlled selectedIndex does not descend, Enter/→ are inert for nesting',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let selected: string | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        selectedIndex={0}
+        onIndexChange={() => undefined}
+        onSelect={(item) => {
+          selected = String(item.value)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(result?.selectedIndex, 0)
+
+    stdin.write(ENTER)
+    await waitFor(() => selected !== undefined)
+
+    t.is(result?.depth, 0)
+    t.is(selected, 'fruits')
+  }
+)
+
 // --- Home / End keys ---
 
 test.serial('Home key jumps to first enabled item', async (t) => {
@@ -2803,6 +2872,7 @@ type HookHarnessProperties = {
   readonly searchQuery?: string
   readonly searchDebounce?: number
   readonly onSelect?: (item: Item<unknown>) => void
+  readonly onConfirm?: (items: Array<Item<unknown>>) => void
   readonly onCancel?: () => void
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
