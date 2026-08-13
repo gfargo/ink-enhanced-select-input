@@ -126,14 +126,18 @@ test.serial(
 // --- Canary: pins down this environment's actual StrictMode behavior ---
 // The B8 tests above assert the *contract* (single onToggle per Space press)
 // but can't mechanically force a double-invoke to prove they'd fail against
-// a buggy implementation, because Ink's bundled react-reconciler does not
-// double-invoke functional state updaters the way React DOM does under
-// StrictMode. This canary makes that environment fact an explicit, CI-
-// checked assertion (rather than an unverified claim) so it's caught if a
-// future Ink/react-reconciler upgrade changes that behavior.
+// a buggy implementation on their own. This canary proves the double-invoke
+// is real in this environment: with the development build of react-reconciler
+// (what CI and any real StrictMode-enabled app run — see AVA's default
+// NODE_ENV=test), a functional setState updater fired from a StrictMode
+// component's effect genuinely runs twice per commit, exactly like React DOM.
+// That's precisely the hazard `toggle()` was fixed to avoid (computing the
+// next Set up front and calling onToggle once, before ever touching state)
+// rather than a theoretical concern — so this makes it an explicit, CI-
+// checked assertion instead of an unverified claim.
 
 test.serial(
-  'StrictMode canary: functional state updaters run once per commit in this environment',
+  'StrictMode canary: functional state updaters run twice per commit in this environment',
   async (t) => {
     let updaterCalls = 0
 
@@ -152,7 +156,7 @@ test.serial(
     renderStrict(<Canary />)
     await delay()
 
-    t.is(updaterCalls, 1)
+    t.is(updaterCalls, 2)
   }
 )
 
