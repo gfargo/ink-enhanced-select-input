@@ -25,6 +25,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
+- **Nested Items (Headless):** `children` on an `Item` lets Enter/→ drill into a submenu and Escape/← back out, with cursor memory — vertical, single-select only, no built-in breadcrumb UI.
 - **Theming:** Override the default component colors with a `theme` prop; automatically disabled when [`NO_COLOR`](https://no-color.org/) is set.
 
 ## Compatibility
@@ -556,18 +557,18 @@ Because Ink does not support event propagation stopping, every `useInput` handle
 />
 ```
 
-| `keyMap` field | Keys it controls                                                           | Default |
-| -------------- | -------------------------------------------------------------------------- | ------- |
-| `arrows`       | `↑` `↓` `←` `→`                                                            | `true`  |
-| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                  | `true`  |
-| `homeEnd`      | `Home` · `End`                                                             | `true`  |
-| `pageKeys`     | `Page Up` · `Page Down`                                                    | `true`  |
-| `cancel`       | `Escape` → `onCancel`                                                      | `true`  |
-| `select`       | `Enter` → `onSelect` / `onConfirm`                                         | `true`  |
-| `toggle`       | `Space` toggle in multi-select mode                                        | `true`  |
-| `bulk`         | `Ctrl+A`/`Ctrl+D`/`Ctrl+R` bulk select-all/none/invert (multi-select mode) | `true`  |
-| `hotkeys`      | Item `hotkey` chars (independent of `select`)                              | `true`  |
-| `search`       | Printable-character capture in searchable mode                             | `true`  |
+| `keyMap` field | Keys it controls                                                              | Default |
+| -------------- | ----------------------------------------------------------------------------- | ------- |
+| `arrows`       | `↑` `↓` `←` `→`; also `→`-descend / `←`-ascend for `item.children`            | `true`  |
+| `vimKeys`      | `j` `k` (vertical) · `h` `l` (horizontal)                                     | `true`  |
+| `homeEnd`      | `Home` · `End`                                                                | `true`  |
+| `pageKeys`     | `Page Up` · `Page Down`                                                       | `true`  |
+| `cancel`       | `Escape` → `onCancel`; also `Escape`-ascend out of `item.children`            | `true`  |
+| `select`       | `Enter` → `onSelect` / `onConfirm`; also `Enter`-descend into `item.children` | `true`  |
+| `toggle`       | `Space` toggle in multi-select mode                                           | `true`  |
+| `bulk`         | `Ctrl+A`/`Ctrl+D`/`Ctrl+R` bulk select-all/none/invert (multi-select mode)    | `true`  |
+| `hotkeys`      | Item `hotkey` chars (independent of `select`)                                 | `true`  |
+| `search`       | Printable-character capture in searchable mode                                | `true`  |
 
 Any field not supplied stays enabled. `isFocused={false}` remains the way to disable all input at once.
 
@@ -712,6 +713,85 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 
 These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
+### Nested Items (Headless)
+
+Give an item a non-empty `children` array to make it a submenu. In the headless hook, Enter or `→` on a highlighted item with `children` descends into that list instead of firing `onSelect`; Escape or `←` ascends back to the parent list, restoring the parent's highlighted index, pagination window, and search query:
+
+```tsx
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
+
+const items = [
+  {
+    label: 'Fruits',
+    value: 'fruits',
+    children: [
+      { label: 'Apple', value: 'apple' },
+      { label: 'Banana', value: 'banana' },
+    ],
+  },
+  { label: 'Vegetables', value: 'vegetables', children: [] },
+]
+
+function MyCustomMenu({ onSelect }) {
+  const { visibleItems, windowIndex, path, depth } = useEnhancedSelectInput({
+    items,
+    onSelect,
+  })
+
+  // path/depth let you render your own breadcrumb — there's no built-in one.
+  return (
+    <Box flexDirection="column">
+      {depth > 0 && (
+        <Text dimColor>{path.map((p) => p.label).join(' › ')}</Text>
+      )}
+      {visibleItems.map((item, i) => (
+        <Text
+          key={item.key ?? String(item.value)}
+          color={i === windowIndex ? 'cyan' : undefined}
+        >
+          {item.label}
+          {item.children?.length ? ' →' : ''}
+        </Text>
+      ))}
+    </Box>
+  )
+}
+```
+
+- `path` — the chain of parent items descended into to reach the current level, root-to-leaf; empty at the root.
+- `depth` — current nesting depth, `0` at the root, incrementing on each descend.
+
+Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. In development, giving any item a non-empty `children` while `orientation="horizontal"` logs a `console.warn` once (since `←`/`→` are already claimed by horizontal navigation, the submenu would otherwise be silently unreachable). A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends); search filters within the active level only, so descending resets the query and searching in a submenu never matches items from the parent list or sibling submenus. `keyMap.select`/`keyMap.cancel` gate Enter-descend/Escape-ascend the same way they gate `onSelect`/`onCancel`; `keyMap.arrows` independently gates `→`-descend/`←`-ascend, so e.g. `keyMap={{ select: false }}` still allows descending via `→`. The duplicate-`key` dev warning (see below) also scans the active submenu level on each descend, not just the root `items`. There's no built-in breadcrumb UI — render one yourself from `path`/`depth` as shown above.
+
+### Focus Management
+
+By default, focus is a manual boolean — the parent decides who's active by passing `isFocused`. Set `focusable` to opt a select into Ink's own focus manager instead, so multiple selects on one screen can Tab between each other without any hand-rolled focus state:
+
+```tsx
+import { Box } from 'ink'
+import { EnhancedSelectInput } from 'ink-enhanced-select-input'
+
+function App() {
+  return (
+    <Box flexDirection="column">
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        focusId="fruit"
+        items={fruitItems}
+      />
+      <EnhancedSelectInput focusable focusId="color" items={colorItems} />
+    </Box>
+  )
+}
+```
+
+Pressing Tab moves focus between the two selects; only the focused one responds to arrows/Enter/typing. `autoFocus` focuses a select on mount when nothing else is focused yet — set it on at most one instance. `focusId` lets a parent focus a specific select programmatically, via Ink's own `useFocusManager().focus(id)`.
+
+`isFocused` still works alongside `focusable` — `isFocused={false}` force-disables input and drops the component out of the Tab ring even if it's `autoFocus`ed, which is handy for conditionally excluding a select from the ring (e.g. while its data is loading). Omit `isFocused` in `focusable` mode and Ink's focus manager decides.
+
+`focusable` is a static/config-time prop — decide once whether a given select participates in Tab-cycling, rather than toggling it at runtime. The headless `useEnhancedSelectInput` hook is unaffected by any of this: it stays purely `isFocused`-driven, so headless consumers keep wiring up focus themselves.
+
 ## Props
 
 These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputProps<V>`). The individual render-component prop types (`IndicatorProps`, `ItemProps`, `GroupHeaderProps`, `SeparatorProps`) are documented in [Custom Components](#custom-components). Earlier `*Properties` names (`Properties`, `IndicatorProperties`, `ItemProperties`, `GroupHeaderProperties`, `SeparatorProperties`, `UseEnhancedSelectInputProperties`) are still exported as deprecated aliases for backward compatibility and will be removed in a future minor — prefer the `*Props` names above in new code.
@@ -719,7 +799,10 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | Prop                     | Type                                        | Default                       | Description                                                                                                                                                                                                                                                                    |
 | ------------------------ | ------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `items`                  | `Array<ItemOrSeparator<V>>`                 | _required_                    | List of selectable items, optionally interspersed with `{ type: 'separator' }` rows                                                                                                                                                                                            |
-| `isFocused`              | `boolean`                                   | `true`                        | Whether the component responds to input                                                                                                                                                                                                                                        |
+| `isFocused`              | `boolean`                                   | `true`                        | Whether the component responds to input. When `focusable` is set, this instead gates eligibility (`false` force-disables and drops out of the Tab ring; otherwise Ink's focus manager decides)                                                                                 |
+| `focusable`              | `boolean`                                   | `false`                       | Opt into Ink's focus manager (`useFocus`) instead of the manual `isFocused` boolean alone, so Tab can cycle between several selects. Treat as a static/config-time prop — see [Focus management](#focus-management)                                                            |
+| `autoFocus`              | `boolean`                                   | `false`                       | Focus this select on mount when nothing else is focused yet. Only meaningful when `focusable` is set                                                                                                                                                                           |
+| `focusId`                | `string`                                    | —                             | Stable id for Ink's focus manager, so a parent can call `useFocusManager().focus(id)`. Only meaningful when `focusable` is set                                                                                                                                                 |
 | `initialIndex`           | `number`                                    | —                             | Index of the initially highlighted item (uncontrolled — ignored once `selectedIndex` is set)                                                                                                                                                                                   |
 | `initialKey`             | `string`                                    | —                             | Highlight the item whose `key` (or `String(value)` fallback) matches at mount. Wins over `initialValue` and `initialIndex`. Initial-only                                                                                                                                       |
 | `initialValue`           | `V`                                         | —                             | Highlight the first item whose `value` matches (`===`) at mount. Wins over `initialIndex`, loses to `initialKey`. Initial-only                                                                                                                                                 |
@@ -784,6 +867,7 @@ type Item<V> = {
   description?: string // Rendered dimmed on its own line beneath the label
   hint?: string // Rendered dimmed to the right of the label
   disabledReason?: string // Rendered dimmed beside the label when `disabled` is true
+  children?: Item<V>[] // Submenu items — see [Nested Items](#nested-items-headless)
 }
 
 type SeparatorItem = {
@@ -801,6 +885,8 @@ type ItemOrSeparator<V> = Item<V> | SeparatorItem
 > `value` is an object.
 
 ## Keyboard Navigation
+
+> Upgrading from `v0.2.0`? See [`MIGRATION.md`](./MIGRATION.md) for the keyboard-behavior changes since then (Home/End, vim keys, `Escape`/`onCancel`, multi-select `Space`, hotkey precedence, `keyMap`).
 
 | Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
 | ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- |
@@ -851,6 +937,14 @@ yarn install
 | `yarn test`     | Build and run tests                          |
 | `yarn lint`     | Check formatting and lint                    |
 | `yarn lint:fix` | Auto-fix formatting and lint issues          |
+
+### Examples
+
+Runnable, single-feature demos live in [`examples/`](./examples/README.md) — one `.tsx` file per feature, no build step required:
+
+```bash
+node --loader ts-node/esm examples/01-vertical.tsx
+```
 
 ## Contributing
 

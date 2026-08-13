@@ -1,5 +1,5 @@
 import test from 'ava'
-import { Box, Text } from 'ink'
+import { Box, Text, useFocusManager, useInput } from 'ink'
 import { render } from 'ink-testing-library'
 import React from 'react'
 import {
@@ -1000,6 +1000,243 @@ test.serial('isFocused=false disables keyboard input', async (t) => {
   t.is(highlighted, 'A')
 })
 
+// --- focus manager integration (focusable/autoFocus/focusId) ---
+
+test.serial(
+  'not opted into focusable: Tab is inert, both selects stay independently active',
+  async (t) => {
+    const itemsA = [
+      { label: 'A1', value: 'a1' },
+      { label: 'A2', value: 'a2' },
+    ]
+    const itemsB = [
+      { label: 'B1', value: 'b1' },
+      { label: 'B2', value: 'b2' },
+    ]
+
+    let highlightedA = ''
+    let highlightedB = ''
+    const { stdin } = render(
+      <Box flexDirection="column">
+        <EnhancedSelectInput
+          items={itemsA}
+          onHighlight={(item) => {
+            highlightedA = item.label
+          }}
+        />
+        <EnhancedSelectInput
+          items={itemsB}
+          onHighlight={(item) => {
+            highlightedB = item.label
+          }}
+        />
+      </Box>
+    )
+
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B1')
+
+    // Neither select registered with Ink's focus manager, so Tab has no
+    // effect on either — both remain independently keyboard-active, as
+    // today (legacy behavior, `isFocused` defaults to true for both).
+    stdin.write(TAB)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A2')
+    t.is(highlightedB, 'B2')
+  }
+)
+
+test.serial(
+  'focusable + autoFocus focuses on mount without a manual isFocused',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        items={items}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'A')
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial('Tab cycles focus between two focusable selects', async (t) => {
+  const itemsA = [
+    { label: 'A1', value: 'a1' },
+    { label: 'A2', value: 'a2' },
+  ]
+  const itemsB = [
+    { label: 'B1', value: 'b1' },
+    { label: 'B2', value: 'b2' },
+  ]
+
+  let highlightedA = ''
+  let highlightedB = ''
+  const { stdin } = render(
+    <Box flexDirection="column">
+      <EnhancedSelectInput
+        focusable
+        autoFocus
+        items={itemsA}
+        onHighlight={(item) => {
+          highlightedA = item.label
+        }}
+      />
+      <EnhancedSelectInput
+        focusable
+        items={itemsB}
+        onHighlight={(item) => {
+          highlightedB = item.label
+        }}
+      />
+    </Box>
+  )
+
+  await delay()
+
+  // Only the auto-focused first select responds to arrow keys.
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlightedA, 'A2')
+  t.is(highlightedB, 'B1')
+
+  // Tab moves focus to the second select; the first stops responding.
+  stdin.write(TAB)
+  await delay()
+  stdin.write(ARROW_DOWN)
+  await delay()
+  t.is(highlightedA, 'A2')
+  t.is(highlightedB, 'B2')
+})
+
+test.serial(
+  'focusId lets a parent programmatically focus a select via useFocusManager',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    let highlightedFirst = ''
+    let highlightedSecond = ''
+
+    function Harness() {
+      const { focus } = useFocusManager()
+      useInput((input) => {
+        if (input === 'f') focus('second')
+      })
+
+      return (
+        <Box flexDirection="column">
+          <EnhancedSelectInput
+            focusable
+            autoFocus
+            focusId="first"
+            items={items}
+            onHighlight={(item) => {
+              highlightedFirst = item.label
+            }}
+          />
+          <EnhancedSelectInput
+            focusable
+            focusId="second"
+            items={items}
+            onHighlight={(item) => {
+              highlightedSecond = item.label
+            }}
+          />
+        </Box>
+      )
+    }
+
+    const { stdin } = render(<Harness />)
+    await delay()
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedFirst, 'B')
+    t.is(highlightedSecond, 'A')
+
+    stdin.write('f')
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedFirst, 'B')
+    t.is(highlightedSecond, 'B')
+  }
+)
+
+test.serial(
+  'focusable + isFocused=false force-disables input and drops out of the Tab ring',
+  async (t) => {
+    const itemsA = [
+      { label: 'A1', value: 'a1' },
+      { label: 'A2', value: 'a2' },
+    ]
+    const itemsB = [
+      { label: 'B1', value: 'b1' },
+      { label: 'B2', value: 'b2' },
+    ]
+
+    let highlightedA = ''
+    let highlightedB = ''
+    const { stdin } = render(
+      <Box flexDirection="column">
+        <EnhancedSelectInput
+          focusable
+          autoFocus
+          isFocused={false}
+          items={itemsA}
+          onHighlight={(item) => {
+            highlightedA = item.label
+          }}
+        />
+        <EnhancedSelectInput
+          focusable
+          items={itemsB}
+          onHighlight={(item) => {
+            highlightedB = item.label
+          }}
+        />
+      </Box>
+    )
+
+    await delay()
+    // Force-disabled even though autoFocus is set: arrow keys are a no-op.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B1')
+
+    // Dropped from the Tab ring: Tab moves straight to the second select
+    // (the only remaining focusable), not back to the disabled first one.
+    stdin.write(TAB)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlightedA, 'A1')
+    t.is(highlightedB, 'B2')
+  }
+)
+
 // --- limit prop pagination ---
 
 test.serial('limit restricts visible items', (t) => {
@@ -1885,6 +2122,702 @@ test.serial('Escape is a no-op when onCancel is not provided', async (t) => {
   t.is(highlighted, 'A')
 })
 
+// --- Nested navigation (Item.children) ---
+
+function nestedItems(): Array<Item<string>> {
+  return [
+    {
+      label: 'Fruits',
+      value: 'fruits',
+      children: [
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Cherry', value: 'cherry' },
+      ],
+    },
+    { label: 'Leaf', value: 'leaf' },
+  ]
+}
+
+test.serial('Enter descends into a parent item with children', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  let selected: string | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={nestedItems()}
+      onSelect={(item) => {
+        selected = String(item.value)
+      }}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await waitFor(() => result?.depth === 1)
+
+  t.is(result?.depth, 1)
+  t.is(labelOf(result?.filteredItems[0]), 'Apple')
+  t.is(result?.path.length, 1)
+  t.is(result?.path[0]?.label, 'Fruits')
+  t.is(selected, undefined)
+})
+
+test.serial('→ descends into a parent item with children', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={nestedItems()}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ARROW_RIGHT)
+  await waitFor(() => result?.depth === 1)
+
+  t.is(result?.depth, 1)
+  t.is(labelOf(result?.filteredItems[0]), 'Apple')
+})
+
+test.serial('leaf Enter fires onSelect and does not descend', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  let selected: string | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={nestedItems()}
+      initialIndex={1}
+      onSelect={(item) => {
+        selected = String(item.value)
+      }}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(labelOf(result?.selectedItem), 'Leaf')
+  stdin.write(ENTER)
+  await waitFor(() => selected !== undefined)
+
+  t.is(selected, 'leaf')
+  t.is(result?.depth, 0)
+})
+
+test.serial('Escape ascends back to the parent list', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={nestedItems()}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await waitFor(() => result?.depth === 1)
+
+  stdin.write(ESCAPE)
+  await waitFor(() => result?.depth === 0)
+
+  t.is(result?.depth, 0)
+  t.is(result?.path.length, 0)
+  t.is(labelOf(result?.filteredItems[0]), 'Fruits')
+})
+
+test.serial('← ascends back to the parent list', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={nestedItems()}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(ENTER)
+  await waitFor(() => result?.depth === 1)
+
+  stdin.write(ARROW_LEFT)
+  await waitFor(() => result?.depth === 0)
+
+  t.is(result?.depth, 0)
+})
+
+test.serial(
+  'Escape at the root still calls onCancel even when items have children',
+  async (t) => {
+    let cancelled = false
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        onCancel={() => {
+          cancelled = true
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ESCAPE)
+    await waitFor(() => cancelled)
+
+    t.true(cancelled)
+    t.is(result?.depth, 0)
+  }
+)
+
+test.serial(
+  'ascending restores the parent list highlight to where it was before descending',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      { label: 'Leaf 0', value: 'leaf-0' },
+      { label: 'Leaf 1', value: 'leaf-1' },
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: [
+          { label: 'Apple', value: 'apple' },
+          { label: 'Banana', value: 'banana' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Move the root highlight to index 2 ("Parent") before descending.
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 1)
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 2)
+
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.selectedIndex, 0)
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+
+    t.is(result?.selectedIndex, 2)
+    t.is(labelOf(result?.selectedItem), 'Parent')
+  }
+)
+
+test.serial(
+  'selection and pagination window reset to the top on descend',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: Array.from({ length: 5 }, (_, i) => ({
+          label: `Child ${i}`,
+          value: `child-${i}`,
+        })),
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.itemsAbove, 0)
+    t.is(result?.visibleItems.length, 2)
+    t.is(labelOf(result?.visibleItems[0]), 'Child 0')
+  }
+)
+
+test.serial(
+  'pagination window restores on ascend after navigating deep into the parent list',
+  async (t) => {
+    const items: Array<Item<string>> = Array.from({ length: 6 }, (_, i) =>
+      i === 5
+        ? {
+            label: 'Parent',
+            value: 'parent',
+            children: [
+              { label: 'A', value: 'a' },
+              { label: 'B', value: 'b' },
+            ],
+          }
+        : { label: `Root ${i}`, value: `root-${i}` }
+    )
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        initialIndex={5}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.rotateIndex, 4)
+
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.rotateIndex, 0)
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.selectedIndex, 5)
+  }
+)
+
+test.serial(
+  'pagination window restores on ascend after navigating deep into the parent list (scroll mode)',
+  async (t) => {
+    const items: Array<Item<string>> = Array.from({ length: 6 }, (_, i) =>
+      i === 5
+        ? {
+            label: 'Parent',
+            value: 'parent',
+            children: [
+              { label: 'A', value: 'a' },
+              { label: 'B', value: 'b' },
+              { label: 'C', value: 'c' },
+              { label: 'D', value: 'd' },
+            ],
+          }
+        : { label: `Root ${i}`, value: `root-${i}` }
+    )
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        paginationMode="scroll"
+        initialIndex={5}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Root-level window follows the cursor to the bottom row: [Root 4, Parent].
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.windowIndex, 1)
+
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.rotateIndex, 0)
+    t.is(result?.selectedIndex, 0)
+
+    // Scroll the child level's own window before ascending, to confirm
+    // ascend restores the parent's saved window rather than the child's.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.rotateIndex === 1)
+    t.is(result?.selectedIndex, 2)
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.windowIndex, 1)
+    t.is(result?.selectedIndex, 5)
+  }
+)
+
+test.serial('disabled parent items are not descendable', async (t) => {
+  const items: Array<Item<string>> = [
+    {
+      label: 'Parent',
+      value: 'parent',
+      disabled: true,
+      children: [{ label: 'Child', value: 'child' }],
+    },
+    { label: 'Other', value: 'other' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  let selected: string | undefined
+  const { stdin } = render(
+    <HookHarness
+      items={items}
+      onSelect={(item) => {
+        selected = String(item.value)
+      }}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(labelOf(result?.selectedItem), 'Other')
+  stdin.write(ENTER)
+  await delay()
+
+  t.is(result?.depth, 0)
+  t.is(selected, 'other')
+})
+
+test.serial(
+  'a child list with its own groups and limit paginates correctly',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: [
+          { label: 'A1', value: 'a1', group: 'Group A' },
+          { label: 'A2', value: 'a2', group: 'Group A' },
+          { label: 'B1', value: 'b1', group: 'Group B' },
+          { label: 'B2', value: 'b2', group: 'Group B' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    // Page 1 (limit 3): the "Group A" header (1 row) + A1 + A2 fill the window;
+    // B1/B2 (a new group, needing its own header) don't fit and start page 2.
+    t.is(result?.visibleItems.length, 2)
+    t.is(labelOf(result?.visibleItems[0]), 'A1')
+    t.is(labelOf(result?.visibleItems[1]), 'A2')
+    t.is(result?.itemsBelow, 2)
+
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 1)
+    t.is(labelOf(result?.selectedItem), 'A2')
+  }
+)
+
+test.serial('search query resets on descend and on ascend', async (t) => {
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  const { stdin } = render(
+    <HookHarness
+      searchable
+      items={nestedItems()}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write('fr')
+  await waitFor(() => result?.searchQuery === 'fr')
+
+  stdin.write(ENTER)
+  await waitFor(() => result?.depth === 1)
+  t.is(result?.searchQuery, '')
+
+  stdin.write('ch')
+  await waitFor(() => result?.searchQuery === 'ch')
+
+  stdin.write(ESCAPE)
+  await waitFor(() => result?.depth === 0)
+  t.is(result?.searchQuery, '')
+})
+
+test.serial(
+  'horizontal orientation does not descend even when items have children',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        orientation="horizontal"
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await waitFor(() => result?.selectedIndex === 1)
+
+    t.is(result?.depth, 0)
+    t.is(labelOf(result?.selectedItem), 'Leaf')
+  }
+)
+
+test.serial(
+  'multiple mode does not descend, Enter/→ are inert for nesting and multi-select still works',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let confirmed: Array<Item<unknown>> | undefined
+    const { stdin } = render(
+      <HookHarness
+        multiple
+        items={nestedItems()}
+        onConfirm={(items) => {
+          confirmed = items
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(result?.selectedIndex, 0)
+
+    stdin.write(SPACE)
+    await waitFor(() => result?.checkedKeys.size === 1)
+
+    stdin.write(ENTER)
+    await waitFor(() => confirmed !== undefined)
+
+    t.is(result?.depth, 0)
+    t.is(confirmed?.length, 1)
+    t.is(confirmed?.[0]?.label, 'Fruits')
+  }
+)
+
+test.serial(
+  'controlled selectedIndex does not descend, Enter/→ are inert for nesting',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let selected: string | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        selectedIndex={0}
+        onIndexChange={() => undefined}
+        onSelect={(item) => {
+          selected = String(item.value)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(result?.selectedIndex, 0)
+
+    stdin.write(ENTER)
+    await waitFor(() => selected !== undefined)
+
+    t.is(result?.depth, 0)
+    t.is(selected, 'fruits')
+  }
+)
+
+test.serial(
+  'keyMap: select:false disables Enter-descend but → still descends',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let selected: string | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        keyMap={{ select: false }}
+        onSelect={(item) => {
+          selected = String(item.value)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(result?.depth, 0)
+    t.is(selected, undefined)
+
+    stdin.write(ARROW_RIGHT)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.depth, 1)
+  }
+)
+
+test.serial(
+  'keyMap: cancel:false disables Escape-ascend but ← still ascends',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let cancelled = false
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        keyMap={{ cancel: false }}
+        onCancel={() => {
+          cancelled = true
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write(ESCAPE)
+    await delay()
+    t.is(result?.depth, 1)
+    t.false(cancelled)
+
+    stdin.write(ARROW_LEFT)
+    await waitFor(() => result?.depth === 0)
+    t.is(result?.depth, 0)
+  }
+)
+
+test.serial(
+  'descend then search filters only within the active child level, and Escape clears the query before ascending',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={nestedItems()}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write('ba')
+    await waitFor(() => result?.searchQuery === 'ba')
+
+    t.is(result?.filteredItems.length, 1)
+    t.is(labelOf(result?.filteredItems[0]), 'Banana')
+
+    // First Escape clears the query and stays at depth 1...
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.searchQuery === '')
+    t.is(result?.depth, 1)
+
+    // ...second Escape ascends back to the parent list.
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+    t.is(result?.depth, 0)
+  }
+)
+
+test.serial(
+  'changing limit while nested snaps rotateIndex for the active (non-root) level',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: Array.from({ length: 6 }, (_, i) => ({
+          label: `Child ${i}`,
+          value: `child-${i}`,
+        })),
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin, rerender } = render(
+      <HookHarness
+        items={items}
+        limit={2}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    for (let index = 0; index < 5; index++) {
+      stdin.write(ARROW_DOWN)
+      // eslint-disable-next-line no-await-in-loop
+      await delay()
+    }
+
+    t.is(result?.selectedIndex, 5)
+    t.is(result?.rotateIndex, 4)
+    t.is(result?.visibleItems.length, 2)
+
+    rerender(
+      <HookHarness
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    t.is(result?.depth, 1)
+    t.is(result?.selectedIndex, 5)
+    t.is(result?.rotateIndex, 3)
+    t.is(result?.visibleItems.length, 3)
+    t.is(result?.windowIndex, 2)
+    t.is(labelOf(result?.visibleItems[0]), 'Child 3')
+  }
+)
+
 // --- Home / End keys ---
 
 test.serial('Home key jumps to first enabled item', async (t) => {
@@ -2154,6 +3087,9 @@ type HookHarnessProperties = {
   readonly onSearchChange?: (query: string) => void
   readonly searchQuery?: string
   readonly searchDebounce?: number
+  readonly onSelect?: (item: Item<unknown>) => void
+  readonly onConfirm?: (items: Array<Item<unknown>>) => void
+  readonly onCancel?: () => void
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -3560,6 +4496,54 @@ test.serial(
   }
 )
 
+test.serial(
+  'warns in development when a submenu (Item.children) has duplicate keys',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      const { stdin } = render(
+        <EnhancedSelectInput
+          items={[
+            {
+              label: 'Parent',
+              value: { id: 0 },
+              children: [
+                { label: 'A', value: { id: 1 } },
+                { label: 'B', value: { id: 2 } },
+              ],
+            },
+          ]}
+        />
+      )
+
+      await delay()
+      // No duplicates at the root — the submenu itself is a single item.
+      t.false(warnings.some((w) => w.includes('Duplicate item keys')))
+
+      stdin.write(ENTER)
+      await delay()
+
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('Duplicate item keys')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
 // --- #44: item.indicator + multiple warning ---
 
 // These two tests stub the global console.warn — run them serially so they
@@ -3690,6 +4674,70 @@ test.serial(
     const frame = lastFrame()!
     t.true(frame.includes('[ ]'))
     t.false(frame.includes('★'))
+  }
+)
+
+// --- horizontal orientation + Item.children warning ---
+
+// These two tests stub the global console.warn — run them serially so they
+// don't race against each other (or other console.warn-stubbing tests) when
+// AVA executes the file's tests concurrently.
+test.serial(
+  'warns in development when children is combined with horizontal orientation',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput orientation="horizontal" items={nestedItems()} />
+      )
+
+      await delay()
+      t.true(warnings.some((w) => w.includes('[ink-enhanced-select-input]')))
+      t.true(warnings.some((w) => w.includes('item.children is ignored')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'no children/horizontal warning in vertical orientation',
+  async (t) => {
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(<EnhancedSelectInput items={nestedItems()} />)
+
+      await delay()
+      t.false(warnings.some((w) => w.includes('item.children is ignored')))
+    } finally {
+      console.warn = originalWarn
+
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
   }
 )
 
