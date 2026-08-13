@@ -85,6 +85,52 @@ function groupOf<V>(item: ItemOrSeparator<V> | undefined): string | undefined {
 }
 
 /**
+ * Stably reorders `items` so groups appear in the order given by `groups`.
+ * Groups present on items but not listed in `groups` are clustered together
+ * after all listed groups, in first-appearance order; ungrouped items
+ * (including separators, which have no group) are appended last. Intra-group
+ * relative order from `items` is preserved. Returns `items` unchanged (same
+ * reference) when `groups` is undefined or empty.
+ */
+export function reorderByGroups<V>(
+  items: Array<ItemOrSeparator<V>>,
+  groups: string[] | undefined
+): Array<ItemOrSeparator<V>> {
+  if (!groups || groups.length === 0) return items
+
+  const rank = new Map<string, number>()
+  for (const name of groups) {
+    if (!rank.has(name)) rank.set(name, rank.size)
+  }
+
+  let nextRank = rank.size
+  for (const item of items) {
+    const group = groupOf(item)
+    if (group !== undefined && !rank.has(group)) {
+      rank.set(group, nextRank)
+      nextRank += 1
+    }
+  }
+
+  const buckets: Array<Array<ItemOrSeparator<V>>> = Array.from(
+    { length: nextRank },
+    () => []
+  )
+  const ungrouped: Array<ItemOrSeparator<V>> = []
+
+  for (const item of items) {
+    const group = groupOf(item)
+    if (group === undefined) {
+      ungrouped.push(item)
+    } else {
+      buckets[rank.get(group)!]!.push(item)
+    }
+  }
+
+  return [...buckets.flat(), ...ungrouped]
+}
+
+/**
  * Fine-grained control over which key groups the component reacts to.
  *
  * Because Ink does not support event propagation stopping, every `useInput`
@@ -149,6 +195,19 @@ export type MatchMode = 'includes' | 'fuzzy'
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
 export type UseEnhancedSelectInputProps<V> = {
   readonly items: Array<ItemOrSeparator<V>>
+  /**
+   * Fixes the display/navigation order of item groups (see `Item.group`)
+   * instead of relying on `items` array order. Groups appear in the order
+   * listed here; groups present on items but not listed here fall after all
+   * listed groups (in first-appearance order among themselves); ungrouped
+   * items are placed last. The reorder is stable — items keep their
+   * relative order within a group, and separators (which have no group) are
+   * treated as ungrouped and moved to the end alongside them. Applies at
+   * every nesting depth — the same `groups` order reorders a submenu's
+   * `children` when you descend into it, not just the root `items`. Omit to
+   * keep the default behavior of ordering by first appearance in `items`.
+   */
+  readonly groups?: string[]
   readonly isFocused?: boolean
   /**
    * Index of the item to highlight at mount. Ignored after mount — like
@@ -1926,6 +1985,7 @@ function computeFilteredItems<V>(
  */
 export function useEnhancedSelectInput<V>({
   items,
+  groups,
   isFocused = true,
   initialIndex: rawInitialIndex,
   initialKey,
@@ -2035,7 +2095,7 @@ export function useEnhancedSelectInput<V>({
     {
       items,
       selectedIndex: resolveInitialSelection(
-        computeFilteredItems(items, {
+        computeFilteredItems(reorderByGroups(items, groups), {
           searchable,
           isQueryControlled,
           searchQuery,
@@ -2070,6 +2130,14 @@ export function useEnhancedSelectInput<V>({
     })
   }
 
+  // Stably reorders items so groups appear in `groups` order, before any
+  // filtering/pagination happens. Memoized separately so an unset `groups`
+  // returns `activeItems` verbatim (same reference), avoiding churn.
+  const orderedItems = useMemo(
+    () => reorderByGroups(activeItems, groups),
+    [activeItems, groups]
+  )
+
   // Filter items based on search query. Memoized so the reference is stable
   // across renders that don't actually change the item set — downstream
   // effects depend on this reference to distinguish "items changed" from
@@ -2078,7 +2146,7 @@ export function useEnhancedSelectInput<V>({
   // already-filtered `items` array, so filtering here would double-filter.
   const filteredItems = useMemo<Array<ItemOrSeparator<V>>>(
     () =>
-      computeFilteredItems(activeItems, {
+      computeFilteredItems(orderedItems, {
         searchable,
         isQueryControlled,
         searchQuery,
@@ -2087,7 +2155,7 @@ export function useEnhancedSelectInput<V>({
         matchMode,
       }),
     [
-      activeItems,
+      orderedItems,
       searchable,
       isQueryControlled,
       searchQuery,
@@ -2880,9 +2948,12 @@ export function useEnhancedSelectInput<V>({
             const childFrame: Level<V> = {
               parent: intent.item,
               items: children,
-              selectedIndex: resolveInitialSelection(children, {
-                autoSelectFirstEnabled: true,
-              }),
+              selectedIndex: resolveInitialSelection(
+                reorderByGroups(children, groups),
+                {
+                  autoSelectFirstEnabled: true,
+                }
+              ),
               rotateIndex: 0,
             }
             return [...previous.slice(0, -1), updatedCurrentTop, childFrame]
