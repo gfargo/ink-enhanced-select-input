@@ -207,6 +207,7 @@ export function Storybook() {
           <EnhancedSelectInput
             multiple
             showSelectionCount
+            showHelp
             orientation={orientation}
             defaultSelectedKeys={['ts']}
             minSelections={1}
