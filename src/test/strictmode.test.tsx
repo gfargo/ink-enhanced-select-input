@@ -123,6 +123,39 @@ test.serial(
   }
 )
 
+// --- Canary: pins down this environment's actual StrictMode behavior ---
+// The B8 tests above assert the *contract* (single onToggle per Space press)
+// but can't mechanically force a double-invoke to prove they'd fail against
+// a buggy implementation, because Ink's bundled react-reconciler does not
+// double-invoke functional state updaters the way React DOM does under
+// StrictMode. This canary makes that environment fact an explicit, CI-
+// checked assertion (rather than an unverified claim) so it's caught if a
+// future Ink/react-reconciler upgrade changes that behavior.
+
+test.serial(
+  'StrictMode canary: functional state updaters run once per commit in this environment',
+  async (t) => {
+    let updaterCalls = 0
+
+    function Canary() {
+      const [count, setCount] = React.useState(0)
+      void count
+      React.useEffect(() => {
+        setCount((previous) => {
+          updaterCalls++
+          return previous + 1
+        })
+      }, [])
+      return null
+    }
+
+    renderStrict(<Canary />)
+    await delay()
+
+    t.is(updaterCalls, 1)
+  }
+)
+
 // --- Core navigation/selection under StrictMode ---
 
 test.serial(
