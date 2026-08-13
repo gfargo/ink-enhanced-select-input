@@ -8,6 +8,14 @@
 
 An enhanced, customizable select input component for [Ink](https://github.com/vadimdemedes/ink) that supports both vertical and horizontal orientations, hotkeys, and flexible rendering. Ideal for building rich, interactive CLI apps with React.
 
+<p align="center">
+  <img src="./assets/demos/searchable.gif" alt="A terminal list of languages; typing 'ja' filters it to JavaScript and Java, then Enter selects Java" width="720">
+</p>
+
+<p align="center">
+  <em>Every demo below is recorded from a real file in <a href="./examples">examples/</a> — see <a href="./demos">demos/</a>.</em>
+</p>
+
 ## Features
 
 - **Orientation:** Choose between vertical or horizontal layouts.
@@ -86,9 +94,13 @@ render(<Demo />)
 />
 ```
 
+![Four options laid out on a single row, with the first highlighted and hotkeys shown beside each label](./assets/demos/horizontal.png)
+
 ### Multi-select
 
 Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
+
+![Space toggling React and Ink on alongside a pre-checked TypeScript, the counter reaching 3 selected/3, then Enter confirming all three](./assets/demos/multi-select.gif)
 
 > **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
 
@@ -229,6 +241,10 @@ Set `limit` to cap how many rows are visible at once. By default (`paginationMod
 
 Set `paginationMode="scroll"` for a cursor-following viewport instead: the window advances one row at a time as the cursor reaches its edge, keeping the highlight where the eye already is — matching `ink-select-input`, `fzf`, and `gum`.
 
+![Three visible rows bracketed by dimmed scroll indicators reading '3 more' above and '2 more' below](./assets/demos/scroll-indicators.png)
+
+<sub>`limit={3}` with `showScrollIndicators` — the ▲/▼ rows count what's hidden.</sub>
+
 ```tsx
 <EnhancedSelectInput items={items} limit={5} paginationMode="scroll" />
 ```
@@ -253,6 +269,8 @@ Home/End always land on a sane window — Home scrolls to the start of the list,
 ### Grouped Items
 
 Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
+
+![A list split under two dimmed section headers, Languages above TypeScript, Rust and Go, and Frameworks above React and Ink](./assets/demos/groups.png)
 
 ```tsx
 <EnhancedSelectInput
@@ -295,6 +313,8 @@ You can provide a custom header renderer via `groupHeaderComponent`:
 ### Descriptions, Hints & Disabled Reasons
 
 Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
+
+![Deploy to production with a description line beneath it, Open file with a Ctrl+O hint, and a dimmed Premium feature row reading 'Upgrade to unlock'](./assets/demos/descriptions.png)
 
 ```tsx
 <EnhancedSelectInput
@@ -346,6 +366,8 @@ Provide a custom separator renderer via `separatorComponent`:
 ### Searchable Mode
 
 Enable inline filtering with the `searchable` prop. Printable characters build a search query that filters items by label (case-insensitive substring match). A search input line renders above the item list.
+
+![A terminal list of languages; typing 'ja' filters it to JavaScript and Java, then Enter selects Java](./assets/demos/searchable.gif)
 
 ```tsx
 <EnhancedSelectInput
@@ -735,6 +757,10 @@ const items = [
 ;<EnhancedSelectInput items={items} onSelect={(item) => console.log(item)} />
 ```
 
+![A category menu; Enter opens a submenu under a Maintenance header, Escape returns to the categories, and a different category is opened and selected](./assets/demos/nested-menus.gif)
+
+<sub>Drill-down and Escape-to-go-back. This recording is [`examples/recipes/nested-menus.tsx`](./examples/recipes/nested-menus.tsx), which builds the same feel by swapping the parent menu's items in state rather than using `children` — reach for that when each level needs its own props.</sub>
+
 Descending into "Fruits" renders a `Fruits` breadcrumb line above the list (default component joins `path` labels with `' › '`). The breadcrumb is:
 
 - Shown by default whenever `depth > 0`; set `showBreadcrumb={false}` to hide it.
@@ -916,6 +942,8 @@ type ItemOrSeparator<V> = Item<V> | SeparatorItem
 | Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | `Enter` / `→`    | `Escape` / `←`  |
 | Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | —                | —               |
 
+![A menu of four options each showing a dimmed hotkey; pressing 's' selects the Searchable entry immediately without navigating to it](./assets/demos/hotkeys.gif)
+
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 
 Nesting (`children` on an item — see [Nested Items](#nested-items)) only applies in vertical, single-select, uncontrolled-highlight mode; `Enter`/`→` descend into a parent item's `children` and `Escape`/`←` ascend back out.
@@ -970,6 +998,20 @@ Runnable, single-feature demos live in [`examples/`](./examples/README.md) — o
 ```bash
 node --loader ts-node/esm examples/01-vertical.tsx
 ```
+
+### Demo assets
+
+The GIFs and screenshots throughout this README are recorded from those same
+example files with [VHS](https://github.com/charmbracelet/vhs), so they can't
+drift away from what the component actually does. To regenerate them after a
+behavior change:
+
+```bash
+brew install vhs gifsicle
+./demos/capture.sh                 # or: ./demos/capture.sh searchable
+```
+
+See [`demos/`](./demos/README.md) for how the tapes are put together.
 
 ## Contributing
 
