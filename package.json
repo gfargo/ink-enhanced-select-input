@@ -19,7 +19,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.20"
   },
   "packageManager": "yarn@1.22.22",
   "scripts": {
@@ -47,7 +47,7 @@
     "react": ">=19.0.0"
   },
   "devDependencies": {
-    "@ava/typescript": "^6.0.0",
+    "@ava/typescript": "^7.0.0",
     "@types/node": "^22.8.2",
     "@types/react": "^19.2.0",
     "ava": "^6.2.0",
