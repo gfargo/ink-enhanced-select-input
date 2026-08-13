@@ -7,6 +7,17 @@ Every capture drives an actual example file, so the demos can't quietly drift
 away from the component's real behavior — if an example changes, re-running the
 capture shows it.
 
+> [!TIP]
+> The methodology behind this setup is packaged as a reusable skill:
+> [**`terminal:vhs-cli-demos`**](https://github.com/gfargo/skills#terminalvhs-cli-demos)
+> in [gfargo/skills](https://github.com/gfargo/skills). It covers tape authoring,
+> deterministic captures, lossless GIF optimization, and building a repeatable
+> capture pipeline — everything documented below, minus the trial and error.
+>
+> ```bash
+> npx skills add gfargo/skills --skill vhs-cli-demos
+> ```
+
 ## Regenerating
 
 ```bash
