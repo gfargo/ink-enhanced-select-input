@@ -147,7 +147,6 @@ export type KeyMap = {
 export type MatchMode = 'includes' | 'fuzzy'
 
 /** Props accepted by the useEnhancedSelectInput hook (all behaviour, no rendering). */
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type UseEnhancedSelectInputProps<V> = {
   readonly items: Array<ItemOrSeparator<V>>
   readonly isFocused?: boolean
@@ -398,7 +397,6 @@ type ThemeColors = {
 type ResolvedTheme = ThemeColors & { readonly dim: boolean }
 
 /** Full component props — hook props plus rendering customisation. */
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
   readonly indicatorComponent?: FC<IndicatorProps>
   readonly itemComponent?: FC<ItemProps>
@@ -508,7 +506,6 @@ export type LoadingProperties = {
  */
 export type Properties<V> = EnhancedSelectInputProps<V>
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type IndicatorProps = {
   readonly isSelected: boolean
   /** True when the item is checked in multi-select mode. Undefined in single-select mode. */
@@ -534,7 +531,6 @@ export type IndicatorProps = {
  */
 export type IndicatorProperties = IndicatorProps
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type ItemProps = {
   readonly isSelected: boolean
   readonly label: string
@@ -566,7 +562,6 @@ export type ItemProps = {
  */
 export type ItemProperties = ItemProps
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type GroupHeaderProps = {
   readonly label: string
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
@@ -579,7 +574,6 @@ export type GroupHeaderProps = {
  */
 export type GroupHeaderProperties = GroupHeaderProps
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type BreadcrumbProps = {
   /**
    * The chain of parent items descended into to reach the current level,
@@ -596,7 +590,6 @@ export type BreadcrumbProps = {
  */
 export type BreadcrumbProperties = BreadcrumbProps
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 export type SeparatorProps = Record<string, unknown>
 
 /**

@@ -268,7 +268,7 @@ Group items under section headers by setting the `group` field. Items sharing th
 
 Renders:
 
-```
+```text
 ── Recent ──
 > Option A
   Option B
@@ -358,7 +358,7 @@ Enable inline filtering with the `searchable` prop. Printable characters build a
 
 Renders:
 
-```
+```text
 / Filter options...
 > Option A
   Option B
@@ -367,7 +367,7 @@ Renders:
 
 When typing:
 
-```
+```text
 / app
 > Apple
   Pineapple
