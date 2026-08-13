@@ -10,6 +10,7 @@ import {
   useEnhancedSelectInput,
   computePageStarts,
   isSeparator,
+  reorderByGroups,
   type Item,
   type ItemOrSeparator,
   type ItemProperties,
@@ -5419,6 +5420,177 @@ test.serial('group headers with showScrollIndicators', (t) => {
   t.true(frame.includes('── First ──'))
   t.true(frame.includes('▼'))
   t.true(frame.includes('3 more'))
+})
+
+// --- Explicit groups ordering ---
+
+test.serial(
+  'groups prop reorders groups regardless of items array order',
+  (t) => {
+    const items = [
+      { label: 'B1', value: 'b1', group: 'B' },
+      { label: 'A1', value: 'a1', group: 'A' },
+      { label: 'B2', value: 'b2', group: 'B' },
+      { label: 'A2', value: 'a2', group: 'A' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} groups={['A', 'B']} />
+    )
+
+    const frame = lastFrame()!
+    const aHeaderIndex = frame.indexOf('── A ──')
+    const bHeaderIndex = frame.indexOf('── B ──')
+    const a1Index = frame.indexOf('A1')
+    const a2Index = frame.indexOf('A2')
+    const b1Index = frame.indexOf('B1')
+    const b2Index = frame.indexOf('B2')
+
+    t.true(aHeaderIndex < bHeaderIndex)
+    t.true(aHeaderIndex < a1Index)
+    t.true(a1Index < a2Index)
+    t.true(a2Index < bHeaderIndex)
+    t.true(bHeaderIndex < b1Index)
+    t.true(b1Index < b2Index)
+  }
+)
+
+test.serial(
+  'groups prop navigates in the configured order, not items order',
+  async (t) => {
+    const items = [
+      { label: 'B1', value: 'b1', group: 'B' },
+      { label: 'A1', value: 'a1', group: 'A' },
+    ]
+
+    const highlighted: string[] = []
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        groups={['A', 'B']}
+        onHighlight={(item) => {
+          highlighted.push(item.label)
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    t.deepEqual(highlighted, ['A1', 'B1'])
+  }
+)
+
+test.serial(
+  'groups not listed in the groups prop fall after listed groups',
+  (t) => {
+    const items = [
+      { label: 'C1', value: 'c1', group: 'C' },
+      { label: 'A1', value: 'a1', group: 'A' },
+      { label: 'B1', value: 'b1', group: 'B' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} groups={['A']} />
+    )
+
+    const frame = lastFrame()!
+    const aHeaderIndex = frame.indexOf('── A ──')
+    const cHeaderIndex = frame.indexOf('── C ──')
+    const bHeaderIndex = frame.indexOf('── B ──')
+
+    // A (listed) comes first; C and B (unlisted) follow in their
+    // first-appearance order from `items`.
+    t.true(aHeaderIndex < cHeaderIndex)
+    t.true(cHeaderIndex < bHeaderIndex)
+  }
+)
+
+test.serial('ungrouped items are placed deterministically last', (t) => {
+  const items = [
+    { label: 'Ungrouped', value: 'u' },
+    { label: 'A1', value: 'a1', group: 'A' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput items={items} groups={['A']} />
+  )
+
+  const frame = lastFrame()!
+  const aHeaderIndex = frame.indexOf('── A ──')
+  const ungroupedIndex = frame.indexOf('Ungrouped')
+
+  t.true(aHeaderIndex < ungroupedIndex)
+})
+
+test.serial(
+  'groups prop reorder is stable — intra-group order is preserved',
+  (t) => {
+    const items = [
+      { label: 'A2', value: 'a2', group: 'A' },
+      { label: 'A1', value: 'a1', group: 'A' },
+    ]
+
+    const highlighted: string[] = []
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        groups={['A']}
+        onHighlight={(item) => {
+          highlighted.push(item.label)
+        }}
+      />
+    )
+
+    const frame = lastFrame()!
+    const a2Index = frame.indexOf('A2')
+    const a1Index = frame.indexOf('A1')
+    // Authored order (A2 before A1) is preserved within the group.
+    t.true(a2Index < a1Index)
+    t.deepEqual(highlighted, ['A2'])
+  }
+)
+
+test.serial('omitting groups renders identically to items order', (t) => {
+  const items = [
+    { label: 'B1', value: 'b1', group: 'B' },
+    { label: 'A1', value: 'a1', group: 'A' },
+  ]
+
+  const withoutGroups = render(<EnhancedSelectInput items={items} />)
+  const bIndex = withoutGroups.lastFrame()!.indexOf('── B ──')
+  const aIndex = withoutGroups.lastFrame()!.indexOf('── A ──')
+
+  // Default (no `groups` prop) keeps items-array order — B before A.
+  t.true(bIndex < aIndex)
+})
+
+test('reorderByGroups returns items unchanged when groups is undefined or empty', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    { label: 'B', value: 'b', group: 'B' },
+    { label: 'A', value: 'a', group: 'A' },
+  ]
+
+  t.is(reorderByGroups(items, undefined), items)
+  t.is(reorderByGroups(items, []), items)
+})
+
+test('reorderByGroups clusters unlisted groups after listed ones and ungrouped items last', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    { label: 'Ungrouped', value: 'u' },
+    { label: 'C1', value: 'c1', group: 'C' },
+    { label: 'A1', value: 'a1', group: 'A' },
+    { label: 'A2', value: 'a2', group: 'A' },
+    { label: 'B1', value: 'b1', group: 'B' },
+  ]
+
+  const result = reorderByGroups(items, ['B', 'A'])
+
+  t.deepEqual(
+    result.map((item) => (isSeparator(item) ? undefined : item.label)),
+    ['B1', 'A1', 'A2', 'C1', 'Ungrouped']
+  )
 })
 
 // --- B9: group headers must count against limit ---
