@@ -30,10 +30,10 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 
 ## Compatibility
 
-| Dependency | Ink 6 | Ink 7   |
-| ---------- | ----- | ------- |
-| Node.js    | >= 20 | >= 22   |
-| React      | >= 19 | >= 19.2 |
+| Dependency | Ink 6    | Ink 7    |
+| ---------- | -------- | -------- |
+| Node.js    | >= 22.20 | >= 22.20 |
+| React      | >= 19    | >= 19.2  |
 
 > For Ink 5 / React 18 support, use `ink-enhanced-select-input@0.2.0`.
 

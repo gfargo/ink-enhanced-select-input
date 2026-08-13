@@ -12,11 +12,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - node-version: 20
-            ink: '6'
           - node-version: 22
             ink: '6'
           - node-version: 22
+            ink: '7'
+          - node-version: 24
+            ink: '6'
+          - node-version: 24
             ink: '7'
     steps:
       - uses: actions/checkout@v7
