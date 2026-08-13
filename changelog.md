@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.2.1...v1.3.0) (2026-08-13)
+
+
+### 🌟 New Features
+
+* **enhanced-select-input:** add showHelp auto-generated keybinding footer ([#148](https://github.com/gfargo/ink-enhanced-select-input/issues/148)) ([201e63f](https://github.com/gfargo/ink-enhanced-select-input/commit/201e63fc0731e11331d1a0bb5ac6070d7421ce7e))
+* **enhanced-select-input:** harden nested-menu interaction points ([#153](https://github.com/gfargo/ink-enhanced-select-input/issues/153)) ([64fc318](https://github.com/gfargo/ink-enhanced-select-input/commit/64fc318f39cf4bbe768763e46afa9e894391894d))
+* **enhanced-select-input:** nested item data model + headless navigation stack ([#151](https://github.com/gfargo/ink-enhanced-select-input/issues/151)) ([0f54f90](https://github.com/gfargo/ink-enhanced-select-input/commit/0f54f90775756f78b2667188b8bd87675179a747))
+* **enhanced-select-input:** opt-in Ink focus-manager integration ([#146](https://github.com/gfargo/ink-enhanced-select-input/issues/146)) ([3f54f3d](https://github.com/gfargo/ink-enhanced-select-input/commit/3f54f3d6de2c4b2b68d9f6f5c978d01fabb62df6))
+* **enhanced-select-input:** render breadcrumb UI above the item list ([#154](https://github.com/gfargo/ink-enhanced-select-input/issues/154)) ([3a67a28](https://github.com/gfargo/ink-enhanced-select-input/commit/3a67a28d608e2bf2cab5ae988b485cd094ce44c6))
+
+
+### 📝 Documentation
+
+* add examples/ directory with one runnable file per feature ([#150](https://github.com/gfargo/ink-enhanced-select-input/issues/150)) ([0b82778](https://github.com/gfargo/ink-enhanced-select-input/commit/0b8277804d926de75015142799698ffb2d5323aa))
+* add v0.2.0 → v1.x keyboard-behavior migration note ([#147](https://github.com/gfargo/ink-enhanced-select-input/issues/147)) ([8735d10](https://github.com/gfargo/ink-enhanced-select-input/commit/8735d107c64582062580b42c988ea0fe29b34592))
+* **examples:** add recipes/ for wizard, remote-search, and nested-menu flows ([#155](https://github.com/gfargo/ink-enhanced-select-input/issues/155)) ([dc16b88](https://github.com/gfargo/ink-enhanced-select-input/commit/dc16b888d543b395f734fe9a0d1a1ff0a7bc59c8))
+
 ## [1.2.1](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.2.0...v1.2.1) (2026-08-11)
 
 ### 🐞 Bug Fixes
