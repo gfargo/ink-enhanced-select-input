@@ -8,6 +8,14 @@
 
 An enhanced, customizable select input component for [Ink](https://github.com/vadimdemedes/ink) that supports both vertical and horizontal orientations, hotkeys, and flexible rendering. Ideal for building rich, interactive CLI apps with React.
 
+<p align="center">
+  <img src="./assets/demos/searchable.gif" alt="A terminal list of languages; typing 'ja' filters it to JavaScript and Java, then Enter selects Java" width="720">
+</p>
+
+<p align="center">
+  <em>Every demo below is recorded from a real file in <a href="./examples">examples/</a> — see <a href="./demos">demos/</a>.</em>
+</p>
+
 ## Features
 
 - **Orientation:** Choose between vertical or horizontal layouts.
@@ -30,10 +38,10 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 
 ## Compatibility
 
-| Dependency | Ink 6 | Ink 7   |
-| ---------- | ----- | ------- |
-| Node.js    | >= 20 | >= 22   |
-| React      | >= 19 | >= 19.2 |
+| Dependency | Ink 6    | Ink 7    |
+| ---------- | -------- | -------- |
+| Node.js    | >= 22.20 | >= 22.20 |
+| React      | >= 19    | >= 19.2  |
 
 > For Ink 5 / React 18 support, use `ink-enhanced-select-input@0.2.0`.
 
@@ -86,9 +94,13 @@ render(<Demo />)
 />
 ```
 
+![Four options laid out on a single row, with the first highlighted and hotkeys shown beside each label](./assets/demos/horizontal.png)
+
 ### Multi-select
 
 Enable multi-select mode with the `multiple` prop. Space toggles an item; Enter confirms the full selection.
+
+![Space toggling React and Ink on alongside a pre-checked TypeScript, the counter reaching 3 selected/3, then Enter confirming all three](./assets/demos/multi-select.gif)
 
 > **Note:** A per-item `indicator` (see [Per-Item Indicators](#per-item-indicators)) is ignored when `multiple` is `true` — the built-in checkbox indicator always takes precedence, and a dev warning is logged if both are supplied. To customize how indicators look in multi-select mode, pass `indicatorComponent` instead.
 
@@ -229,6 +241,10 @@ Set `limit` to cap how many rows are visible at once. By default (`paginationMod
 
 Set `paginationMode="scroll"` for a cursor-following viewport instead: the window advances one row at a time as the cursor reaches its edge, keeping the highlight where the eye already is — matching `ink-select-input`, `fzf`, and `gum`.
 
+![Three visible rows bracketed by dimmed scroll indicators reading '3 more' above and '2 more' below](./assets/demos/scroll-indicators.png)
+
+<sub>`limit={3}` with `showScrollIndicators` — the ▲/▼ rows count what's hidden.</sub>
+
 ```tsx
 <EnhancedSelectInput items={items} limit={5} paginationMode="scroll" />
 ```
@@ -254,6 +270,8 @@ Home/End always land on a sane window — Home scrolls to the start of the list,
 
 Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
 
+![A list split under two dimmed section headers, Languages above TypeScript, Rust and Go, and Frameworks above React and Ink](./assets/demos/groups.png)
+
 ```tsx
 <EnhancedSelectInput
   items={[
@@ -268,7 +286,7 @@ Group items under section headers by setting the `group` field. Items sharing th
 
 Renders:
 
-```
+```text
 ── Recent ──
 > Option A
   Option B
@@ -295,6 +313,8 @@ You can provide a custom header renderer via `groupHeaderComponent`:
 ### Descriptions, Hints & Disabled Reasons
 
 Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
+
+![Deploy to production with a description line beneath it, Open file with a Ctrl+O hint, and a dimmed Premium feature row reading 'Upgrade to unlock'](./assets/demos/descriptions.png)
 
 ```tsx
 <EnhancedSelectInput
@@ -347,6 +367,8 @@ Provide a custom separator renderer via `separatorComponent`:
 
 Enable inline filtering with the `searchable` prop. Printable characters build a search query that filters items by label (case-insensitive substring match). A search input line renders above the item list.
 
+![A terminal list of languages; typing 'ja' filters it to JavaScript and Java, then Enter selects Java](./assets/demos/searchable.gif)
+
 ```tsx
 <EnhancedSelectInput
   items={items}
@@ -358,7 +380,7 @@ Enable inline filtering with the `searchable` prop. Printable characters build a
 
 Renders:
 
-```
+```text
 / Filter options...
 > Option A
   Option B
@@ -367,7 +389,7 @@ Renders:
 
 When typing:
 
-```
+```text
 / app
 > Apple
   Pineapple
@@ -574,6 +596,26 @@ Any field not supplied stays enabled. `isFocused={false}` remains the way to dis
 
 `hotkeys` and `select` are independent: `keyMap={{ hotkeys: false }}` disables item hotkeys but leaves `Enter` working, and `keyMap={{ select: false }}` disables `Enter` but leaves item hotkeys working.
 
+### Help Footer (`showHelp`)
+
+Set `showHelp` to render a dim footer line listing the currently-active keybindings, e.g. `↑↓ navigate · enter select · esc cancel`. The line is **derived** from the resolved `keyMap`, `multiple`, `searchable`, and `orientation` — it can never drift out of sync with actual behaviour. Disabling a `keyMap` group drops the corresponding segment (e.g. `keyMap={{ cancel: false }}` removes `esc cancel`), `multiple` swaps `enter select` for `space toggle · enter confirm`, and `searchable` adds `type to search`.
+
+```tsx
+<EnhancedSelectInput items={items} showHelp onSelect={onSelect} />
+```
+
+The underlying builder is also exported for custom footer rendering. `buildHelpSegments` takes a fully-resolved key map, so pass your (possibly partial) `keyMap` through `resolveKeyMap` first:
+
+```tsx
+import { buildHelpSegments, resolveKeyMap } from 'ink-enhanced-select-input'
+
+const segments = buildHelpSegments(resolveKeyMap(keyMap), {
+  multiple,
+  searchable,
+  isVertical,
+})
+```
+
 ### Custom Components
 
 ```tsx
@@ -671,7 +713,7 @@ function MyCustomSelect({ items, onSelect }) {
 
 `windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, `maxWidth`, `truncate`, and `theme` (theming is render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, `maxWidth`, `truncate`, `theme` (theming is render-only), and `showHelp` (render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
 
 - `selectedIndex` — index of the highlighted item within `filteredItems`. Reflects the `selectedIndex` prop when controlled.
 - `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
@@ -714,6 +756,10 @@ const items = [
 
 ;<EnhancedSelectInput items={items} onSelect={(item) => console.log(item)} />
 ```
+
+![A category menu; Enter opens a submenu under a Maintenance header, Escape returns to the categories, and a different category is opened and selected](./assets/demos/nested-menus.gif)
+
+<sub>Drill-down and Escape-to-go-back. This recording is [`examples/recipes/nested-menus.tsx`](./examples/recipes/nested-menus.tsx), which builds the same feel by swapping the parent menu's items in state rather than using `children` — reach for that when each level needs its own props.</sub>
 
 Descending into "Fruits" renders a `Fruits` breadcrumb line above the list (default component joins `path` labels with `' › '`). The breadcrumb is:
 
@@ -849,6 +895,7 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | `loadingText`            | `string`                                    | `'Searching…'`                | Text shown by the default loading row. Only used when `isLoading` is true                                                                                                                                                                                                                                                                                                                   |
 | `loadingComponent`       | `FC<LoadingProperties>`                     | `DefaultLoadingComponent`     | Custom renderer for the loading row. Only used when `isLoading` is true                                                                                                                                                                                                                                                                                                                     |
 | `keyMap`                 | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                                                                                                                                                                                  |
+| `showHelp`               | `boolean`                                   | `false`                       | Render a dim footer line listing the currently-active keybindings, derived from `keyMap`/`multiple`/`searchable`/`orientation` — see [Help Footer](#help-footer-showhelp)                                                                                                                                                                                                                   |
 | `typeahead`              | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                                                                                                                                                                                               |
 | `typeaheadTimeout`       | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                                                                                                                                                                                   |
 | `maxWidth`               | `number`                                    | —                             | Max display width (characters) for a label; longer labels are ellipsized so each item stays on one row. Display-only — search, `onSelect`/`onHighlight`/`onConfirm`, and hotkeys still use the full label                                                                                                                                                                                   |
@@ -895,6 +942,8 @@ type ItemOrSeparator<V> = Item<V> | SeparatorItem
 | ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- | ---------------- | --------------- |
 | Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | `Enter` / `→`    | `Escape` / `←`  |
 | Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | —                | —               |
+
+![A menu of four options each showing a dimmed hotkey; pressing 's' selects the Searchable entry immediately without navigating to it](./assets/demos/hotkeys.gif)
 
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
 
@@ -950,6 +999,20 @@ Runnable, single-feature demos live in [`examples/`](./examples/README.md) — o
 ```bash
 node --loader ts-node/esm examples/01-vertical.tsx
 ```
+
+### Demo assets
+
+The GIFs and screenshots throughout this README are recorded from those same
+example files with [VHS](https://github.com/charmbracelet/vhs), so they can't
+drift away from what the component actually does. To regenerate them after a
+behavior change:
+
+```bash
+brew install vhs gifsicle
+./demos/capture.sh                 # or: ./demos/capture.sh searchable
+```
+
+See [`demos/`](./demos/README.md) for how the tapes are put together.
 
 ## Contributing
 

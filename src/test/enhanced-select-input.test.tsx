@@ -3933,6 +3933,97 @@ test.serial('showSelectionCount is hidden in single-select mode', async (t) => {
   t.false(lastFrame()!.includes('selected'))
 })
 
+test.serial('showHelp renders the active keybindings footer', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput showHelp items={items} />)
+
+  await delay()
+  t.true(lastFrame()!.includes('↑↓ navigate · enter select · esc cancel'))
+})
+
+test.serial('showHelp is hidden by default', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(<EnhancedSelectInput items={items} />)
+
+  await delay()
+  t.false(lastFrame()!.includes('navigate'))
+})
+
+test.serial(
+  'showHelp shows toggle/confirm segments in multi-select mode',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput showHelp multiple items={items} />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('space toggle'))
+    t.true(frame.includes('enter confirm'))
+    t.false(frame.includes('enter select'))
+  }
+)
+
+test.serial('showHelp shows a search segment in searchable mode', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput showHelp searchable items={items} />
+  )
+
+  await delay()
+  t.true(lastFrame()!.includes('type to search'))
+})
+
+test.serial('showHelp drops segments disabled via keyMap', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+  ]
+
+  const { lastFrame } = render(
+    <EnhancedSelectInput showHelp keyMap={{ cancel: false }} items={items} />
+  )
+
+  await delay()
+  t.false(lastFrame()!.includes('esc cancel'))
+})
+
+test.serial(
+  'showHelp renders alongside the no-matches searchable view',
+  async (t) => {
+    const items = [{ label: 'Apple', value: 'apple' }]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput showHelp searchable items={items} />
+    )
+
+    await delay()
+    stdin.write('zzz')
+    await delay()
+
+    const frame = lastFrame()!
+    t.true(frame.includes('No matches'))
+    t.true(frame.includes('type to search'))
+  }
+)
+
 test.serial(
   'checkedIndicator/uncheckedIndicator customise the checkbox glyphs',
   async (t) => {

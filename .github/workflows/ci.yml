@@ -12,20 +12,22 @@ jobs:
     strategy:
       matrix:
         include:
-          - node-version: 20
-            ink: '6'
           - node-version: 22
             ink: '6'
           - node-version: 22
             ink: '7'
+          - node-version: 24
+            ink: '6'
+          - node-version: 24
+            ink: '7'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable Corepack
         run: corepack enable
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: yarn
@@ -42,6 +44,9 @@ jobs:
         # --no-lockfile: override ink/react for this job only, without
         # writing to (or drifting from) the committed yarn.lock.
         run: yarn add --dev ink@^7.1.1 react@^19.2.0 --no-lockfile
+
+      - name: Typecheck
+        run: yarn typecheck
 
       - name: Test
         # --serial: this suite renders many concurrent Ink instances with
