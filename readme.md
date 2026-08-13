@@ -574,6 +574,26 @@ Any field not supplied stays enabled. `isFocused={false}` remains the way to dis
 
 `hotkeys` and `select` are independent: `keyMap={{ hotkeys: false }}` disables item hotkeys but leaves `Enter` working, and `keyMap={{ select: false }}` disables `Enter` but leaves item hotkeys working.
 
+### Help Footer (`showHelp`)
+
+Set `showHelp` to render a dim footer line listing the currently-active keybindings, e.g. `↑↓ navigate · enter select · esc cancel`. The line is **derived** from the resolved `keyMap`, `multiple`, `searchable`, and `orientation` — it can never drift out of sync with actual behaviour. Disabling a `keyMap` group drops the corresponding segment (e.g. `keyMap={{ cancel: false }}` removes `esc cancel`), `multiple` swaps `enter select` for `space toggle · enter confirm`, and `searchable` adds `type to search`.
+
+```tsx
+<EnhancedSelectInput items={items} showHelp onSelect={onSelect} />
+```
+
+The underlying builder is also exported for custom footer rendering. `buildHelpSegments` takes a fully-resolved key map, so pass your (possibly partial) `keyMap` through `resolveKeyMap` first:
+
+```tsx
+import { buildHelpSegments, resolveKeyMap } from 'ink-enhanced-select-input'
+
+const segments = buildHelpSegments(resolveKeyMap(keyMap), {
+  multiple,
+  searchable,
+  isVertical,
+})
+```
+
 ### Custom Components
 
 ```tsx
@@ -671,7 +691,7 @@ function MyCustomSelect({ items, onSelect }) {
 
 `windowIndex` is the highlighted item's index **within `visibleItems`** (i.e. `selectedIndex - rotateIndex`) — use it, not `selectedIndex`, when indexing into `visibleItems`.
 
-The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, `maxWidth`, `truncate`, and `theme` (theming is render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
+The hook accepts all the same props as `EnhancedSelectInput` except `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, `showScrollIndicators`, `searchPlaceholder`, `maxWidth`, `truncate`, `theme` (theming is render-only), and `showHelp` (render-only) — including `selectedIndex`/`onIndexChange` and `selectedKeys`/`onSelectedKeysChange` for [controlled mode](#controlled-mode). It returns:
 
 - `selectedIndex` — index of the highlighted item within `filteredItems`. Reflects the `selectedIndex` prop when controlled.
 - `rotateIndex` — start of the current pagination window (`0` when `limit` is not set).
@@ -848,6 +868,7 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | `loadingText`            | `string`                                    | `'Searching…'`                | Text shown by the default loading row. Only used when `isLoading` is true                                                                                                                                                                                                      |
 | `loadingComponent`       | `FC<LoadingProperties>`                     | `DefaultLoadingComponent`     | Custom renderer for the loading row. Only used when `isLoading` is true                                                                                                                                                                                                        |
 | `keyMap`                 | `KeyMap`                                    | all enabled                   | Selectively disable built-in key groups to avoid conflicts                                                                                                                                                                                                                     |
+| `showHelp`               | `boolean`                                   | `false`                       | Render a dim footer line listing the currently-active keybindings, derived from `keyMap`/`multiple`/`searchable`/`orientation` — see [Help Footer](#help-footer-showhelp)                                                                                                      |
 | `typeahead`              | `boolean`                                   | `false`                       | Enable type-ahead jump to the first item matching typed characters; ignored when `searchable`                                                                                                                                                                                  |
 | `typeaheadTimeout`       | `number`                                    | `500`                         | Idle window (ms) after which the type-ahead buffer resets                                                                                                                                                                                                                      |
 | `maxWidth`               | `number`                                    | —                             | Max display width (characters) for a label; longer labels are ellipsized so each item stays on one row. Display-only — search, `onSelect`/`onHighlight`/`onConfirm`, and hotkeys still use the full label                                                                      |
