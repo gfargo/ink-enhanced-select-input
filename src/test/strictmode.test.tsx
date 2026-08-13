@@ -123,42 +123,15 @@ test.serial(
   }
 )
 
-// --- Canary: pins down this environment's actual StrictMode behavior ---
-// The B8 tests above assert the *contract* (single onToggle per Space press)
-// but can't mechanically force a double-invoke to prove they'd fail against
-// a buggy implementation on their own. This canary proves the double-invoke
-// is real in this environment: with the development build of react-reconciler
-// (what CI and any real StrictMode-enabled app run — see AVA's default
-// NODE_ENV=test), a functional setState updater fired from a StrictMode
-// component's effect genuinely runs twice per commit, exactly like React DOM.
-// That's precisely the hazard `toggle()` was fixed to avoid (computing the
-// next Set up front and calling onToggle once, before ever touching state)
-// rather than a theoretical concern — so this makes it an explicit, CI-
-// checked assertion instead of an unverified claim.
-
-test.serial(
-  'StrictMode canary: functional state updaters run twice per commit in this environment',
-  async (t) => {
-    let updaterCalls = 0
-
-    function Canary() {
-      const [count, setCount] = React.useState(0)
-      void count
-      React.useEffect(() => {
-        setCount((previous) => {
-          updaterCalls++
-          return previous + 1
-        })
-      }, [])
-      return null
-    }
-
-    renderStrict(<Canary />)
-    await delay()
-
-    t.is(updaterCalls, 2)
-  }
-)
+// Whether StrictMode actually double-invokes effects/updaters here depends
+// on which react-reconciler build (development vs. production) is loaded,
+// which react-reconciler picks via `process.env.NODE_ENV` at import time —
+// that varies by environment (unset in the repo's CI workflow, but not
+// necessarily elsewhere) and isn't something a test in this suite controls
+// or should assert a specific value for. The B8 tests above are the actual
+// regression guard: `toggle()` computes the next Set and calls `onToggle`
+// synchronously, before ever touching state, so it stays correct regardless
+// of whether the environment double-invokes.
 
 // --- Core navigation/selection under StrictMode ---
 
