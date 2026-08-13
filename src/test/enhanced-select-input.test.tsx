@@ -3123,6 +3123,7 @@ test.serial(
 // Value type is unknown since tests only assert on index/count fields.
 type HookHarnessProperties = {
   readonly items: Array<ItemOrSeparator<unknown>>
+  readonly groups?: string[]
   readonly initialIndex?: number
   readonly selectedIndex?: number
   readonly onIndexChange?: (index: number) => void
@@ -5565,6 +5566,105 @@ test.serial('omitting groups renders identically to items order', (t) => {
   // Default (no `groups` prop) keeps items-array order — B before A.
   t.true(bIndex < aIndex)
 })
+
+test.serial(
+  'separators sort to the end alongside ungrouped items when groups is set',
+  (t) => {
+    const items: Array<ItemOrSeparator<string>> = [
+      { type: 'separator' },
+      { label: 'B1', value: 'b1', group: 'B' },
+      { label: 'A1', value: 'a1', group: 'A' },
+    ]
+
+    const result = reorderByGroups(items, ['A', 'B'])
+
+    t.deepEqual(
+      result.map((item) => (isSeparator(item) ? 'separator' : item.label)),
+      ['A1', 'B1', 'separator']
+    )
+  }
+)
+
+test.serial(
+  'groups prop reorders a descended submenu (Item.children), not just the root',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={[
+          {
+            label: 'Parent',
+            value: 'parent',
+            children: [
+              { label: 'B1', value: 'b1', group: 'B' },
+              { label: 'A1', value: 'a1', group: 'A' },
+            ],
+          },
+        ]}
+        groups={['A', 'B']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    // The submenu's children are reordered by the same `groups` order as the
+    // root — A before B — even though `children` was authored B-then-A.
+    t.deepEqual(
+      result?.filteredItems.map((item) =>
+        isSeparator(item) ? undefined : item.label
+      ),
+      ['A1', 'B1']
+    )
+  }
+)
+
+test.serial(
+  'groups prop on a descended child level does not select a disabled item post-reorder',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={[
+          {
+            label: 'Parent',
+            value: 'parent',
+            children: [
+              // Authored order (A1 before B1) puts the enabled item first —
+              // but `groups` reorders the rendered list to [B1, A1], and B1
+              // is disabled. Initial selection must be resolved against the
+              // reordered list, landing on A1, not the pre-reorder index 0.
+              { label: 'A1', value: 'a1', group: 'A' },
+              { label: 'B1', value: 'b1', group: 'B', disabled: true },
+            ],
+          },
+        ]}
+        groups={['B', 'A']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    t.deepEqual(
+      result?.filteredItems.map((item) =>
+        isSeparator(item) ? undefined : item.label
+      ),
+      ['B1', 'A1']
+    )
+    t.is(result?.selectedIndex, 1)
+    t.is(result?.selectedItem?.label, 'A1')
+    t.falsy(result?.selectedItem?.disabled)
+  }
+)
 
 test('reorderByGroups returns items unchanged when groups is undefined or empty', (t) => {
   const items: Array<ItemOrSeparator<string>> = [

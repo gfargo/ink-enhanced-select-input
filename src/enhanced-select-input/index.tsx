@@ -203,8 +203,10 @@ export type UseEnhancedSelectInputProps<V> = {
    * listed groups (in first-appearance order among themselves); ungrouped
    * items are placed last. The reorder is stable — items keep their
    * relative order within a group, and separators (which have no group) are
-   * treated as ungrouped and moved to the end alongside them. Omit to keep
-   * the default behavior of ordering by first appearance in `items`.
+   * treated as ungrouped and moved to the end alongside them. Applies at
+   * every nesting depth — the same `groups` order reorders a submenu's
+   * `children` when you descend into it, not just the root `items`. Omit to
+   * keep the default behavior of ordering by first appearance in `items`.
    */
   readonly groups?: string[]
   readonly isFocused?: boolean
@@ -2945,9 +2947,12 @@ export function useEnhancedSelectInput<V>({
             const childFrame: Level<V> = {
               parent: intent.item,
               items: children,
-              selectedIndex: resolveInitialSelection(children, {
-                autoSelectFirstEnabled: true,
-              }),
+              selectedIndex: resolveInitialSelection(
+                reorderByGroups(children, groups),
+                {
+                  autoSelectFirstEnabled: true,
+                }
+              ),
               rotateIndex: 0,
             }
             return [...previous.slice(0, -1), updatedCurrentTop, childFrame]
