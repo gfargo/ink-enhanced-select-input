@@ -28,6 +28,9 @@ node --loader ts-node/esm examples/01-vertical.tsx
 | [`11-cancel-escape.tsx`](./11-cancel-escape.tsx)                     | `onCancel` on Escape                                                 | `node --loader ts-node/esm examples/11-cancel-escape.tsx`                             |
 | [`12-keymap.tsx`](./12-keymap.tsx)                                   | `keyMap` conflict avoidance                                          | `node --loader ts-node/esm examples/12-keymap.tsx`                                    |
 | [`13-headless-hook.tsx`](./13-headless-hook.tsx)                     | Headless `useEnhancedSelectInput` hook                               | `TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm examples/13-headless-hook.tsx` |
+| [`recipes/wizard.tsx`](./recipes/wizard.tsx)                         | Recipe: multi-step wizard (`step` state + `onCancel` to go back)     | `node --loader ts-node/esm examples/recipes/wizard.tsx`                               |
+| [`recipes/remote-search.tsx`](./recipes/remote-search.tsx)           | Recipe: `searchable` + simulated remote/async search                 | `node --loader ts-node/esm examples/recipes/remote-search.tsx`                        |
+| [`recipes/nested-menus.tsx`](./recipes/nested-menus.tsx)             | Recipe: parent menu swapping in a submenu, with `group` items        | `node --loader ts-node/esm examples/recipes/nested-menus.tsx`                         |
 
 Each example is an interactive Ink app — run it in a real terminal to try it out (arrow keys / vim keys to navigate, Enter to select, Escape to cancel). They exit automatically once a selection or cancellation is made.
 
