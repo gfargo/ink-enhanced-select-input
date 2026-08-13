@@ -405,6 +405,14 @@ export type EnhancedSelectInputProps<V> = UseEnhancedSelectInputProps<V> & {
   readonly groupHeaderComponent?: FC<GroupHeaderProps>
   /** Custom renderer for `{ type: 'separator' }` rows. */
   readonly separatorComponent?: FC<SeparatorProps>
+  /** Custom renderer for the breadcrumb row shown above the list when nested. */
+  readonly breadcrumbComponent?: FC<BreadcrumbProps>
+  /**
+   * Show a breadcrumb of the current navigation `path` above the list
+   * whenever nested (`depth > 0`). No-op outside nested navigation. Default: true.
+   */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly showBreadcrumb?: boolean
   /**
    * Show ▲/▼ (vertical) or ◀/▶ (horizontal) indicators with item counts
    * when the limit window doesn't cover the full list. Only meaningful when
@@ -562,6 +570,23 @@ export type GroupHeaderProps = {
  * backward compatibility; will be removed in a future minor.
  */
 export type GroupHeaderProperties = GroupHeaderProps
+
+// eslint-disable-next-line unicorn/prevent-abbreviations
+export type BreadcrumbProps = {
+  /**
+   * The chain of parent items descended into to reach the current level,
+   * root-to-leaf. Only rendered when non-empty (`depth > 0`).
+   */
+  readonly path: Array<Item<unknown>>
+  /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
+  readonly theme?: ResolvedTheme
+}
+
+/**
+ * @deprecated Renamed to {@link BreadcrumbProps}. Kept as an alias for
+ * backward compatibility; will be removed in a future minor.
+ */
+export type BreadcrumbProperties = BreadcrumbProps
 
 // eslint-disable-next-line unicorn/prevent-abbreviations
 export type SeparatorProps = Record<string, unknown>
@@ -3051,6 +3076,21 @@ export function DefaultGroupHeaderComponent({
   )
 }
 
+export function DefaultBreadcrumbComponent({ path, theme }: BreadcrumbProps) {
+  const resolvedTheme = theme ?? resolveTheme()
+  return (
+    <Box>
+      <Text
+        color={resolvedTheme.groupHeader}
+        dimColor={resolvedTheme.dim}
+        wrap="truncate-end"
+      >
+        {path.map((item) => item.label).join(' › ')}
+      </Text>
+    </Box>
+  )
+}
+
 export function DefaultSeparatorComponent() {
   return (
     <Box>
@@ -3093,6 +3133,8 @@ export function EnhancedSelectInput<V>({
   itemComponent = DefaultItemComponent,
   groupHeaderComponent = DefaultGroupHeaderComponent,
   separatorComponent = DefaultSeparatorComponent,
+  breadcrumbComponent = DefaultBreadcrumbComponent,
+  showBreadcrumb = true,
   showScrollIndicators = false,
   searchPlaceholder = 'Search...',
   maxWidth,
@@ -3130,6 +3172,8 @@ export function EnhancedSelectInput<V>({
     searchQuery,
     searchCursor,
     selectionCount,
+    path,
+    depth,
   } = useEnhancedSelectInput({
     ...hookProperties,
     isFocused: effectiveIsFocused,
@@ -3147,6 +3191,7 @@ export function EnhancedSelectInput<V>({
   const ItemComponent = itemComponent
   const GroupHeaderComponent = groupHeaderComponent
   const SeparatorComponent = separatorComponent
+  const BreadcrumbComponent = breadcrumbComponent
   // A custom itemComponent receives description/hint/disabledReason as props
   // specifically so it can render them itself. Rendering them again here
   // would duplicate that text, so the parent only renders them for the
@@ -3154,6 +3199,11 @@ export function EnhancedSelectInput<V>({
   const isDefaultItemComponent = itemComponent === DefaultItemComponent
   const isVertical = hookProperties.orientation !== 'horizontal'
   const isMultiple = hookProperties.multiple === true
+
+  const breadcrumb =
+    showBreadcrumb && depth > 0 ? (
+      <BreadcrumbComponent path={path} theme={resolvedTheme} />
+    ) : null
 
   const searchInput = searchable ? (
     <Box>
@@ -3199,6 +3249,7 @@ export function EnhancedSelectInput<V>({
     // the loading row replaces "No matches" rather than appearing above it.
     return (
       <Box flexDirection="column">
+        {breadcrumb}
         {searchInput}
         {selectionCountLine}
         {loadingRow}
@@ -3213,6 +3264,7 @@ export function EnhancedSelectInput<V>({
 
   return (
     <Box flexDirection="column">
+      {breadcrumb}
       {searchInput}
       {selectionCountLine}
       {loadingRow}
