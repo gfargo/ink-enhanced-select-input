@@ -45,6 +45,9 @@ jobs:
         # writing to (or drifting from) the committed yarn.lock.
         run: yarn add --dev ink@^7.1.1 react@^19.2.0 --no-lockfile
 
+      - name: Typecheck
+        run: yarn typecheck
+
       - name: Test
         # --serial: this suite renders many concurrent Ink instances with
         # real-timer-based assertions (fixed delay()s), which races under
