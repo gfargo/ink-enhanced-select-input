@@ -399,6 +399,21 @@ test('computePageStarts: a page always has at least one item, even when header+i
   t.deepEqual(computePageStarts(items, 1), [0, 1])
 })
 
+test('computePageStarts: a single group spanning multiple pages is unaffected by the "continued" affordance', (t) => {
+  // The "continued" indicator (OSS-2434) is render-only — it must not shift
+  // where computePageStarts breaks pages, even when a group spans a boundary.
+  const items = [
+    mkGroupedItem('A', 'Fruits'),
+    mkGroupedItem('B', 'Fruits'),
+    mkGroupedItem('C', 'Fruits'),
+    mkGroupedItem('D', 'Fruits'),
+  ]
+  // Header(1) + A(1) + B(1) = 3 rows fills page 1; page 2 re-charges a header
+  // row for C even though it's the same group ("first item of a page always
+  // renders its header"), so page 2 is header(1) + C(1) + D(1) = 3 rows.
+  t.deepEqual(computePageStarts(items, 3), [0, 2])
+})
+
 // ── pageStartFor (binary search) ────────────────────────────────────────────
 
 test('pageStartFor: empty pageStarts returns 0', (t) => {

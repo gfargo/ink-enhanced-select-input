@@ -129,9 +129,13 @@ export function Storybook() {
 
       {currentView === 'groups' && orientation && (
         <Box flexDirection="column">
-          <Text dimColor>Item Groups — items grouped under headers:</Text>
+          <Text dimColor>
+            Item Groups — items grouped under headers. “Languages” spans a page
+            boundary below, so page 2 shows “Languages (continued)”:
+          </Text>
           <EnhancedSelectInput
             orientation={orientation}
+            limit={3}
             items={[
               { label: 'TypeScript', value: 'ts', group: 'Languages' },
               { label: 'Rust', value: 'rust', group: 'Languages' },

@@ -5251,6 +5251,96 @@ test.serial(
     t.true(frame2.includes('── Second ──'))
     t.true(frame2.includes('C'))
     t.true(frame2.includes('D'))
+    // "Second" starts fresh on page 2 — it doesn't continue "First".
+    t.false(frame2.includes('(continued)'))
+  }
+)
+
+test.serial(
+  'group header shows "(continued)" when a group spans a page boundary',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'Fruits' },
+      { label: 'B', value: 'b', group: 'Fruits' },
+      { label: 'C', value: 'c', group: 'Fruits' },
+      { label: 'D', value: 'd', group: 'Fruits' },
+    ]
+
+    // Limit=3 splits this single "Fruits" group into page1=[A,B], page2=[C,D]
+    // (see computePageStarts), so "Fruits" spans the page boundary.
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    // Page 1: first page never shows a continued indicator.
+    const frame1 = lastFrame()!
+    t.true(frame1.includes('── Fruits ──'))
+    t.false(frame1.includes('(continued)'))
+    t.true(frame1.includes('A'))
+    t.true(frame1.includes('B'))
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'C')
+
+    // Page 2: "Fruits" repeats, so its header carries the continued indicator.
+    const frame2 = lastFrame()!
+    t.true(frame2.includes('── Fruits (continued) ──'))
+    t.true(frame2.includes('C'))
+    t.true(frame2.includes('D'))
+  }
+)
+
+test.serial(
+  'custom groupHeaderComponent receives continued across a page boundary',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'Fruits' },
+      { label: 'B', value: 'b', group: 'Fruits' },
+      { label: 'C', value: 'c', group: 'Fruits' },
+      { label: 'D', value: 'd', group: 'Fruits' },
+    ]
+
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        groupHeaderComponent={({ label, continued }) => (
+          <Text>
+            [{label}
+            {continued ? ' *' : ''}]
+          </Text>
+        )}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    const frame1 = lastFrame()!
+    t.true(frame1.includes('[Fruits]'))
+    t.false(frame1.includes('[Fruits *]'))
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'C')
+
+    const frame2 = lastFrame()!
+    t.true(frame2.includes('[Fruits *]'))
   }
 )
 // --- Additional Group Tests ---

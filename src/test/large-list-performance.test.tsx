@@ -204,6 +204,8 @@ test('10k grouped items: End jumps to the last group and item, frame stays bound
   t.is(highlighted, `Item ${ITEM_COUNT - 1}`)
   const frame = lastFrame()!
   t.true(countNonEmptyLines(frame) <= groupLimit + 2)
-  t.true(frame.includes(`── Group ${ITEM_COUNT / 100 - 1} ──`))
+  // Group 99 has 100 items but groupLimit=20, so the page containing the
+  // last item is necessarily mid-group — its header carries "(continued)".
+  t.true(frame.includes(`── Group ${ITEM_COUNT / 100 - 1} (continued) ──`))
   t.true(frame.includes(`Item ${ITEM_COUNT - 1}`))
 })

@@ -553,6 +553,9 @@ export type ItemProperties = ItemProps
 // eslint-disable-next-line unicorn/prevent-abbreviations
 export type GroupHeaderProps = {
   readonly label: string
+  /** True when this header repeats a group that began on the previous page. */
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly continued?: boolean
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
@@ -3037,16 +3040,18 @@ export function DefaultItemComponent({
 
 export function DefaultGroupHeaderComponent({
   label,
+  continued,
   theme,
 }: GroupHeaderProps) {
   const resolvedTheme = theme ?? resolveTheme()
+  const text = continued ? `${label} (continued)` : label
   return (
     <Box>
       <Text
         color={resolvedTheme.groupHeader}
         dimColor={resolvedTheme.dim}
         wrap="truncate-end"
-      >{`── ${label} ──`}</Text>
+      >{`── ${text} ──`}</Text>
     </Box>
   )
 }
@@ -3130,6 +3135,7 @@ export function EnhancedSelectInput<V>({
     searchQuery,
     searchCursor,
     selectionCount,
+    filteredItems,
   } = useEnhancedSelectInput({
     ...hookProperties,
     isFocused: effectiveIsFocused,
@@ -3262,10 +3268,17 @@ export function EnhancedSelectInput<V>({
               index > 0 ? visibleItems[index - 1] : undefined
             let groupHeader: React.ReactNode = null
             if (item.group && item.group !== groupOf(previousVisibleItem)) {
+              // Only the window's first row can "continue" a group — a header
+              // at index > 0 is always a change within the page, never a
+              // continuation of the item immediately before the window.
+              const continued =
+                index === 0 &&
+                groupOf(filteredItems[rotateIndex - 1]) === item.group
               groupHeader = (
                 <GroupHeaderComponent
                   key={`group-header-${index}-${item.group}`}
                   label={item.group}
+                  continued={continued}
                   theme={resolvedTheme}
                 />
               )

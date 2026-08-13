@@ -279,14 +279,16 @@ Renders:
 
 When `limit` is set, group headers count toward it just like items — a header takes up one row, and the first item of a page always renders its header (even mid-group), since it has no preceding visible item to compare against. This keeps the rendered line count predictable and bounded by `limit`, regardless of how items are grouped. Each page is guaranteed at least one item, so a group whose header + item alone exceeds `limit` still renders (rather than being skipped).
 
-You can provide a custom header renderer via `groupHeaderComponent`:
+When that mid-group header repeats a group that already started on the previous page, it receives `continued: true`. `DefaultGroupHeaderComponent` reflects this by appending `(continued)` to the label (e.g. `── Recent (continued) ──`), so it's clear the group didn't restart — it's the same group carrying over.
+
+You can provide a custom header renderer via `groupHeaderComponent`, which also receives `continued` and can style or ignore it:
 
 ```tsx
 <EnhancedSelectInput
   items={items}
-  groupHeaderComponent={({ label }) => (
+  groupHeaderComponent={({ label, continued }) => (
     <Text bold color="cyan">
-      {label}
+      {continued ? `${label} (continued)` : label}
     </Text>
   )}
 />
