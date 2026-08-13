@@ -4,6 +4,7 @@ export {
   DefaultIndicatorComponent,
   DefaultItemComponent,
   DefaultGroupHeaderComponent,
+  DefaultBreadcrumbComponent,
   DefaultSeparatorComponent,
   DefaultLoadingComponent,
   resolveInitialIndex,
@@ -33,6 +34,7 @@ export type {
   IndicatorProps,
   ItemProps,
   GroupHeaderProps,
+  BreadcrumbProps,
   TruncateMode,
   SeparatorProps,
   LoadingProperties,
@@ -44,5 +46,6 @@ export type {
   IndicatorProperties,
   ItemProperties,
   GroupHeaderProperties,
+  BreadcrumbProperties,
   SeparatorProperties,
 } from './enhanced-select-input/index.js'

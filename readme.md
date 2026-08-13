@@ -25,7 +25,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
-- **Nested Items (Headless):** `children` on an `Item` lets Enter/→ drill into a submenu and Escape/← back out, with cursor memory — vertical, single-select only, no built-in breadcrumb UI.
+- **Nested Items:** `children` on an `Item` lets Enter/→ drill into a submenu and Escape/← back out, with cursor memory and a built-in breadcrumb rendered above the list — vertical, single-select only.
 - **Theming:** Override the default component colors with a `theme` prop; automatically disabled when [`NO_COLOR`](https://no-color.org/) is set.
 
 ## Compatibility
@@ -657,7 +657,7 @@ If you only need to change colors — not swap out entire components — pass a 
 />
 ```
 
-Custom `indicatorComponent`, `itemComponent`, and `groupHeaderComponent` also receive the resolved theme as a `theme` prop, so they can opt into it instead of hard-coding colors.
+Custom `indicatorComponent`, `itemComponent`, `groupHeaderComponent`, and `breadcrumbComponent` also receive the resolved theme as a `theme` prop, so they can opt into it instead of hard-coding colors.
 
 The component automatically disables all color (and dim styling) when the [`NO_COLOR`](https://no-color.org/) environment variable is set to a non-empty value — no configuration needed.
 
@@ -713,12 +713,12 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 
 These setters give you the hooks needed to wire up custom keybindings on top of the built-in behaviour.
 
-### Nested Items (Headless)
+### Nested Items
 
-Give an item a non-empty `children` array to make it a submenu. In the headless hook, Enter or `→` on a highlighted item with `children` descends into that list instead of firing `onSelect`; Escape or `←` ascends back to the parent list, restoring the parent's highlighted index, pagination window, and search query:
+Give an item a non-empty `children` array to make it a submenu. Enter or `→` on a highlighted item with `children` descends into that list instead of firing `onSelect`; Escape or `←` ascends back to the parent list, restoring the parent's highlighted index, pagination window, and search query. `<EnhancedSelectInput>` renders a breadcrumb of the current navigation path above the list whenever nested (`depth > 0`):
 
 ```tsx
-import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
+import { EnhancedSelectInput } from 'ink-enhanced-select-input'
 
 const items = [
   {
@@ -732,13 +732,34 @@ const items = [
   { label: 'Vegetables', value: 'vegetables', children: [] },
 ]
 
+;<EnhancedSelectInput items={items} onSelect={(item) => console.log(item)} />
+```
+
+Descending into "Fruits" renders a `Fruits` breadcrumb line above the list (default component joins `path` labels with `' › '`). The breadcrumb is:
+
+- Shown by default whenever `depth > 0`; set `showBreadcrumb={false}` to hide it.
+- Customizable via `breadcrumbComponent`, which receives `BreadcrumbProps` (`path: Item<V>[]`, `theme`):
+
+```tsx
+<EnhancedSelectInput
+  items={items}
+  breadcrumbComponent={({ path }) => (
+    <Text dimColor>{path.map((p) => p.label).join(' / ')}</Text>
+  )}
+/>
+```
+
+For a fully custom renderer, the headless `useEnhancedSelectInput` hook exposes the same `path`/`depth` so you can build your own breadcrumb:
+
+```tsx
+import { useEnhancedSelectInput } from 'ink-enhanced-select-input/headless'
+
 function MyCustomMenu({ onSelect }) {
   const { visibleItems, windowIndex, path, depth } = useEnhancedSelectInput({
     items,
     onSelect,
   })
 
-  // path/depth let you render your own breadcrumb — there's no built-in one.
   return (
     <Box flexDirection="column">
       {depth > 0 && (
@@ -761,7 +782,7 @@ function MyCustomMenu({ onSelect }) {
 - `path` — the chain of parent items descended into to reach the current level, root-to-leaf; empty at the root.
 - `depth` — current nesting depth, `0` at the root, incrementing on each descend.
 
-Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. In development, giving any item a non-empty `children` while `orientation="horizontal"` logs a `console.warn` once (since `←`/`→` are already claimed by horizontal navigation, the submenu would otherwise be silently unreachable). A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends); search filters within the active level only, so descending resets the query and searching in a submenu never matches items from the parent list or sibling submenus. `keyMap.select`/`keyMap.cancel` gate Enter-descend/Escape-ascend the same way they gate `onSelect`/`onCancel`; `keyMap.arrows` independently gates `→`-descend/`←`-ascend, so e.g. `keyMap={{ select: false }}` still allows descending via `→`. The duplicate-`key` dev warning (see below) also scans the active submenu level on each descend, not just the root `items`. There's no built-in breadcrumb UI — render one yourself from `path`/`depth` as shown above.
+Restrictions (v1): vertical orientation and single-select only — nesting is ignored entirely when `orientation="horizontal"`, when `multiple` is `true`, or when `selectedIndex` (controlled highlight) is supplied. In development, giving any item a non-empty `children` while `orientation="horizontal"` logs a `console.warn` once (since `←`/`→` are already claimed by horizontal navigation, the submenu would otherwise be silently unreachable). A `disabled` item is never descendable. In `searchable` mode, `←`/`→` are claimed by search-cursor movement, so descending is Enter-only and ascending is Escape-only (and the first Escape clears a non-empty search query before it ascends); search filters within the active level only, so descending resets the query and searching in a submenu never matches items from the parent list or sibling submenus. `keyMap.select`/`keyMap.cancel` gate Enter-descend/Escape-ascend the same way they gate `onSelect`/`onCancel`; `keyMap.arrows` independently gates `→`-descend/`←`-ascend, so e.g. `keyMap={{ select: false }}` still allows descending via `→`. The duplicate-`key` dev warning (see below) also scans the active submenu level on each descend, not just the root `items`.
 
 ### Focus Management
 
@@ -833,6 +854,8 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | `uncheckedIndicator`     | `string`                                    | `'[ ]'`                       | Glyph shown for an unchecked item in multi-select mode                                                                                                                                                                                                                         |
 | `groupHeaderComponent`   | `FC<GroupHeaderProps>`                      | `DefaultGroupHeaderComponent` | Custom group header renderer                                                                                                                                                                                                                                                   |
 | `separatorComponent`     | `FC<SeparatorProps>`                        | `DefaultSeparatorComponent`   | Custom renderer for `{ type: 'separator' }` rows                                                                                                                                                                                                                               |
+| `breadcrumbComponent`    | `FC<BreadcrumbProps>`                       | `DefaultBreadcrumbComponent`  | Custom renderer for the breadcrumb row shown above the list when nested — see [Nested Items](#nested-items)                                                                                                                                                                    |
+| `showBreadcrumb`         | `boolean`                                   | `true`                        | Show the breadcrumb of the current navigation `path` above the list whenever nested (`depth > 0`)                                                                                                                                                                              |
 | `searchable`             | `boolean`                                   | `false`                       | Enable inline search/filter mode                                                                                                                                                                                                                                               |
 | `searchPlaceholder`      | `string`                                    | `'Search...'`                 | Placeholder text shown when search query is empty                                                                                                                                                                                                                              |
 | `matchMode`              | `'includes' \| 'fuzzy'`                     | `'includes'`                  | Built-in search matcher; `'fuzzy'` matches an ordered, non-contiguous subsequence. Ignored when `filter` is supplied                                                                                                                                                           |
@@ -867,7 +890,7 @@ type Item<V> = {
   description?: string // Rendered dimmed on its own line beneath the label
   hint?: string // Rendered dimmed to the right of the label
   disabledReason?: string // Rendered dimmed beside the label when `disabled` is true
-  children?: Item<V>[] // Submenu items — see [Nested Items](#nested-items-headless)
+  children?: Item<V>[] // Submenu items — see [Nested Items](#nested-items)
 }
 
 type SeparatorItem = {
@@ -888,12 +911,14 @@ type ItemOrSeparator<V> = Item<V> | SeparatorItem
 
 > Upgrading from `v0.2.0`? See [`MIGRATION.md`](./MIGRATION.md) for the keyboard-behavior changes since then (Home/End, vim keys, `Escape`/`onCancel`, multi-select `Space`, hotkey precedence, `keyMap`).
 
-| Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   |
-| ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- |
-| Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
-| Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` |
+| Orientation | Previous  | Next      | Page Back | Page Forward | First  | Last  | Select / Confirm | Toggle (multi) | Cancel   | Descend (nested) | Ascend (nested) |
+| ----------- | --------- | --------- | --------- | ------------ | ------ | ----- | ---------------- | -------------- | -------- | ---------------- | --------------- |
+| Vertical    | `↑` / `k` | `↓` / `j` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | `Enter` / `→`    | `Escape` / `←`  |
+| Horizontal  | `←` / `h` | `→` / `l` | `Page Up` | `Page Down`  | `Home` | `End` | `Enter`          | `Space`        | `Escape` | —                | —               |
 
 In **single-select** mode, `Enter` calls `onSelect` and hotkeys select immediately. In **multi-select** mode (`multiple={true}`), `Space` toggles the highlighted item and `Enter` calls `onConfirm` with all checked items (gated on `minSelections`/`maxSelections`, if set). `Ctrl+A`/`Ctrl+D`/`Ctrl+R` select-all/none/invert. Hotkeys are disabled in multi-select mode to avoid ambiguity with `Space`.
+
+Nesting (`children` on an item — see [Nested Items](#nested-items)) only applies in vertical, single-select, uncontrolled-highlight mode; `Enter`/`→` descend into a parent item's `children` and `Escape`/`←` ascend back out.
 
 `Page Up`/`Page Down` move the highlight by a page at a time — the number of items currently visible in the `limit` window, or 10 when `limit` is not set.
 
