@@ -18,7 +18,6 @@ import type {
   UseEnhancedSelectInputProps,
 } from '../headless.js'
 
-// eslint-disable-next-line unicorn/prevent-abbreviations
 type ExtReq<A, B> = Required<A> extends Required<B> ? true : false
 
 // Structural equality in both directions, via `Required<>` so a divergence
