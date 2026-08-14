@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.4.0...v1.5.0) (2026-08-14)
+
+
+### 🌟 New Features
+
+* **enhanced-select-input:** group-level select-all for multiple-selection mode ([#174](https://github.com/gfargo/ink-enhanced-select-input/issues/174)) ([c114710](https://github.com/gfargo/ink-enhanced-select-input/commit/c114710c4518cd9d08ce24ec24f0325701b2313b))
+* **enhanced-select-input:** pin a group header atop the window when scrolled mid-group ([#94](https://github.com/gfargo/ink-enhanced-select-input/issues/94)) ([#182](https://github.com/gfargo/ink-enhanced-select-input/issues/182)) ([da477e5](https://github.com/gfargo/ink-enhanced-select-input/commit/da477e59d6862c64bc11f35ff61f1c48699e11a9))
+
+
+### 🐞 Bug Fixes
+
+* **enhanced-select-input:** resolve same-tick navigation keypresses against the live index, not a stale render ([#68](https://github.com/gfargo/ink-enhanced-select-input/issues/68)) ([#177](https://github.com/gfargo/ink-enhanced-select-input/issues/177)) ([0846715](https://github.com/gfargo/ink-enhanced-select-input/commit/0846715c0efc67a2281261ee4b76f1acefcca8cc))
+
+
+### 📝 Documentation
+
+* add a table of contents to the readme ([#183](https://github.com/gfargo/ink-enhanced-select-input/issues/183)) ([7e8c4c7](https://github.com/gfargo/ink-enhanced-select-input/commit/7e8c4c7c1191054f5d13e0944815abb92e76ee3e))
+
 ## [1.4.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.3.0...v1.4.0) (2026-08-14)
 
 
