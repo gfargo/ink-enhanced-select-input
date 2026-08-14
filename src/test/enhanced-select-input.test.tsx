@@ -6023,6 +6023,128 @@ test.serial(
   }
 )
 
+test.serial(
+  'collapsible + limit: collapsing a group recomputes the page window and reveals rows that were previously below the fold',
+  async (t) => {
+    const items = [
+      { label: 'A1', value: 'a1', group: 'G1' },
+      { label: 'A2', value: 'a2', group: 'G1' },
+      { label: 'A3', value: 'a3', group: 'G1' },
+      { label: 'B1', value: 'b1', group: 'G2' },
+      { label: 'B2', value: 'b2', group: 'G2' },
+      { label: 'B3', value: 'b3', group: 'G2' },
+      { label: 'C1', value: 'c1', group: 'G3' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // NavRows: [header:G1, A1, A2, A3, header:G2, B1, B2, B3, header:G3, C1]
+    // (10 rows). limit=3 → page 0 is rows [0,3): header:G1, A1, A2.
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.visibleItems.length, 3)
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.is(result?.itemsAbove, 0)
+    t.is(result?.itemsBelow, 7)
+
+    // Highlight is on the G1 header at mount — collapse it.
+    stdin.write(SPACE)
+    await delay()
+
+    // NavRows shrink to [header:G1(collapsed), header:G2, B1, B2, B3,
+    // header:G3, C1] (7 rows) — G1's 3 items are gone outright, not merely
+    // uncounted, so page 0 now fits header:G1, header:G2, B1 and itemsBelow
+    // drops from 7 to 4 in the same tick as the collapse.
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.visibleItems.length, 3)
+    t.is(result?.itemsAbove, 0)
+    t.is(result?.itemsBelow, 4)
+
+    const [row0, row1, row2] = result!.visibleItems
+    t.true(isGroupHeaderRow(row0))
+    t.is((row0 as { group: string }).group, 'G1')
+    t.true((row0 as { collapsed: boolean }).collapsed)
+    t.true(isGroupHeaderRow(row1))
+    t.is((row1 as { group: string }).group, 'G2')
+    t.false(isGroupHeaderRow(row2) || isSeparator(row2!))
+    t.is((row2 as { label: string }).label, 'B1')
+  }
+)
+
+test.serial(
+  'collapsible + multiple: checked items in a collapsed group stay checked, Space on a header collapses instead of toggling, and onConfirm still includes hidden-but-checked items',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let confirmed: string[] | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        items={items}
+        defaultSelectedKeys={['a']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Highlight starts on the "First" header; 'a' is pre-checked.
+    t.is(result?.selectedIndex, 0)
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.true(result?.checkedKeys.has('a'))
+
+    // Space on a header collapses its group — it must not toggle a checkbox.
+    stdin.write(SPACE)
+    await delay()
+
+    t.true(
+      (result?.visibleItems[0] as { collapsed: boolean } | undefined)?.collapsed
+    )
+    t.true(result?.checkedKeys.has('a'))
+    t.is(result?.checkedKeys.size, 1)
+
+    // Navigate onto "C" (First's items are hidden, so the next row is the
+    // "Second" header, then "C") and check it.
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(result?.selectedItem?.label, 'C')
+
+    stdin.write(SPACE)
+    await delay()
+    t.true(result?.checkedKeys.has('c'))
+
+    stdin.write(ENTER)
+    await delay()
+
+    // 'a' is still checked despite living in a collapsed, hidden group.
+    t.is(confirmed?.length, 2)
+    t.true(confirmed?.includes('a'))
+    t.true(confirmed?.includes('c'))
+  }
+)
+
 test('reorderByGroups returns items unchanged when groups is undefined or empty', (t) => {
   const items: Array<ItemOrSeparator<string>> = [
     { label: 'B', value: 'b', group: 'B' },

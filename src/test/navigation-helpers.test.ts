@@ -656,6 +656,26 @@ test('buildNavigableRows: header keys are unique even for repeated group names',
   t.is(new Set(headerKeys).size, headerKeys.length)
 })
 
+test("buildNavigableRows: a later group's header key is stable across an earlier group's collapse toggle", (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+  ]
+
+  const expandedKey = buildNavigableRows(items, new Set())
+    .filter((row) => isGroupHeaderRow(row) && row.group === 'Second')
+    .map((row) => (row as { key: string }).key)[0]
+
+  // Collapsing "First" removes its 2 item rows ahead of "Second", changing
+  // "Second" header's position in the array — the key must not change with it.
+  const collapsedKey = buildNavigableRows(items, new Set(['First']))
+    .filter((row) => isGroupHeaderRow(row) && row.group === 'Second')
+    .map((row) => (row as { key: string }).key)[0]
+
+  t.is(expandedKey, collapsedKey)
+})
+
 // ── computeNavRowPageStarts ──────────────────────────────────────────────────
 
 test('computeNavRowPageStarts: empty navRows returns no pages', (t) => {

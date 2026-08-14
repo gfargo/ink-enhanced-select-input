@@ -175,6 +175,7 @@ export function buildNavigableRows<V>(
   collapsedGroups: ReadonlySet<string>
 ): Array<NavRow<V>> {
   const rows: Array<NavRow<V>> = []
+  const headerOccurrences = new Map<string, number>()
   let previousGroup: string | undefined
 
   for (const item of items) {
@@ -182,10 +183,15 @@ export function buildNavigableRows<V>(
     if (group !== previousGroup) {
       previousGroup = group
       if (group !== undefined) {
+        const occurrence = headerOccurrences.get(group) ?? 0
+        headerOccurrences.set(group, occurrence + 1)
         rows.push({
           type: 'group-header',
           group,
-          key: `group-header-${rows.length}-${group}`,
+          key:
+            occurrence === 0
+              ? `group-header-${group}`
+              : `group-header-${group}-${occurrence}`,
           collapsed: collapsedGroups.has(group),
         })
       }
