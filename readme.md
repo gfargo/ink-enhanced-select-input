@@ -330,6 +330,8 @@ Set `collapsible: true` to make group headers focusable, navigable rows. The hig
 
 Combined with `multiple`, collapsing a group only hides it from view — checked state (`toggle`/`selectAll`/`selectNone`/`invertSelection`) is always tracked over the full, uncollapsed item set, so a checked item inside a collapsed group stays checked and still confirms. `collapsible` is unsupported combined with a controlled `selectedIndex`.
 
+Also combined with `multiple`, `Ctrl+A` on a focused group header checks every enabled item in that group instead of performing the global select-all — if any enabled item in the group is unchecked it checks all of them, otherwise it unchecks all of them (all-on-if-any-off). Disabled items in the group are never touched, and this works on a collapsed group too. Off a header (or outside `collapsible`/`multiple`), `Ctrl+A` keeps its usual global select-all meaning. The headless equivalent is `toggleGroup(group)` from `useEnhancedSelectInput`, which fires `onToggle` once per affected item.
+
 ### Descriptions, Hints & Disabled Reasons
 
 Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
@@ -749,6 +751,7 @@ The hook accepts all the same props as `EnhancedSelectInput` except `indicatorCo
 - `setSelectedIndex(index)` — imperatively move the highlighted item, clamping into range and snapping `rotateIndex` to the containing page.
 - `setSearchQuery(query)` — imperatively set the search query, place the cursor at the end, and reset the highlighted selection to the top. Has no filtering effect unless `searchable` is `true`.
 - `toggle(item?)` — toggle the checked state of `item` (defaults to the highlighted item) in `multiple` mode; no-op outside `multiple` mode, on a disabled item, or when checking would exceed `maxSelections` (unchecking is always allowed), and fires `onToggle`.
+- `toggleGroup(group)` — toggle every enabled item in `group` at once: checks all of them if any is unchecked, otherwise unchecks all (all-on-if-any-off); disabled items are untouched. No-op outside `multiple` mode. Fires `onToggle` once per affected item. This is what `Ctrl+A` on a focused, `collapsible` group header dispatches — see [Collapsible Groups](#collapsible-groups).
 - `selectAll()` / `selectNone()` / `invertSelection()` — bulk-check/uncheck/flip every enabled item (respecting the active search filter and `maxSelections`); no-op outside `multiple` mode.
 - `selectionCount` — number of currently checked items (`0` outside `multiple` mode).
 - `isSelectionValid` — `true` when `selectionCount` satisfies `minSelections`/`maxSelections` (always `true` outside `multiple` mode or when neither bound is set).

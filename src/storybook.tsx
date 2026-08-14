@@ -9,6 +9,7 @@ type StorybookView =
   | 'custom-item'
   | 'groups'
   | 'collapsible-groups'
+  | 'group-select-all'
   | 'multi-select'
   | 'searchable'
   | 'scroll-indicators'
@@ -101,6 +102,11 @@ export function Storybook() {
                 group: 'New in 1.0',
               },
               {
+                label: 'Group Select-All',
+                value: 'group-select-all',
+                group: 'New in 1.0',
+              },
+              {
                 label: 'Multi-Select',
                 value: 'multi-select',
                 group: 'New in 1.0',
@@ -183,6 +189,43 @@ export function Storybook() {
               if (item.value === 'back') {
                 setCurrentView(undefined)
               }
+            }}
+          />
+        </Box>
+      )}
+
+      {currentView === 'group-select-all' && orientation && (
+        <Box flexDirection="column">
+          <Text dimColor>
+            Group Select-All — collapsible + multi-select: Space toggles an
+            item, Ctrl+A on a focused header toggles the whole group (skipping
+            disabled items), Enter confirms:
+          </Text>
+          <EnhancedSelectInput
+            collapsible
+            multiple
+            showSelectionCount
+            showHelp
+            orientation={orientation}
+            defaultCollapsedGroups={['Frameworks']}
+            items={[
+              { label: 'TypeScript', value: 'ts', group: 'Languages' },
+              { label: 'Rust', value: 'rust', group: 'Languages' },
+              { label: 'Go', value: 'go', group: 'Languages' },
+              { label: 'React', value: 'react', group: 'Frameworks' },
+              { label: 'Ink', value: 'ink', group: 'Frameworks' },
+              {
+                label: 'COBOL (unavailable)',
+                value: 'cobol',
+                group: 'Frameworks',
+                disabled: true,
+              },
+            ]}
+            onConfirm={(items) => {
+              console.log('Confirmed:', items.map((i) => i.label).join(', '))
+            }}
+            onCancel={() => {
+              setCurrentView(undefined)
             }}
           />
         </Box>

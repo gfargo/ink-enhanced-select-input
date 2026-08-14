@@ -399,8 +399,9 @@ export type UseEnhancedSelectInputProps<V> = {
    */
   readonly confirmScope?: 'all' | 'filtered'
   /**
-   * Called each time an item is toggled in multi-select mode (Space).
-   * Receives the toggled item and whether it is now checked.
+   * Called each time an item is toggled in multi-select mode — via Space, or
+   * once per affected item when `Ctrl+A` toggles a whole group (see
+   * `collapsible`). Receives the toggled item and whether it is now checked.
    */
   readonly onToggle?: (item: Item<V>, checked: boolean) => void
   /**
@@ -496,9 +497,11 @@ export type UseEnhancedSelectInputProps<V> = {
    * Combined with `multiple`, collapsing only hides a group from view —
    * checked state (`toggle`/`selectAll`/`selectNone`/`invertSelection`) is
    * always tracked over the full, uncollapsed item set, so a checked item
-   * inside a collapsed group stays checked and still confirms. Unsupported
-   * combined with a controlled `selectedIndex`. Default: false, preserving
-   * the historical non-navigable header behavior.
+   * inside a collapsed group stays checked and still confirms. Also with
+   * `multiple`, `Ctrl+A` on a focused header toggles every enabled item in
+   * that group (all-on-if-any-off; see `toggleGroup`) instead of the global
+   * select-all. Unsupported combined with a controlled `selectedIndex`.
+   * Default: false, preserving the historical non-navigable header behavior.
    */
   readonly collapsible?: boolean
   /**
@@ -1309,6 +1312,7 @@ export type Intent<V> =
   | { type: 'descend'; item: Item<V> }
   | { type: 'ascend' }
   | { type: 'toggle-collapse'; group: string }
+  | { type: 'toggle-group'; group: string }
 
 /**
  * Search-line word/line delete, backspace, and Escape-while-querying,
@@ -1446,6 +1450,31 @@ function resolveToggleCollapseIntent<V>(
   }
 
   return undefined
+}
+
+/**
+ * `Ctrl+A` on a focused group header toggles every enabled item in that
+ * group, instead of falling through to {@link resolveBulkIntent}'s global
+ * select-all. Only claims the chord when the highlight is actually on a
+ * {@link GroupHeaderRow} — off a header, `Ctrl+A` still means global
+ * select-all. Gated on `multiple` (there is no `checkedKeys` otherwise) and
+ * `collapsible` (headers are only navigable rows in that mode), and on
+ * `km.bulk` since this reuses the bulk-selection chord namespace. Resolved
+ * before {@link resolveBulkIntent} so the header-context binding wins.
+ */
+function resolveToggleGroupIntent<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, multiple, collapsible, filteredItems, selectedIndex } = context
+  if (!multiple || !collapsible || !km.bulk) return undefined
+  if (!(key.ctrl && input === 'a')) return undefined
+
+  const highlighted = filteredItems[selectedIndex]
+  if (!isGroupHeaderRow(highlighted)) return undefined
+
+  return { type: 'toggle-group', group: highlighted.group }
 }
 
 /** Home/End jump-to-boundary, gated on `km.homeEnd`. */
@@ -1832,6 +1861,9 @@ export function resolveInputIntent<V>(
   const toggleCollapse = resolveToggleCollapseIntent(input, key, context)
   if (toggleCollapse) return toggleCollapse
 
+  const toggleGroup = resolveToggleGroupIntent(input, key, context)
+  if (toggleGroup) return toggleGroup
+
   const { isModifiedChord, isActiveVimKey } = resolveModifierState(
     input,
     key,
@@ -2063,6 +2095,13 @@ export type UseEnhancedSelectInputResult<V> = {
    * (unchecking is always allowed). Fires `onToggle`.
    */
   toggle: (item?: Item<V>) => void
+  /**
+   * Toggle every enabled item in `group` at once: if any enabled member is
+   * unchecked, checks all of them; otherwise unchecks all
+   * (all-on-if-any-off). Disabled items are never touched. No-op outside
+   * `multiple` mode. Fires `onToggle` once per affected item.
+   */
+  toggleGroup: (group: string) => void
   /** Number of currently checked items. Always 0 outside `multiple` mode. */
   selectionCount: number
   /**
@@ -2900,6 +2939,43 @@ export function useEnhancedSelectInput<V>({
     updateCheckedKeys(next)
   }
 
+  // Toggle every enabled item in `group` at once in multi-select mode:
+  // all-on-if-any-off — if any enabled member is unchecked, check all of
+  // them; otherwise uncheck all. Disabled items are never touched. Reads
+  // group membership from `filteredItems` (not `navRows`), so a collapsed
+  // group's items are included — matching how checked state already
+  // survives collapse (see the collapsible+multiple test). Unlike
+  // `selectAll`/`selectNone`/`invertSelection` below, this fires `onToggle`
+  // per affected item — a single group's membership is small and bounded,
+  // so the callback-storm concern that keeps those bulk helpers silent
+  // doesn't apply here, and per-item notification is more useful.
+  const toggleGroup = (group: string) => {
+    if (!multiple) return
+    const members = filteredItems.filter(
+      (item): item is Item<V> => isSelectable(item) && item.group === group
+    )
+    if (members.length === 0) return
+
+    const { current } = checkedKeysReference
+    const willCheck = members.some((item) => !current.has(itemKey(item)))
+    const next = new Set(current)
+    for (const item of members) {
+      const k = itemKey(item)
+      if (willCheck) {
+        if (next.has(k)) continue
+        if (maxSelections !== undefined && next.size >= maxSelections) break
+        next.add(k)
+        onToggle?.(item, true)
+      } else {
+        if (!next.has(k)) continue
+        next.delete(k)
+        onToggle?.(item, false)
+      }
+    }
+
+    updateCheckedKeys(next)
+  }
+
   // Bulk selection helpers — select-all/invert only add enabled items drawn
   // from filteredItems (never disabled ones, matching defaultSelectedKeys'
   // and toggle's behaviour) and stop adding once maxSelections is reached,
@@ -3189,6 +3265,11 @@ export function useEnhancedSelectInput<V>({
           break
         }
 
+        case 'toggle-group': {
+          toggleGroup(intent.group)
+          break
+        }
+
         case 'none': {
           break
         }
@@ -3215,6 +3296,7 @@ export function useEnhancedSelectInput<V>({
     setSelectedIndex: setSelectedIndexPublic,
     setSearchQuery: setSearchQueryPublic,
     toggle,
+    toggleGroup,
     selectionCount,
     isSelectionValid,
     selectAll,
