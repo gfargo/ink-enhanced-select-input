@@ -165,10 +165,15 @@ export function Storybook() {
         <Box flexDirection="column">
           <Text dimColor>
             Collapsible Groups — headers are focusable; Space/Enter/→ collapses
-            or expands the highlighted group:
+            or expands the highlighted group. Multi-select mode: Space toggles
+            an item, Ctrl+A on a header toggles the whole group (skipping
+            disabled items), Enter confirms:
           </Text>
           <EnhancedSelectInput
             collapsible
+            multiple
+            showSelectionCount
+            showHelp
             orientation={orientation}
             defaultCollapsedGroups={['Frameworks']}
             items={[
@@ -177,12 +182,18 @@ export function Storybook() {
               { label: 'Go', value: 'go', group: 'Languages' },
               { label: 'React', value: 'react', group: 'Frameworks' },
               { label: 'Ink', value: 'ink', group: 'Frameworks' },
-              { label: 'Go Back', value: 'back', hotkey: 'b' },
+              {
+                label: 'COBOL (unavailable)',
+                value: 'cobol',
+                group: 'Frameworks',
+                disabled: true,
+              },
             ]}
-            onSelect={(item) => {
-              if (item.value === 'back') {
-                setCurrentView(undefined)
-              }
+            onConfirm={(items) => {
+              console.log('Confirmed:', items.map((i) => i.label).join(', '))
+            }}
+            onCancel={() => {
+              setCurrentView(undefined)
             }}
           />
         </Box>

@@ -6145,6 +6145,249 @@ test.serial(
   }
 )
 
+// ── group-level select-all (Ctrl+A on a focused header, multiple mode) ────────
+
+test.serial(
+  'collapsible + multiple: Ctrl+A on a focused header checks every enabled item in that group, skipping disabled ones, and fires onToggle per affected item',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'B', value: 'b', group: 'G', disabled: true },
+      { label: 'C', value: 'c', group: 'G' },
+      { label: 'D', value: 'd', group: 'Other' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const toggled: Array<[string, boolean]> = []
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        items={items}
+        onToggle={(item, checked) => {
+          toggled.push([String(item.value), checked])
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Highlight starts on the "G" header.
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.is((result?.visibleItems[0] as { group: string }).group, 'G')
+
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.true(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('c'))
+    t.false(result?.checkedKeys.has('b'))
+    t.false(result?.checkedKeys.has('d'))
+    t.is(result?.checkedKeys.size, 2)
+    t.deepEqual(new Set(toggled.map(([key]) => key)), new Set(['a', 'c']))
+    t.true(toggled.every(([, checked]) => checked))
+  }
+)
+
+test.serial(
+  'collapsible + multiple: Ctrl+A on a focused header unchecks every enabled item when all of them are already checked',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'B', value: 'b', group: 'G', disabled: true },
+      { label: 'C', value: 'c', group: 'G' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        items={items}
+        defaultSelectedKeys={['a', 'c']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.false(result?.checkedKeys.has('a'))
+    t.false(result?.checkedKeys.has('c'))
+    t.is(result?.checkedKeys.size, 0)
+  }
+)
+
+test.serial(
+  'collapsible + multiple: Ctrl+A follows all-on-if-any-off — a partially-checked group is fully checked, not cleared',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'C', value: 'c', group: 'G' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        items={items}
+        defaultSelectedKeys={['a']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.true(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('c'))
+    t.is(result?.checkedKeys.size, 2)
+  }
+)
+
+test.serial(
+  'collapsible: Ctrl+A on a focused header is a no-op when multiple is false',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'C', value: 'c', group: 'G' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    const collapsedBefore = (
+      result?.visibleItems[0] as { collapsed: boolean } | undefined
+    )?.collapsed
+
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.is(result?.checkedKeys.size, 0)
+    t.is(
+      (result?.visibleItems[0] as { collapsed: boolean } | undefined)
+        ?.collapsed,
+      collapsedBefore
+    )
+  }
+)
+
+test.serial(
+  'multiple (non-collapsible): Ctrl+A still performs the global select-all — no header exists to bind the group toggle to',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'C', value: 'c', group: 'G' },
+      { label: 'D', value: 'd', group: 'Other' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        multiple
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.is(result?.checkedKeys.size, 3)
+  }
+)
+
+test.serial(
+  'collapsible + multiple: Ctrl+A on a focused header respects maxSelections',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'G' },
+      { label: 'B', value: 'b', group: 'G' },
+      { label: 'C', value: 'c', group: 'G' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        maxSelections={2}
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.is(result?.checkedKeys.size, 2)
+  }
+)
+
+test.serial(
+  'collapsible + multiple: Ctrl+A on a collapsed header still toggles its hidden items',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        multiple
+        items={items}
+        defaultCollapsedGroups={['First']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // "First" is collapsed, so its header is the only visible row for it.
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.is((result?.visibleItems[0] as { group: string }).group, 'First')
+    t.true(
+      (result?.visibleItems[0] as { collapsed: boolean } | undefined)?.collapsed
+    )
+
+    stdin.write(CTRL_A)
+    await delay()
+
+    t.true(result?.checkedKeys.has('a'))
+    t.true(result?.checkedKeys.has('b'))
+    t.false(result?.checkedKeys.has('c'))
+  }
+)
+
 test('reorderByGroups returns items unchanged when groups is undefined or empty', (t) => {
   const items: Array<ItemOrSeparator<string>> = [
     { label: 'B', value: 'b', group: 'B' },
