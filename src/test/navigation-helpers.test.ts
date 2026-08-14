@@ -1,10 +1,13 @@
 import test from 'ava'
 import {
+  buildNavigableRows,
+  computeNavRowPageStarts,
   computePageStarts,
   findFirstValidIndex,
   findLastValidIndex,
   findNextValidIndex,
   findPageIndex,
+  isGroupHeaderRow,
   pageIndexOfStart,
   pageStartFor,
   resolveInitialIndex,
@@ -12,6 +15,7 @@ import {
   truncateLabel,
   type Item,
   type ItemOrSeparator,
+  type NavRow,
   type SeparatorItem,
 } from '../enhanced-select-input/index.js'
 
@@ -566,4 +570,144 @@ test('computePageStarts: a separator costs exactly one row, same as a plain item
     mkItem('c'),
   ]
   t.deepEqual(computePageStarts(items, 2), [0, 2])
+})
+
+// ── buildNavigableRows ──────────────────────────────────────────────────────
+
+function rowSignature(row: NavRow<string>): string {
+  if (isGroupHeaderRow(row)) return `header:${row.group}:${row.collapsed}`
+  if ('type' in row && row.type === 'separator') return 'separator'
+  return row.label
+}
+
+test('buildNavigableRows: ungrouped items pass through with no headers', (t) => {
+  const items = [mkItem('a'), mkItem('b')]
+  const rows = buildNavigableRows(items, new Set())
+  t.deepEqual(
+    rows.map((row) => rowSignature(row)),
+    ['a', 'b']
+  )
+})
+
+test('buildNavigableRows: inserts one header per contiguous group boundary', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  t.deepEqual(
+    rows.map((row) => rowSignature(row)),
+    ['header:First:false', 'A', 'B', 'header:Second:false', 'C']
+  )
+})
+
+test('buildNavigableRows: a collapsed group renders only its header, items omitted', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set(['First']))
+  t.deepEqual(
+    rows.map((row) => rowSignature(row)),
+    ['header:First:true', 'header:Second:false', 'C']
+  )
+})
+
+test('buildNavigableRows: non-contiguous occurrences of the same group each get their own header', (t) => {
+  const items = [
+    mkGroupedItem('A', 'G'),
+    mkItem('ungrouped'),
+    mkGroupedItem('B', 'G'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  t.deepEqual(
+    rows.map((row) => rowSignature(row)),
+    ['header:G:false', 'A', 'ungrouped', 'header:G:false', 'B']
+  )
+})
+
+test('buildNavigableRows: separators pass through unaffected by grouping', (t) => {
+  const items: Array<ItemOrSeparator<string>> = [
+    mkGroupedItem('A', 'G'),
+    mkSeparator(),
+    mkGroupedItem('B', 'G'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // The separator breaks group continuity — same as computePageStarts —
+  // so the second grouped item gets its own header.
+  t.deepEqual(
+    rows.map((row) => rowSignature(row)),
+    ['header:G:false', 'A', 'separator', 'header:G:false', 'B']
+  )
+})
+
+test('buildNavigableRows: header keys are unique even for repeated group names', (t) => {
+  const items = [
+    mkGroupedItem('A', 'G'),
+    mkItem('ungrouped'),
+    mkGroupedItem('B', 'G'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  const headerKeys = rows
+    .filter((row) => isGroupHeaderRow(row))
+    .map((row) => row.key)
+  t.is(new Set(headerKeys).size, headerKeys.length)
+})
+
+test("buildNavigableRows: a later group's header key is stable across an earlier group's collapse toggle", (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+  ]
+
+  const expandedKey = buildNavigableRows(items, new Set())
+    .filter((row) => isGroupHeaderRow(row) && row.group === 'Second')
+    .map((row) => (row as { key: string }).key)[0]
+
+  // Collapsing "First" removes its 2 item rows ahead of "Second", changing
+  // "Second" header's position in the array — the key must not change with it.
+  const collapsedKey = buildNavigableRows(items, new Set(['First']))
+    .filter((row) => isGroupHeaderRow(row) && row.group === 'Second')
+    .map((row) => (row as { key: string }).key)[0]
+
+  t.is(expandedKey, collapsedKey)
+})
+
+// ── computeNavRowPageStarts ──────────────────────────────────────────────────
+
+test('computeNavRowPageStarts: empty navRows returns no pages', (t) => {
+  t.deepEqual(computeNavRowPageStarts<string>([], 3), [])
+})
+
+test('computeNavRowPageStarts: falsy limit returns a single page', (t) => {
+  const rows = buildNavigableRows([mkItem('a'), mkItem('b')], new Set())
+  t.deepEqual(computeNavRowPageStarts(rows, 0), [0])
+})
+
+test('computeNavRowPageStarts: every row (item or header) costs exactly one, no virtual injection', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, header:Second, C] — 5 rows, limit 2 → chunks of 2.
+  t.deepEqual(computeNavRowPageStarts(rows, 2), [0, 2, 4])
+})
+
+test('computeNavRowPageStarts: a collapsed group is excluded from page starts, not merely uncounted', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'Second'),
+    mkGroupedItem('D', 'Second'),
+  ]
+  const collapsedRows = buildNavigableRows(items, new Set(['First']))
+  // Rows: [header:First(collapsed), header:Second, C, D] — 4 rows total,
+  // with A/B never present to page over at all.
+  t.is(collapsedRows.length, 4)
+  t.deepEqual(computeNavRowPageStarts(collapsedRows, 3), [0, 3])
 })

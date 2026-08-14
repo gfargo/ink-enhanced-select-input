@@ -8,6 +8,7 @@ type StorybookView =
   | 'custom-indicators'
   | 'custom-item'
   | 'groups'
+  | 'collapsible-groups'
   | 'multi-select'
   | 'searchable'
   | 'scroll-indicators'
@@ -95,6 +96,11 @@ export function Storybook() {
                 group: 'New in 1.0',
               },
               {
+                label: 'Collapsible Groups',
+                value: 'collapsible-groups',
+                group: 'New in 1.0',
+              },
+              {
                 label: 'Multi-Select',
                 value: 'multi-select',
                 group: 'New in 1.0',
@@ -138,6 +144,33 @@ export function Storybook() {
           <Text dimColor>Item Groups — items grouped under headers:</Text>
           <EnhancedSelectInput
             orientation={orientation}
+            items={[
+              { label: 'TypeScript', value: 'ts', group: 'Languages' },
+              { label: 'Rust', value: 'rust', group: 'Languages' },
+              { label: 'Go', value: 'go', group: 'Languages' },
+              { label: 'React', value: 'react', group: 'Frameworks' },
+              { label: 'Ink', value: 'ink', group: 'Frameworks' },
+              { label: 'Go Back', value: 'back', hotkey: 'b' },
+            ]}
+            onSelect={(item) => {
+              if (item.value === 'back') {
+                setCurrentView(undefined)
+              }
+            }}
+          />
+        </Box>
+      )}
+
+      {currentView === 'collapsible-groups' && orientation && (
+        <Box flexDirection="column">
+          <Text dimColor>
+            Collapsible Groups — headers are focusable; Space/Enter/→ collapses
+            or expands the highlighted group:
+          </Text>
+          <EnhancedSelectInput
+            collapsible
+            orientation={orientation}
+            defaultCollapsedGroups={['Frameworks']}
             items={[
               { label: 'TypeScript', value: 'ts', group: 'Languages' },
               { label: 'Rust', value: 'rust', group: 'Languages' },
