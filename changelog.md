@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.3.0...v1.4.0) (2026-08-14)
+
+
+### 🌟 New Features
+
+* **enhanced-select-input:** add explicit groups prop for deterministic group ordering ([#165](https://github.com/gfargo/ink-enhanced-select-input/issues/165)) ([dc1a92b](https://github.com/gfargo/ink-enhanced-select-input/commit/dc1a92b291ecc373073d55ad4ec217e950bc63c5))
+* **enhanced-select-input:** make group headers navigable/focusable and collapsible ([#173](https://github.com/gfargo/ink-enhanced-select-input/issues/173)) ([d955bdd](https://github.com/gfargo/ink-enhanced-select-input/commit/d955bdda8ff8d39fd7b8224e4219536bc0415f7f))
+
+
+### 📝 Documentation
+
+* add VHS demo captures to the readme ([#169](https://github.com/gfargo/ink-enhanced-select-input/issues/169)) ([36fc670](https://github.com/gfargo/ink-enhanced-select-input/commit/36fc670a3ff7b70e392d50bdc033589840afd7af))
+* **demos:** credit the terminal:vhs-cli-demos skill ([#171](https://github.com/gfargo/ink-enhanced-select-input/issues/171)) ([3a0cc22](https://github.com/gfargo/ink-enhanced-select-input/commit/3a0cc22947de93919568571e26fede1f5aaa92a2))
+
+
+### ✅ Tests
+
+* **enhanced-select-input:** add StrictMode test pass targeting B8 ([#164](https://github.com/gfargo/ink-enhanced-select-input/issues/164)) ([c1f70fe](https://github.com/gfargo/ink-enhanced-select-input/commit/c1f70fe15aa4cad44bb15114fd3ff8468c49fc63))
+
 ## [1.3.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.2.1...v1.3.0) (2026-08-13)
 
 
