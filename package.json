@@ -4,6 +4,14 @@
   "description": "An enhanced variant of the select input component for Ink",
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gfargo/ink-enhanced-select-input.git"
+  },
+  "homepage": "https://github.com/gfargo/ink-enhanced-select-input#readme",
+  "bugs": {
+    "url": "https://github.com/gfargo/ink-enhanced-select-input/issues"
+  },
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
