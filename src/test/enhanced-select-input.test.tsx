@@ -9,12 +9,14 @@ import {
   scrollWindowStart,
   useEnhancedSelectInput,
   computePageStarts,
+  isGroupHeaderRow,
   isSeparator,
   reorderByGroups,
   type Item,
   type ItemOrSeparator,
   type ItemProperties,
   type KeyMap,
+  type NavRow,
   type UseEnhancedSelectInputResult,
 } from '../enhanced-select-input/index.js'
 
@@ -55,10 +57,10 @@ const delay = async (ms = 300) =>
 // Test fixtures below never include separators — narrow the label lookup so
 // assertions can read `.label` without threading isSeparator checks through
 // every call site.
-function labelOf(
-  item: ItemOrSeparator<unknown> | undefined
-): string | undefined {
-  return item && !isSeparator(item) ? item.label : undefined
+function labelOf(item: NavRow<unknown> | undefined): string | undefined {
+  return item && !isSeparator(item) && !isGroupHeaderRow(item)
+    ? item.label
+    : undefined
 }
 
 // Ink 7 flushes a lone Escape byte asynchronously (it briefly buffers it in
@@ -3152,6 +3154,9 @@ type HookHarnessProperties = {
   readonly onSelect?: (item: Item<unknown>) => void
   readonly onConfirm?: (items: Array<Item<unknown>>) => void
   readonly onCancel?: () => void
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly collapsible?: boolean
+  readonly defaultCollapsedGroups?: string[]
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -5757,6 +5762,267 @@ test.serial(
   }
 )
 
+// ── collapsible group headers ────────────────────────────────────────────────
+
+test.serial(
+  'collapsible: false (default) — group headers stay non-navigable',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    let highlighted = ''
+    const { stdin } = render(
+      <EnhancedSelectInput
+        items={items}
+        collapsible={false}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    t.is(highlighted, 'A')
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'B')
+  }
+)
+
+test.serial(
+  'collapsible: headers are focusable — initial highlight lands on the first group header',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    render(
+      <HookHarness
+        collapsible
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.selectedIndex, 0)
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.is((result?.visibleItems[0] as { group: string }).group, 'First')
+    // A header row is never the `selectedItem` — only a real, non-header item is.
+    t.is(result?.selectedItem, undefined)
+  }
+)
+
+test.serial(
+  'collapsible: Space collapses the highlighted header, hiding its items from the frame',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput collapsible items={items} />
+    )
+
+    await delay()
+    // The "First" header carries the highlight at mount (index 0).
+    const frameBeforeCollapse = lastFrame()!
+    t.true(frameBeforeCollapse.includes('▾ First'))
+    t.true(frameBeforeCollapse.includes('A'))
+    t.true(frameBeforeCollapse.includes('B'))
+
+    stdin.write(SPACE)
+    await delay()
+
+    const frameAfterCollapse = lastFrame()!
+    t.true(frameAfterCollapse.includes('▸ First'))
+    t.false(frameAfterCollapse.includes('A'))
+    t.false(frameAfterCollapse.includes('B'))
+    t.true(frameAfterCollapse.includes('C'))
+  }
+)
+
+test.serial('collapsible: Enter expands a collapsed group back', async (t) => {
+  const items = [
+    { label: 'A', value: 'a', group: 'First' },
+    { label: 'B', value: 'b', group: 'Second' },
+  ]
+
+  const { lastFrame, stdin } = render(
+    <EnhancedSelectInput
+      collapsible
+      items={items}
+      defaultCollapsedGroups={['First']}
+    />
+  )
+
+  await delay()
+  t.false(lastFrame()!.includes('A'))
+
+  stdin.write(ENTER)
+  await delay()
+
+  const frame = lastFrame()!
+  t.true(frame.includes('▾ First'))
+  t.true(frame.includes('A'))
+})
+
+test.serial(
+  'collapsible: → (rightArrow) toggles collapse just like Space/Enter',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    const { lastFrame, stdin } = render(
+      <EnhancedSelectInput collapsible items={items} />
+    )
+
+    await delay()
+    t.true(lastFrame()!.includes('A'))
+
+    stdin.write(ARROW_RIGHT)
+    await delay()
+
+    const frame = lastFrame()!
+    t.true(frame.includes('▸ First'))
+    t.false(frame.includes('A'))
+  }
+)
+
+test.serial(
+  'collapsible: collapsed items are excluded from navigation and visibleItems entirely',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        defaultCollapsedGroups={['First']}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // NavRows: [header:First(collapsed), header:Second, B] — "A" is absent
+    // entirely, not merely present-but-skipped.
+    t.is(result?.visibleItems.length, 3)
+    t.false(
+      result?.visibleItems.some(
+        (row) =>
+          !isGroupHeaderRow(row) && !isSeparator(row) && row.label === 'A'
+      )
+    )
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    t.is(result?.selectedItem?.label, 'B')
+  }
+)
+
+test.serial(
+  'collapsible: defaultCollapsedGroups seeds initial collapse state',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        items={items}
+        defaultCollapsedGroups={['First']}
+      />
+    )
+
+    await delay()
+    const frame = lastFrame()!
+    t.true(frame.includes('▸ First'))
+    t.false(frame.includes('A'))
+    t.true(frame.includes('▾ Second'))
+    t.true(frame.includes('B'))
+  }
+)
+
+test.serial(
+  'collapsible: hook selectedIndex/visibleItems count group headers as rows',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    render(
+      <HookHarness
+        collapsible
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Rows: [header:First, A, header:Second, B] — 4 navigable rows for 2 items.
+    t.is(result?.visibleItems.length, 4)
+  }
+)
+
+test.serial(
+  'collapsible: toggling collapse keeps the highlight on the same header',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // The "First" header carries the highlight at mount (index 0).
+    t.is(result?.selectedIndex, 0)
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+
+    stdin.write(SPACE)
+    await delay()
+
+    t.is(result?.selectedIndex, 0)
+    t.true(isGroupHeaderRow(result?.visibleItems[0]))
+    t.is(result?.visibleItems.length, 1)
+  }
+)
+
 test('reorderByGroups returns items unchanged when groups is undefined or empty', (t) => {
   const items: Array<ItemOrSeparator<string>> = [
     { label: 'B', value: 'b', group: 'B' },
@@ -7232,7 +7498,7 @@ test.serial(
     // "ice " matches only "Ice Cream" (not "Iced Tea" since "iced tea" doesn't contain "ice ")
     t.is(result?.visibleItems.length, 1)
     const first = result?.visibleItems[0]
-    t.is(first && !isSeparator(first) ? first.label : undefined, 'Ice Cream')
+    t.is(labelOf(first), 'Ice Cream')
   }
 )
 

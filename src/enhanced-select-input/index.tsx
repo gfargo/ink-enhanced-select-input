@@ -22,7 +22,9 @@ export type Item<V> = {
   disabled?: boolean
   /**
    * Group name for this item. Items sharing the same group value are visually
-   * grouped under a header row. Headers are non-navigable.
+   * grouped under a header row. Headers are non-navigable by default; set
+   * `collapsible: true` on {@link UseEnhancedSelectInputProps} to make them
+   * focusable rows that toggle their group's collapsed state.
    */
   group?: string
   /**
@@ -67,20 +69,50 @@ export type SeparatorItem = {
 
 export type ItemOrSeparator<V> = Item<V> | SeparatorItem
 
-export function isSeparator<V>(
-  item: ItemOrSeparator<V>
-): item is SeparatorItem {
+/**
+ * A focusable, non-selectable row standing in for a collapsible group's
+ * header. Only produced by {@link buildNavigableRows} when `collapsible` is
+ * true — never appears in `items`/`filteredItems` themselves.
+ */
+export type GroupHeaderRow = {
+  readonly type: 'group-header'
+  readonly group: string
+  readonly key: string
+  /** Whether this group's items are currently hidden from navigation/rendering. */
+  readonly collapsed: boolean
+}
+
+/** A single row of the navigable projection — an item, a separator, or (in `collapsible` mode) a group header. */
+export type NavRow<V> = ItemOrSeparator<V> | GroupHeaderRow
+
+export function isSeparator<V>(item: NavRow<V>): item is SeparatorItem {
   return (item as SeparatorItem).type === 'separator'
 }
 
-/** True when `item` can be highlighted/selected — not a separator and not disabled. */
-export function isSelectable<V>(
-  item: ItemOrSeparator<V> | undefined
-): item is Item<V> {
-  return item !== undefined && !isSeparator(item) && !item.disabled
+export function isGroupHeaderRow<V>(
+  row: NavRow<V> | undefined
+): row is GroupHeaderRow {
+  return row !== undefined && (row as GroupHeaderRow).type === 'group-header'
 }
 
-function groupOf<V>(item: ItemOrSeparator<V> | undefined): string | undefined {
+/** True when `row` is a real item — not a separator and not a group-header row — regardless of `disabled`. */
+export function isItem<V>(row: NavRow<V> | undefined): row is Item<V> {
+  return row !== undefined && !isSeparator(row) && !isGroupHeaderRow(row)
+}
+
+/** True when `row` can be highlighted/selected — a real item that's neither a separator, a group-header row, nor disabled. */
+export function isSelectable<V>(row: NavRow<V> | undefined): row is Item<V> {
+  return isItem(row) && !row.disabled
+}
+
+/** True when `row` can carry the navigation cursor — a selectable item, or (in `collapsible` mode) a group-header row. */
+export function isNavigable<V>(
+  row: NavRow<V> | undefined
+): row is Item<V> | GroupHeaderRow {
+  return isGroupHeaderRow(row) || isSelectable(row)
+}
+
+function groupOf<V>(item: NavRow<V> | undefined): string | undefined {
   return item && !isSeparator(item) ? item.group : undefined
 }
 
@@ -128,6 +160,43 @@ export function reorderByGroups<V>(
   }
 
   return [...buckets.flat(), ...ungrouped]
+}
+
+/**
+ * Projects `items` into the flat sequence of navigable rows used when
+ * `collapsible` is true: a {@link GroupHeaderRow} is inserted at each
+ * contiguous group boundary (mirroring the render layer's historical
+ * adjacency check), and a collapsed group's items are omitted entirely — not
+ * just their header — so they're excluded from navigation, rendering, and
+ * pagination alike. Ungrouped items and separators pass through unchanged.
+ */
+export function buildNavigableRows<V>(
+  items: Array<ItemOrSeparator<V>>,
+  collapsedGroups: ReadonlySet<string>
+): Array<NavRow<V>> {
+  const rows: Array<NavRow<V>> = []
+  let previousGroup: string | undefined
+
+  for (const item of items) {
+    const group = groupOf(item)
+    if (group !== previousGroup) {
+      previousGroup = group
+      if (group !== undefined) {
+        rows.push({
+          type: 'group-header',
+          group,
+          key: `group-header-${rows.length}-${group}`,
+          collapsed: collapsedGroups.has(group),
+        })
+      }
+    }
+
+    if (group === undefined || !collapsedGroups.has(group)) {
+      rows.push(item)
+    }
+  }
+
+  return rows
 }
 
 /**
@@ -413,6 +482,25 @@ export type UseEnhancedSelectInputProps<V> = {
    * the absolute boundary. Default: true.
    */
   readonly loop?: boolean
+  /**
+   * Makes group headers (see `Item.group`) focusable, navigable rows —
+   * Space, Enter, or → toggles the highlighted header's group between
+   * collapsed and expanded. A collapsed group's items are excluded from
+   * navigation, rendering, and pagination; only its header remains.
+   * Combined with `multiple`, collapsing only hides a group from view —
+   * checked state (`toggle`/`selectAll`/`selectNone`/`invertSelection`) is
+   * always tracked over the full, uncollapsed item set, so a checked item
+   * inside a collapsed group stays checked and still confirms. Unsupported
+   * combined with a controlled `selectedIndex`. Default: false, preserving
+   * the historical non-navigable header behavior.
+   */
+  readonly collapsible?: boolean
+  /**
+   * Group names to start collapsed when `collapsible` is true. Ignored
+   * otherwise. Read only at mount, like `initialIndex` — changing it after
+   * mount has no effect.
+   */
+  readonly defaultCollapsedGroups?: string[]
 }
 
 /**
@@ -623,6 +711,10 @@ export type ItemProperties = ItemProps
 
 export type GroupHeaderProps = {
   readonly label: string
+  /** True when this header carries the highlight cursor. Only meaningful when `collapsible` is true. */
+  readonly isSelected?: boolean
+  /** Whether this header's group is currently collapsed. `undefined` outside `collapsible` mode. */
+  readonly isCollapsed?: boolean
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
@@ -695,16 +787,16 @@ const NAV_VIM_KEYS: Record<'vertical' | 'horizontal', Set<string>> = {
 }
 
 export function resolveInitialIndex<V>(
-  items: Array<ItemOrSeparator<V>>,
+  items: Array<NavRow<V>>,
   initialIndex: number
 ): number {
   if (items.length === 0) return 0
   const clamped = Math.max(0, Math.min(initialIndex, items.length - 1))
-  if (isSelectable(items[clamped])) return clamped
-  // Search forward for the nearest selectable item, wrapping around
+  if (isNavigable(items[clamped])) return clamped
+  // Search forward for the nearest navigable row, wrapping around
   for (let i = 1; i < items.length; i++) {
     const nextIndex = (clamped + i) % items.length
-    if (isSelectable(items[nextIndex])) return nextIndex
+    if (isNavigable(items[nextIndex])) return nextIndex
   }
 
   return clamped
@@ -723,7 +815,7 @@ export function resolveInitialIndex<V>(
  * `false`.
  */
 export function resolveInitialSelection<V>(
-  items: Array<ItemOrSeparator<V>>,
+  items: Array<NavRow<V>>,
   options: {
     initialKey?: string
     initialValue?: V
@@ -740,14 +832,14 @@ export function resolveInitialSelection<V>(
 
   if (initialKey !== undefined) {
     const index = items.findIndex(
-      (item) => !isSeparator(item) && itemKey(item) === initialKey
+      (item) => isItem(item) && itemKey(item) === initialKey
     )
     if (index !== -1) return resolveInitialIndex(items, index)
   }
 
   if (initialValue !== undefined) {
     const index = items.findIndex(
-      (item) => !isSeparator(item) && item.value === initialValue
+      (item) => isItem(item) && item.value === initialValue
     )
     if (index !== -1) return resolveInitialIndex(items, index)
   }
@@ -760,7 +852,7 @@ export function resolveInitialSelection<V>(
 }
 
 export function findNextValidIndex<V>(
-  items: Array<ItemOrSeparator<V>>,
+  items: Array<NavRow<V>>,
   currentIndex: number,
   step: number,
   loop = true
@@ -772,23 +864,23 @@ export function findNextValidIndex<V>(
     let nextIndex = currentIndex
     for (let i = 0; i < itemCount; i++) {
       nextIndex = (nextIndex + step + itemCount) % itemCount
-      if (isSelectable(items[nextIndex])) {
+      if (isNavigable(items[nextIndex])) {
         return nextIndex
       }
     }
 
-    // No selectable item — stay put
+    // No navigable row — stay put
     return currentIndex
   }
 
-  // Clamp mode: step without wrapping, skipping non-selectable items along
+  // Clamp mode: step without wrapping, skipping non-navigable rows along
   // the way. Stops (stays put) once stepping again would run past the boundary.
   let nextIndex = currentIndex
   for (let i = 0; i < itemCount; i++) {
     const candidate = nextIndex + step
     if (candidate < 0 || candidate >= itemCount) break
     nextIndex = candidate
-    if (isSelectable(items[nextIndex])) {
+    if (isNavigable(items[nextIndex])) {
       return nextIndex
     }
   }
@@ -807,7 +899,7 @@ const DEFAULT_PAGE_SIZE = 10
  * spinning `abs(delta)` times for nothing.
  */
 export function findPageIndex<V>(
-  items: Array<ItemOrSeparator<V>>,
+  items: Array<NavRow<V>>,
   currentIndex: number,
   delta: number,
   loop: boolean
@@ -826,21 +918,17 @@ export function findPageIndex<V>(
   return index
 }
 
-export function findFirstValidIndex<V>(
-  items: Array<ItemOrSeparator<V>>
-): number {
+export function findFirstValidIndex<V>(items: Array<NavRow<V>>): number {
   for (const [i, item] of items.entries()) {
-    if (isSelectable(item)) return i
+    if (isNavigable(item)) return i
   }
 
   return -1
 }
 
-export function findLastValidIndex<V>(
-  items: Array<ItemOrSeparator<V>>
-): number {
+export function findLastValidIndex<V>(items: Array<NavRow<V>>): number {
   for (let i = items.length - 1; i >= 0; i--) {
-    if (isSelectable(items[i])) return i
+    if (isNavigable(items[i])) return i
   }
 
   return -1
@@ -921,6 +1009,30 @@ export function computePageStarts<V>(
 
     running += cost
     placedInPage += 1
+  }
+
+  return starts
+}
+
+/**
+ * Pagination windows over the navigable-row projection used in `collapsible`
+ * mode. Unlike {@link computePageStarts}, which injects a *virtual* header
+ * cost ahead of a plain `Array<ItemOrSeparator<V>>`, `navRows` already
+ * contains group headers as explicit rows — so every row (item, separator,
+ * or header) costs exactly one, with no extra injection. A collapsed group's
+ * items are simply absent from `navRows` to begin with, so they're excluded
+ * from every page outright rather than merely uncounted.
+ */
+export function computeNavRowPageStarts<V>(
+  navRows: Array<NavRow<V>>,
+  limit: number
+): number[] {
+  if (navRows.length === 0) return []
+  if (!limit || limit <= 0) return [0]
+
+  const starts: number[] = []
+  for (let i = 0; i < navRows.length; i += limit) {
+    starts.push(i)
   }
 
   return starts
@@ -1133,9 +1245,17 @@ export type InputIntentContext<V> = {
   multiple: boolean
   orientation: 'vertical' | 'horizontal'
   selectedIndex: number
-  filteredItems: Array<ItemOrSeparator<V>>
+  /**
+   * The navigable-row projection to index into. Equals the plain filtered
+   * items array unless `collapsible` is true, in which case it also
+   * includes {@link GroupHeaderRow} entities and omits collapsed groups'
+   * items — see {@link buildNavigableRows}.
+   */
+  filteredItems: Array<NavRow<V>>
   /** Current depth in the nested-item level stack. 0 at the root. */
   depth: number
+  /** Whether group headers are navigable/collapsible rows. Defaults to false. */
+  collapsible?: boolean
   /**
    * Whether descend/ascend intents may be resolved at all — false when
    * `multiple` or the highlighted index is controlled (nesting is
@@ -1182,6 +1302,7 @@ export type Intent<V> =
   | { type: 'hotkey'; item: Item<V>; index: number }
   | { type: 'descend'; item: Item<V> }
   | { type: 'ascend' }
+  | { type: 'toggle-collapse'; group: string }
 
 /**
  * Search-line word/line delete, backspace, and Escape-while-querying,
@@ -1288,6 +1409,37 @@ function resolveSearchEditIntent<V>(
     resolveSearchDeleteIntent(key, input, context) ??
     resolveSearchCursorIntent(key, input, context)
   )
+}
+
+/**
+ * Space / Enter / → toggles the highlighted group header's collapsed state.
+ * Only active when `collapsible` is true and the highlighted row is a
+ * {@link GroupHeaderRow} — resolved before jump/page/toggle/navigate/descend/
+ * submit so a header's Space/Enter/→ never falls through to a checkbox
+ * toggle, nested descend, or `onSelect` (headers have no children, so
+ * `resolveDescendIntent` already yields nothing for them, but resolving this
+ * first keeps the intent semantically explicit and immune to reordering).
+ */
+function resolveToggleCollapseIntent<V>(
+  input: string,
+  key: Key,
+  context: InputIntentContext<V>
+): Intent<V> | undefined {
+  const { km, collapsible, filteredItems, selectedIndex } = context
+  if (!collapsible) return undefined
+
+  const highlighted = filteredItems[selectedIndex]
+  if (!isGroupHeaderRow(highlighted)) return undefined
+
+  if (
+    (km.toggle && input === ' ') ||
+    (km.select && key.return) ||
+    (km.arrows && key.rightArrow)
+  ) {
+    return { type: 'toggle-collapse', group: highlighted.group }
+  }
+
+  return undefined
 }
 
 /** Home/End jump-to-boundary, gated on `km.homeEnd`. */
@@ -1671,6 +1823,9 @@ export function resolveInputIntent<V>(
     return { type: 'none' }
   }
 
+  const toggleCollapse = resolveToggleCollapseIntent(input, key, context)
+  if (toggleCollapse) return toggleCollapse
+
   const { isModifiedChord, isActiveVimKey } = resolveModifierState(
     input,
     key,
@@ -1842,8 +1997,13 @@ export type UseEnhancedSelectInputResult<V> = {
   selectedIndex: number
   /** Start of the current pagination window (0 when limit is not set). */
   rotateIndex: number
-  /** The slice of items visible in the current window. */
-  visibleItems: Array<ItemOrSeparator<V>>
+  /**
+   * The slice of rows visible in the current window. Plain items/separators
+   * unless `collapsible` is true, in which case it may also contain
+   * {@link GroupHeaderRow} entities — use {@link isGroupHeaderRow} to
+   * distinguish them before treating an entry as an `Item`.
+   */
+  visibleItems: Array<NavRow<V>>
   /** True when filtered items is non-empty. */
   hasItems: boolean
   /** Number of items hidden above the current window. */
@@ -2020,6 +2180,8 @@ export function useEnhancedSelectInput<V>({
   typeahead = false,
   typeaheadTimeout = 500,
   loop = true,
+  collapsible = false,
+  defaultCollapsedGroups,
 }: UseEnhancedSelectInputProps<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
@@ -2083,6 +2245,14 @@ export function useEnhancedSelectInput<V>({
     }
   }, [])
 
+  // Collapse state for `collapsible` group headers — a group name is
+  // collapsed while it's a member of this set. Seeded from
+  // `defaultCollapsedGroups` at mount; ignored entirely (and never read for
+  // navigation/rendering) when `collapsible` is false.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(defaultCollapsedGroups)
+  )
+
   // Level stack for nested navigation (see Item.children). The root frame
   // (index 0) is a placeholder — its items/selectedIndex are never read from
   // the frame itself; the root instead reads live from the `items` prop and
@@ -2091,28 +2261,38 @@ export function useEnhancedSelectInput<V>({
   // single-level hook, including reacting to `items` prop churn. Frames at
   // index >= 1 are pushed by descend and hold a snapshot of the parent
   // item's `children` plus cursor/scroll memory for ascend to restore.
-  const [stack, setStack] = useState<Array<Level<V>>>(() => [
-    {
-      items,
-      selectedIndex: resolveInitialSelection(
-        computeFilteredItems(reorderByGroups(items, groups), {
-          searchable,
-          isQueryControlled,
-          searchQuery,
-          filter,
-          searchFields,
-          matchMode,
-        }),
-        {
+  const [stack, setStack] = useState<Array<Level<V>>>(() => {
+    const initialFilteredItems = computeFilteredItems(
+      reorderByGroups(items, groups),
+      {
+        searchable,
+        isQueryControlled,
+        searchQuery,
+        filter,
+        searchFields,
+        matchMode,
+      }
+    )
+    const initialNavRows: Array<NavRow<V>> = collapsible
+      ? buildNavigableRows(
+          initialFilteredItems,
+          new Set(defaultCollapsedGroups)
+        )
+      : initialFilteredItems
+
+    return [
+      {
+        items,
+        selectedIndex: resolveInitialSelection(initialNavRows, {
           initialKey,
           initialValue,
           initialIndex: rawInitialIndex,
           autoSelectFirstEnabled,
-        }
-      ),
-      rotateIndex: 0,
-    },
-  ])
+        }),
+        rotateIndex: 0,
+      },
+    ]
+  })
   const depth = stack.length - 1
   const topFrame = stack[depth]!
   // Depth 0 always reads the live `items` prop (not the frame's snapshot) so
@@ -2165,13 +2345,32 @@ export function useEnhancedSelectInput<V>({
     ]
   )
 
+  // The navigable-row projection used for all index math (selection,
+  // pagination, rendering) below. Equals `filteredItems` by reference when
+  // `collapsible` is false, guaranteeing zero behavioral drift from the
+  // pre-collapsible hook on that (default) path. When `collapsible` is true,
+  // it also includes `GroupHeaderRow` entities and omits collapsed groups'
+  // items entirely — see `buildNavigableRows`.
+  const navRows: Array<NavRow<V>> = useMemo(
+    () =>
+      collapsible
+        ? buildNavigableRows(filteredItems, collapsedGroups)
+        : filteredItems,
+    [collapsible, filteredItems, collapsedGroups]
+  )
+
   // Pagination windows ("pages") are computed against rendered row count —
   // items plus the group headers injected before them — not raw item count,
-  // so `limit` bounds what actually appears on screen.
-  const pageStarts = useMemo(
-    () => (limit ? computePageStarts(filteredItems, limit) : []),
-    [filteredItems, limit]
-  )
+  // so `limit` bounds what actually appears on screen. In `collapsible` mode,
+  // headers are already explicit rows in `navRows` (and a collapsed group's
+  // items are simply absent from it), so `computeNavRowPageStarts` charges
+  // exactly one row per entity with no virtual header injection.
+  const pageStarts = useMemo(() => {
+    if (!limit) return []
+    return collapsible
+      ? computeNavRowPageStarts(navRows, limit)
+      : computePageStarts(filteredItems, limit)
+  }, [collapsible, navRows, filteredItems, limit])
 
   const isIndexControlled = controlledIndex !== undefined
   // Nesting is unsupported alongside `multiple` (checkedKeys stays a single
@@ -2179,7 +2378,7 @@ export function useEnhancedSelectInput<V>({
   // highlight (the level stack governs the uncontrolled cursor only).
   const nestingEnabled = !multiple && !isIndexControlled
   const selectedIndex = isIndexControlled
-    ? resolveInitialIndex(filteredItems, controlledIndex)
+    ? resolveInitialIndex(navRows, controlledIndex)
     : topFrame.selectedIndex
   // Latest-value ref so the revalidation effect can read the current
   // selectedIndex without listing it as a dependency (which would make the
@@ -2342,42 +2541,37 @@ export function useEnhancedSelectInput<V>({
   // Both lookups are binary searches — pageStarts is strictly ascending — so
   // per-render cost is O(log pages) rather than O(pages).
   let effectiveRotateIndex: number
-  let visibleItems: Array<ItemOrSeparator<V>>
+  let visibleItems: Array<NavRow<V>>
   if (limit && paginationMode === 'scroll') {
     const windowStart = scrollWindowStart(
       windowStartReference.current,
       selectedIndex,
       limit,
-      filteredItems.length,
+      navRows.length,
       scrollOffset
     )
     windowStartReference.current = windowStart
     effectiveRotateIndex = windowStart
-    visibleItems = filteredItems.slice(windowStart, windowStart + limit)
+    visibleItems = navRows.slice(windowStart, windowStart + limit)
   } else {
     effectiveRotateIndex = limit ? pageStartFor(pageStarts, selectedIndex) : 0
     const currentPageIndex = pageIndexOfStart(pageStarts, effectiveRotateIndex)
     const nextPageStart =
       currentPageIndex !== -1 && currentPageIndex + 1 < pageStarts.length
         ? pageStarts[currentPageIndex + 1]
-        : filteredItems.length
+        : navRows.length
     visibleItems = limit
-      ? filteredItems.slice(effectiveRotateIndex, nextPageStart)
-      : filteredItems
+      ? navRows.slice(effectiveRotateIndex, nextPageStart)
+      : navRows
   }
 
   const itemsAbove = effectiveRotateIndex
   const itemsBelow = limit
-    ? Math.max(
-        0,
-        filteredItems.length - effectiveRotateIndex - visibleItems.length
-      )
+    ? Math.max(0, navRows.length - effectiveRotateIndex - visibleItems.length)
     : 0
-  const rawSelectedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const rawSelectedItem = hasItems ? navRows[selectedIndex] : undefined
   const selectedItem =
-    rawSelectedItem && !isSeparator(rawSelectedItem)
-      ? rawSelectedItem
-      : undefined
+    rawSelectedItem && isItem(rawSelectedItem) ? rawSelectedItem : undefined
   const windowIndex = hasItems ? selectedIndex - effectiveRotateIndex : -1
   // Page Up/Down step by the number of items currently on screen — matching
   // what the user actually sees scroll by a "page" — falling back to a fixed
@@ -2443,20 +2637,20 @@ export function useEnhancedSelectInput<V>({
     // an item the user never asked for — only navigation should leave it.
     if (selectedIndexReference.current === -1) return
 
-    if (filteredItems.length === 0) {
+    if (navRows.length === 0) {
       setTopSelectedIndex(0)
       return
     }
 
-    const currentItem = filteredItems[selectedIndexReference.current]
-    if (!isSelectable(currentItem)) {
+    const currentRow = navRows[selectedIndexReference.current]
+    if (!isNavigable(currentRow)) {
       const newIndex = resolveInitialIndex(
-        filteredItems,
+        navRows,
         selectedIndexReference.current
       )
       setTopSelectedIndex(newIndex)
     }
-  }, [filteredItems, limit, pageStarts, isIndexControlled])
+  }, [navRows, limit, pageStarts, isIndexControlled])
 
   // Keep the parent in sync when a controlled selectedIndex resolves to a
   // different value than what was passed in — e.g. items shrank and the
@@ -2480,11 +2674,11 @@ export function useEnhancedSelectInput<V>({
   // given index changes content while the index itself stays put: the
   // effect now re-fires with the new item instead of silently keeping the
   // old one.
-  const highlightedItem = hasItems ? filteredItems[selectedIndex] : undefined
+  const highlightedItem = hasItems ? navRows[selectedIndex] : undefined
   const highlightedItemReference = useRef(highlightedItem)
   highlightedItemReference.current = highlightedItem
   const highlightedKey =
-    highlightedItem && !isSeparator(highlightedItem)
+    highlightedItem && isItem(highlightedItem)
       ? itemKey(highlightedItem)
       : undefined
 
@@ -2603,7 +2797,7 @@ export function useEnhancedSelectInput<V>({
   // `highlightedKey`, with no suppression needed.
   useEffect(() => {
     const item = highlightedItemReference.current
-    if (item && !isSeparator(item) && !item.disabled) {
+    if (item && isItem(item) && !item.disabled) {
       onHighlightReference.current?.(item)
     }
   }, [highlightedKey])
@@ -2673,7 +2867,7 @@ export function useEnhancedSelectInput<V>({
   // multi-select mode. Shared by the Space keybinding and the public API so
   // custom keybindings can reuse the exact same behaviour.
   const toggle = (item?: Item<V>) => {
-    const target = item ?? filteredItems[selectedIndex]
+    const target = item ?? navRows[selectedIndex]
     if (!multiple || !isSelectable(target)) return
     const k = itemKey(target)
     // Compute the next set from the ref (not React's functional-updater
@@ -2799,7 +2993,7 @@ export function useEnhancedSelectInput<V>({
       return
     }
 
-    const itemToSelect = filteredItems[selectedIndex]
+    const itemToSelect = navRows[selectedIndex]
     if (isSelectable(itemToSelect)) {
       onSelect?.(itemToSelect)
     }
@@ -2811,7 +3005,7 @@ export function useEnhancedSelectInput<V>({
   const handleTypeahead = (char: string, isActive: boolean, now: number) => {
     const next = isActive ? typeaheadBuffer.current.text + char : char
     typeaheadBuffer.current = { text: next, time: now }
-    const matchIndex = filteredItems.findIndex(
+    const matchIndex = navRows.findIndex(
       (item) =>
         isSelectable(item) &&
         item.label.toLowerCase().startsWith(next.toLowerCase())
@@ -2848,13 +3042,14 @@ export function useEnhancedSelectInput<V>({
         multiple,
         orientation,
         selectedIndex,
-        filteredItems,
+        filteredItems: navRows,
         depth,
         nestingEnabled,
         typeahead,
         typeaheadActive: typeaheadIsActive,
         loop,
         pageSize,
+        collapsible,
       })
 
       if (
@@ -2971,6 +3166,20 @@ export function useEnhancedSelectInput<V>({
             resetSearchForLevelChange()
           }
 
+          break
+        }
+
+        case 'toggle-collapse': {
+          setCollapsedGroups((previous) => {
+            const next = new Set(previous)
+            if (next.has(intent.group)) {
+              next.delete(intent.group)
+            } else {
+              next.add(intent.group)
+            }
+
+            return next
+          })
           break
         }
 
@@ -3134,16 +3343,20 @@ export function DefaultItemComponent({
 
 export function DefaultGroupHeaderComponent({
   label,
+  isSelected,
+  isCollapsed,
   theme,
 }: GroupHeaderProps) {
   const resolvedTheme = theme ?? resolveTheme()
+  const color = isSelected ? resolvedTheme.selected : resolvedTheme.groupHeader
+  const affordance = isCollapsed === undefined ? '' : isCollapsed ? '▸ ' : '▾ '
   return (
     <Box>
       <Text
-        color={resolvedTheme.groupHeader}
+        color={color}
         dimColor={resolvedTheme.dim}
         wrap="truncate-end"
-      >{`── ${label} ──`}</Text>
+      >{`── ${affordance}${label} ──`}</Text>
     </Box>
   )
 }
@@ -3331,6 +3544,7 @@ export function EnhancedSelectInput<V>({
   const isDefaultItemComponent = itemComponent === DefaultItemComponent
   const isVertical = hookProperties.orientation !== 'horizontal'
   const isMultiple = hookProperties.multiple === true
+  const collapsibleMode = hookProperties.collapsible === true
 
   const breadcrumb =
     showBreadcrumb && depth > 0 ? (
@@ -3424,14 +3638,29 @@ export function EnhancedSelectInput<V>({
           flexDirection={isVertical ? 'column' : 'row'}
           gap={isVertical ? 0 : 2}
         >
-          {visibleItems.map((item, index) => {
-            if (isSeparator(item)) {
+          {visibleItems.map((row, index) => {
+            if (isSeparator(row)) {
               return (
                 <SeparatorComponent
-                  key={item.key ?? `separator-${index + rotateIndex}`}
+                  key={row.key ?? `separator-${index + rotateIndex}`}
                 />
               )
             }
+
+            if (isGroupHeaderRow(row)) {
+              const isHeaderSelected = index + rotateIndex === selectedIndex
+              return (
+                <GroupHeaderComponent
+                  key={row.key}
+                  label={row.group}
+                  isSelected={isHeaderSelected}
+                  isCollapsed={row.collapsed}
+                  theme={resolvedTheme}
+                />
+              )
+            }
+
+            const item = row
 
             // A disabled item never gets a selection cursor, even if it's the
             // resolved selectedIndex (e.g. every item is disabled, so
@@ -3449,19 +3678,25 @@ export function EnhancedSelectInput<V>({
                 : undefined
 
             // Determine if we need to render a group header before this item.
-            // Compare against the immediately preceding visible item (adjacency check),
-            // so non-contiguous items sharing a group name each get their own header.
-            const previousVisibleItem =
-              index > 0 ? visibleItems[index - 1] : undefined
+            // Only in non-`collapsible` mode — in `collapsible` mode headers
+            // are already explicit rows in `visibleItems` (see the
+            // `isGroupHeaderRow` branch above), so injecting one here would
+            // double-render it. Compare against the immediately preceding
+            // visible item (adjacency check), so non-contiguous items
+            // sharing a group name each get their own header.
             let groupHeader: React.ReactNode = null
-            if (item.group && item.group !== groupOf(previousVisibleItem)) {
-              groupHeader = (
-                <GroupHeaderComponent
-                  key={`group-header-${index}-${item.group}`}
-                  label={item.group}
-                  theme={resolvedTheme}
-                />
-              )
+            if (!collapsibleMode) {
+              const previousVisibleItem =
+                index > 0 ? visibleItems[index - 1] : undefined
+              if (item.group && item.group !== groupOf(previousVisibleItem)) {
+                groupHeader = (
+                  <GroupHeaderComponent
+                    key={`group-header-${index}-${item.group}`}
+                    label={item.group}
+                    theme={resolvedTheme}
+                  />
+                )
+              }
             }
 
             return (

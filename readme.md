@@ -29,7 +29,7 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
 - **Multi-select Mode:** Space to toggle, Enter to confirm a multi-item selection.
 - **Searchable Mode:** Type to filter items inline with case-insensitive matching, opt-in fuzzy matching, custom filter predicates, and matched-character highlighting.
 - **Type-ahead Jump:** Opt-in listbox-style jump to the first item matching typed characters, without entering search mode.
-- **Item Groups:** Organize items under non-navigable section headers.
+- **Item Groups:** Organize items under section headers — non-navigable by default, or focusable/collapsible with `collapsible: true`.
 - **Descriptions, Hints & Separators:** Command-palette-style dimmed description/hint text, `disabledReason` explanations, and non-navigable separator rows.
 - **Cancel / Escape:** `onCancel` prop for multi-step CLI "go back" flows.
 - **Headless Hook:** `useEnhancedSelectInput` for fully custom renderers with built-in behavior.
@@ -268,7 +268,7 @@ Home/End always land on a sane window — Home scrolls to the start of the list,
 
 ### Grouped Items
 
-Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. Headers are purely visual — they are non-navigable and do not affect selection.
+Group items under section headers by setting the `group` field. Items sharing the same `group` value are visually grouped, and a header row is rendered before the first item in each group. By default headers are purely visual — non-navigable and without effect on selection. Set `collapsible: true` to make them focusable and toggleable instead — see [Collapsible Groups](#collapsible-groups).
 
 ![A list split under two dimmed section headers, Languages above TypeScript, Rust and Go, and Frameworks above React and Ink](./assets/demos/groups.png)
 
@@ -309,6 +309,26 @@ You can provide a custom header renderer via `groupHeaderComponent`:
   )}
 />
 ```
+
+#### Collapsible Groups
+
+Set `collapsible: true` to make group headers focusable, navigable rows. The highlight can land on a header, and `Space`, `Enter`, or `→` toggles its group between collapsed and expanded. A collapsed group's items are excluded from navigation, rendering, and pagination entirely — only its header remains on screen.
+
+```tsx
+<EnhancedSelectInput
+  items={[
+    { label: 'Option A', value: 'a', group: 'Recent' },
+    { label: 'Option B', value: 'b', group: 'Recent' },
+    { label: 'Option C', value: 'c', group: 'All' },
+  ]}
+  collapsible
+  defaultCollapsedGroups={['All']}
+/>
+```
+
+`defaultCollapsedGroups` seeds which groups start collapsed — read only at mount, like `initialIndex`. The default header renders a `▸`/`▾` affordance to show each group's collapsed state; a custom `groupHeaderComponent` receives `isSelected`/`isCollapsed` props to render its own.
+
+Combined with `multiple`, collapsing a group only hides it from view — checked state (`toggle`/`selectAll`/`selectNone`/`invertSelection`) is always tracked over the full, uncollapsed item set, so a checked item inside a collapsed group stays checked and still confirms. `collapsible` is unsupported combined with a controlled `selectedIndex`.
 
 ### Descriptions, Hints & Disabled Reasons
 
@@ -902,6 +922,8 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | `truncate`               | `'end' \| 'middle' \| 'start'`              | `'end'`                       | Where the ellipsis lands when `maxWidth` truncates a label. `'middle'` is useful for file paths                                                                                                                                                                                                                                                                                             |
 | `loop`                   | `boolean`                                   | `true`                        | Whether arrow/vim/Page Up/Down navigation wraps around at the list boundary; `false` clamps instead. `Home`/`End` are unaffected                                                                                                                                                                                                                                                            |
 | `theme`                  | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                                                                                                                                                                                                                                            |
+| `collapsible`            | `boolean`                                   | `false`                       | Make group headers focusable/collapsible — see [Collapsible Groups](#collapsible-groups)                                                                                                                                                                                                                                                                                                    |
+| `defaultCollapsedGroups` | `string[]`                                  | —                             | Group names to start collapsed; only used when `collapsible` is true, read once at mount                                                                                                                                                                                                                                                                                                    |
 
 ### Item Shape
 
