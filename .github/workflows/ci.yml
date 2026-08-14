@@ -54,4 +54,12 @@ jobs:
         # the CPU contention of a shared CI runner — confirmed on `main`
         # itself independent of any test changes (gfargo/ink-enhanced-select-input#114).
         # Serial execution trades a few extra seconds for deterministic CI.
+        # Skipped on the coverage leg below — `yarn coverage` already runs
+        # the full suite (instrumented), so running both here would just
+        # execute it twice.
+        if: matrix.node-version != 22 || matrix.ink != '6'
         run: yarn test:ci
+
+      - name: Test with coverage
+        if: matrix.node-version == 22 && matrix.ink == '6'
+        run: yarn coverage
