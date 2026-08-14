@@ -2852,6 +2852,12 @@ export function useEnhancedSelectInput<V>({
   // through `selectedIndex` for the highlight to actually move. In
   // uncontrolled mode, updates internal state directly.
   const updateSelection = (nextIndex: number) => {
+    // Update the ref synchronously (not just via the render-sync effect
+    // above) so a same-tick second keypress — resolved from
+    // selectedIndexReference.current, not the render-scoped `selectedIndex`
+    // — computes its next index from the value this call just committed,
+    // rather than from a stale value React hasn't re-rendered with yet.
+    selectedIndexReference.current = nextIndex
     onIndexChange?.(nextIndex)
     if (!isIndexControlled) setTopSelectedIndex(nextIndex)
   }
@@ -3123,7 +3129,11 @@ export function useEnhancedSelectInput<V>({
         hasItems,
         multiple,
         orientation,
-        selectedIndex,
+        // .current, not the render-scoped `selectedIndex`: several same-tick
+        // ArrowDowns must each resolve against the previous one's committed
+        // index (via updateSelection), not the same stale value they'd all
+        // read from render-scoped state before a re-render lands (#68/B12).
+        selectedIndex: selectedIndexReference.current,
         filteredItems: navRows,
         depth,
         nestingEnabled,

@@ -1944,6 +1944,70 @@ test('Ctrl+H and Ctrl+L do not navigate in horizontal orientation', async (t) =>
   t.is(highlighted, 'A') // Ctrl+H must not navigate left
 })
 
+// --- B12: same-tick keypresses must not be coalesced ---
+// https://github.com/gfargo/ink-enhanced-select-input/issues/68 — each
+// ArrowDown's next index was computed from the render-scoped `selectedIndex`
+// closure, so several presses delivered in the same tick (before a
+// re-render) all resolved against the same stale value instead of each
+// building on the last. Writing all three escape sequences in a single
+// `stdin.write` call reproduces that: Ink parses the whole batch inside one
+// synchronous input event, same as a terminal delivering held-key repeat or
+// a paste, with no render in between presses.
+
+test('B12: 3 same-tick ArrowDowns move 3 positions, not 1', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+    { label: 'D', value: 'd' },
+  ]
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'A')
+
+  stdin.write(ARROW_DOWN + ARROW_DOWN + ARROW_DOWN)
+  await waitFor(() => highlighted === 'D')
+
+  t.is(highlighted, 'D')
+})
+
+test('B12: held-key repeat sequences land on the correct item', async (t) => {
+  const items = Array.from({ length: 10 }, (_, i) => ({
+    label: `Item ${i}`,
+    value: `item-${i}`,
+  }))
+
+  let highlighted = ''
+  const { stdin } = render(
+    <EnhancedSelectInput
+      items={items}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  t.is(highlighted, 'Item 0')
+
+  // A held key repeating within one stdin batch, same as Kitty-protocol
+  // terminals report a physical key held down.
+  stdin.write(ARROW_DOWN.repeat(6))
+  await waitFor(() => highlighted === 'Item 6')
+
+  t.is(highlighted, 'Item 6')
+})
+
 // --- DefaultIndicatorComponent in isolation ---
 
 test.serial('DefaultIndicatorComponent renders selected state', (t) => {
