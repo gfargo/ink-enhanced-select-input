@@ -54,6 +54,9 @@ const delay = async (ms = 300) =>
     setTimeout(resolve, ms)
   })
 
+const countNonEmptyLines = (frame: string) =>
+  frame.split('\n').filter((line) => line.trim() !== '').length
+
 // Test fixtures below never include separators — narrow the label lookup so
 // assertions can read `.label` without threading isSeparator checks through
 // every call site.
@@ -3221,6 +3224,8 @@ type HookHarnessProperties = {
   // eslint-disable-next-line react/boolean-prop-naming
   readonly collapsible?: boolean
   readonly defaultCollapsedGroups?: string[]
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly stickyGroupHeaders?: boolean
   readonly onResult: (result: UseEnhancedSelectInputResult<unknown>) => void
 }
 
@@ -5475,6 +5480,50 @@ test.serial(
     t.true(frame2.includes('D'))
   }
 )
+
+test.serial(
+  "non-collapsible: isContinuation distinguishes a page opening on a group's true start from one opening mid-group",
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+      { label: 'D', value: 'd', group: 'Second' },
+      { label: 'E', value: 'e', group: 'Second' },
+    ]
+
+    // Pages (limit 3, virtual header cost budgeted): [A,B] | [C,D] | [E].
+    // Page 2 opens on "C" — "Second"'s true first item (the item before it,
+    // "B", is a different group). Page 3 opens on "E" — still "Second", but
+    // its predecessor "D" is the *same* group, so this is a continuation.
+    let highlighted = ''
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        items={items}
+        limit={3}
+        onHighlight={(item) => {
+          highlighted = item.label
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'C')
+    t.true(lastFrame()!.includes('── Second ──'))
+    t.false(lastFrame()!.includes('(continued)'))
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    t.is(highlighted, 'E')
+    t.true(lastFrame()!.includes('── Second (continued) ──'))
+  }
+)
 // --- Additional Group Tests ---
 
 test.serial('group headers render in horizontal orientation', (t) => {
@@ -6206,6 +6255,206 @@ test.serial(
     t.is(confirmed?.length, 2)
     t.true(confirmed?.includes('a'))
     t.true(confirmed?.includes('c'))
+  }
+)
+
+// ── sticky group headers (F10) ─────────────────────────────────────────────
+// https://github.com/gfargo/ink-enhanced-select-input/issues/94 — when a
+// collapsible group's items span more than one pagination window, scrolling
+// past the header leaves the window disorientingly headerless. stickyGroupHeaders
+// pins a synthetic copy of that header atop the window, marked isContinuation.
+
+test.serial(
+  'stickyGroupHeaders: no sticky header on a page that opens exactly on the real header',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'Second' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    // Rows: [header:First, A, B, header:Second, C, D] — 6 rows, limit 3.
+    // Page 2 lands exactly on header:Second (2+2 items each fit their own
+    // header+pair in one page) — nothing to pin.
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        stickyGroupHeaders
+        items={items}
+        limit={3}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    const frame = lastFrame()!
+    // Collapsible mode's default renderer prefixes a header with its
+    // expand/collapse affordance (▾/▸), so the real header reads
+    // "── ▾ Second ──", not "── Second ──".
+    t.true(frame.includes('── ▾ Second ──'))
+    t.false(frame.includes('(continued)'))
+    t.true(frame.includes('C'))
+    t.true(frame.includes('D'))
+    t.false(frame.includes('A'))
+    t.false(frame.includes('B'))
+  }
+)
+
+test.serial(
+  'stickyGroupHeaders: pins a continuation header when the window scrolls mid-group, without exceeding limit',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    // Rows: [header:First, A, B, C, header:Second, D] — 6 rows, limit 3.
+    // Page 2 opens on "C" — mid-"First", its real header left on page 1.
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        stickyGroupHeaders
+        items={items}
+        limit={3}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    const frame = lastFrame()!
+    // The sticky header is never itself collapsed (a group with a mid-window
+    // item can't be), so it carries the same ▾ affordance as a real header.
+    t.true(frame.includes('── ▾ First (continued) ──'))
+    t.true(frame.includes('C'))
+    // "Second"'s real header is also in view on this same page — it is not
+    // itself a continuation.
+    t.true(frame.includes('── ▾ Second ──'))
+    t.false(frame.includes('── ▾ Second (continued) ──'))
+    t.false(frame.includes('A'))
+    t.false(frame.includes('B'))
+    // Sticky header (1) + C (1) + header:Second (1) = 3, exactly `limit` —
+    // the reserved-row budgeting in computeNavRowPageStarts held.
+    t.is(countNonEmptyLines(frame), 3)
+  }
+)
+
+test.serial(
+  'stickyGroupHeaders: exposed via the headless hook result as stickyGroupHeader',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        stickyGroupHeaders
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.stickyGroupHeader, undefined)
+
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    t.is(result?.stickyGroupHeader, 'First')
+  }
+)
+
+test.serial(
+  'stickyGroupHeaders: no-op when collapsible is false',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    render(
+      <HookHarness
+        stickyGroupHeaders
+        items={items}
+        limit={3}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    t.is(result?.stickyGroupHeader, undefined)
+  }
+)
+
+test.serial(
+  "stickyGroupHeaders: also pins in paginationMode: 'scroll', unbudgeted (may exceed limit by one row)",
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        stickyGroupHeaders
+        items={items}
+        limit={3}
+        paginationMode="scroll"
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    const frame = lastFrame()!
+    t.true(frame.includes('── ▾ First (continued) ──'))
+    t.true(frame.includes('A'))
+    t.true(frame.includes('B'))
+    t.true(frame.includes('C'))
+    // Unlike 'page' mode, 'scroll' mode doesn't reserve a row for the
+    // sticky header — sticky(1) + A + B + C = 4 rows, one over `limit` (3).
+    // This mirrors the pre-existing, documented header-budget quirk
+    // non-collapsible groups already have in scroll mode.
+    t.is(countNonEmptyLines(frame), 4)
   }
 )
 

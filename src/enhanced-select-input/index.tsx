@@ -510,6 +510,22 @@ export type UseEnhancedSelectInputProps<V> = {
    * mount has no effect.
    */
   readonly defaultCollapsedGroups?: string[]
+  /**
+   * When `collapsible` is true and the pagination window scrolls to a point
+   * mid-group (the group's own header row is above the window), pins a
+   * synthetic copy of that header to the top of the window instead of
+   * leaving it disorientingly headerless. The synthetic header is rendered
+   * with `isContinuation: true` (see `GroupHeaderProps`) and is never
+   * itself selectable. Ignored when `collapsible` is false. Default: false.
+   *
+   * In `paginationMode: 'page'`, the sticky header's row is budgeted for —
+   * pages that would open mid-group show one fewer real row so the total
+   * stays within `limit`. In `'scroll'` mode it isn't (mirroring the
+   * existing, documented header-budget behavior for non-collapsible
+   * groups) — the rendered row count may exceed `limit` by one on the
+   * ticks where a sticky header is shown.
+   */
+  readonly stickyGroupHeaders?: boolean
 }
 
 /**
@@ -724,6 +740,15 @@ export type GroupHeaderProps = {
   readonly isSelected?: boolean
   /** Whether this header's group is currently collapsed. `undefined` outside `collapsible` mode. */
   readonly isCollapsed?: boolean
+  /**
+   * True when this header doesn't mark the group's actual first item — its
+   * real header is above the current pagination window/page, and this is
+   * either the incidental header non-`collapsible` mode always shows atop a
+   * window/page that opens mid-group, or (`collapsible` + `stickyGroupHeaders`)
+   * a synthetic header pinned there for the same reason. `undefined` when
+   * this header does mark the group's true start.
+   */
+  readonly isContinuation?: boolean
   /** Resolved theme colors, present when rendered by EnhancedSelectInput. */
   readonly theme?: ResolvedTheme
 }
@@ -1031,17 +1056,54 @@ export function computePageStarts<V>(
  * or header) costs exactly one, with no extra injection. A collapsed group's
  * items are simply absent from `navRows` to begin with, so they're excluded
  * from every page outright rather than merely uncounted.
+ *
+ * When `stickyGroupHeaders` is true, a page that would otherwise open on a
+ * non-header row belonging to a group (i.e. mid-group, its real header row
+ * left on the previous page) additionally charges 1 row for the synthetic
+ * sticky header `EnhancedSelectInput` pins atop that page — mirroring
+ * `computePageStarts`' "first item of a page always gets its header" rule,
+ * just for a header the render layer synthesizes rather than one already
+ * present in the source array.
  */
 export function computeNavRowPageStarts<V>(
   navRows: Array<NavRow<V>>,
-  limit: number
+  limit: number,
+  stickyGroupHeaders = false
 ): number[] {
   if (navRows.length === 0) return []
   if (!limit || limit <= 0) return [0]
 
-  const starts: number[] = []
-  for (let i = 0; i < navRows.length; i += limit) {
-    starts.push(i)
+  if (!stickyGroupHeaders) {
+    const starts: number[] = []
+    for (let i = 0; i < navRows.length; i += limit) {
+      starts.push(i)
+    }
+
+    return starts
+  }
+
+  const stickyHeaderCostAt = (row: NavRow<V>): 0 | 1 =>
+    !isGroupHeaderRow(row) && groupOf(row) !== undefined ? 1 : 0
+
+  const starts: number[] = [0]
+  let pageStart = 0
+  let running = 0
+  let placedInPage = 0
+
+  for (const [i, row] of navRows.entries()) {
+    const headerCost = i === pageStart ? stickyHeaderCostAt(row) : 0
+    const cost = headerCost + 1
+
+    if (placedInPage > 0 && running + cost > limit) {
+      pageStart = i
+      starts.push(pageStart)
+      running = stickyHeaderCostAt(row) + 1
+      placedInPage = 1
+      continue
+    }
+
+    running += cost
+    placedInPage += 1
   }
 
   return starts
@@ -2070,6 +2132,16 @@ export type UseEnhancedSelectInputResult<V> = {
    */
   windowIndex: number
   /**
+   * The group whose header should be pinned atop `visibleItems` — set only
+   * when `collapsible` and `stickyGroupHeaders` are both true and the
+   * window has scrolled to a point mid-group (the group's real header row
+   * isn't in `visibleItems`). `undefined` otherwise. A custom renderer
+   * consuming `visibleItems` directly (rather than `EnhancedSelectInput`)
+   * should render this group's header, with `isContinuation: true`, before
+   * `visibleItems` itself.
+   */
+  stickyGroupHeader: string | undefined
+  /**
    * The chain of parent items descended into to reach the current level,
    * root-to-leaf. Empty at the root (`depth === 0`). See {@link Item.children}.
    */
@@ -2227,6 +2299,7 @@ export function useEnhancedSelectInput<V>({
   loop = true,
   collapsible = false,
   defaultCollapsedGroups,
+  stickyGroupHeaders = false,
 }: UseEnhancedSelectInputProps<V>): UseEnhancedSelectInputResult<V> {
   const km = resolveKeyMap(keyMap)
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
@@ -2413,9 +2486,9 @@ export function useEnhancedSelectInput<V>({
   const pageStarts = useMemo(() => {
     if (!limit) return []
     return collapsible
-      ? computeNavRowPageStarts(navRows, limit)
+      ? computeNavRowPageStarts(navRows, limit, stickyGroupHeaders)
       : computePageStarts(filteredItems, limit)
-  }, [collapsible, navRows, filteredItems, limit])
+  }, [collapsible, navRows, filteredItems, limit, stickyGroupHeaders])
 
   const isIndexControlled = controlledIndex !== undefined
   // Nesting is unsupported alongside `multiple` (checkedKeys stays a single
@@ -2609,6 +2682,24 @@ export function useEnhancedSelectInput<V>({
       ? navRows.slice(effectiveRotateIndex, nextPageStart)
       : navRows
   }
+
+  // The group whose header should be pinned atop `visibleItems` — only when
+  // `stickyGroupHeaders` opted in, and only ever for a real (non-header) row
+  // that belongs to a group: `buildNavigableRows` always inserts a group's
+  // header immediately before its first item, so a group-bearing row at the
+  // very top of the window can only mean that header is above it, off-window.
+  // (In `'page'` mode `computeNavRowPageStarts` already reserved this row's
+  // budget when it computed `pageStarts` above; in `'scroll'` mode it isn't
+  // budgeted, matching the same unbudgeted-header quirk non-`collapsible`
+  // mode already has there.)
+  const firstVisibleRow = visibleItems[0]
+  const stickyGroupHeader =
+    stickyGroupHeaders &&
+    collapsible &&
+    firstVisibleRow !== undefined &&
+    !isGroupHeaderRow(firstVisibleRow)
+      ? groupOf(firstVisibleRow)
+      : undefined
 
   const itemsAbove = effectiveRotateIndex
   const itemsBelow = limit
@@ -3301,6 +3392,7 @@ export function useEnhancedSelectInput<V>({
     selectedItem,
     filteredItems,
     windowIndex,
+    stickyGroupHeader,
     path: stack.slice(1).map((frame) => frame.parent!),
     depth,
     setSelectedIndex: setSelectedIndexPublic,
@@ -3443,18 +3535,20 @@ export function DefaultGroupHeaderComponent({
   label,
   isSelected,
   isCollapsed,
+  isContinuation,
   theme,
 }: GroupHeaderProps) {
   const resolvedTheme = theme ?? resolveTheme()
   const color = isSelected ? resolvedTheme.selected : resolvedTheme.groupHeader
   const affordance = isCollapsed === undefined ? '' : isCollapsed ? '▸ ' : '▾ '
+  const suffix = isContinuation ? ' (continued)' : ''
   return (
     <Box>
       <Text
         color={color}
         dimColor={resolvedTheme.dim}
         wrap="truncate-end"
-      >{`── ${affordance}${label} ──`}</Text>
+      >{`── ${affordance}${label}${suffix} ──`}</Text>
     </Box>
   )
 }
@@ -3617,6 +3711,8 @@ export function EnhancedSelectInput<V>({
     selectionCount,
     path,
     depth,
+    filteredItems,
+    stickyGroupHeader,
   } = useEnhancedSelectInput({
     ...hookProperties,
     isFocused: effectiveIsFocused,
@@ -3736,6 +3832,15 @@ export function EnhancedSelectInput<V>({
           flexDirection={isVertical ? 'column' : 'row'}
           gap={isVertical ? 0 : 2}
         >
+          {stickyGroupHeader !== undefined && (
+            <GroupHeaderComponent
+              key={`sticky-group-header-${stickyGroupHeader}`}
+              isContinuation
+              label={stickyGroupHeader}
+              isCollapsed={false}
+              theme={resolvedTheme}
+            />
+          )}
           {visibleItems.map((row, index) => {
             if (isSeparator(row)) {
               return (
@@ -3787,10 +3892,21 @@ export function EnhancedSelectInput<V>({
               const previousVisibleItem =
                 index > 0 ? visibleItems[index - 1] : undefined
               if (item.group && item.group !== groupOf(previousVisibleItem)) {
+                // The window/page's first row always gets a header here (no
+                // preceding visible item to compare against) — but that's
+                // ambiguous between "this group truly starts here" and "this
+                // group started earlier, off-window". Resolve it against the
+                // *full* filteredItems array (not just the visible slice) to
+                // tell the two apart.
+                const isContinuation =
+                  index === 0 &&
+                  rotateIndex > 0 &&
+                  groupOf(filteredItems[rotateIndex - 1]) === item.group
                 groupHeader = (
                   <GroupHeaderComponent
                     key={`group-header-${index}-${item.group}`}
                     label={item.group}
+                    isContinuation={isContinuation}
                     theme={resolvedTheme}
                   />
                 )
