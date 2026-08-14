@@ -332,6 +332,18 @@ Combined with `multiple`, collapsing a group only hides it from view — checked
 
 Also combined with `multiple`, `Ctrl+A` on a focused group header checks every enabled item in that group instead of performing the global select-all — if any enabled item in the group is unchecked it checks all of them, otherwise it unchecks all of them (all-on-if-any-off). Disabled items in the group are never touched, and this works on a collapsed group too. Off a header (or outside `collapsible`/`multiple`), `Ctrl+A` keeps its usual global select-all meaning. The headless equivalent is `toggleGroup(group)` from `useEnhancedSelectInput`, which fires `onToggle` once per affected item.
 
+#### Sticky Group Headers
+
+When a `collapsible` group's items span more than one pagination window, scrolling past its header leaves the window disorientingly headerless. Set `stickyGroupHeaders: true` alongside `collapsible` to pin a copy of that header to the top of the window instead:
+
+```tsx
+<EnhancedSelectInput items={items} limit={5} collapsible stickyGroupHeaders />
+```
+
+The pinned header is a read-only visual aid, not a navigable row — it's never itself selectable. `groupHeaderComponent` (and the default renderer) receives `isContinuation: true` on it, so a custom renderer can style it differently (the built-in one appends `(continued)`). `isContinuation` is also set on a group's _real_ header when it happens to open a page mid-group in non-`collapsible` mode — the existing behavior there (a header always renders atop a page/window that starts mid-group, since there's no preceding row to compare against) already gives you this signal for free, with no prop to opt into.
+
+In `paginationMode: 'page'` (the default), the pinned header's row is budgeted for — a page that would otherwise open mid-group renders one fewer real row so the total still fits `limit`. In `paginationMode: 'scroll'` it isn't budgeted, so the rendered row count may exceed `limit` by one on the ticks where a sticky header is shown — this mirrors the same pre-existing, unbudgeted-header behavior non-`collapsible` groups already have in scroll mode. `stickyGroupHeaders` is a no-op when `collapsible` is false.
+
 ### Descriptions, Hints & Disabled Reasons
 
 Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
@@ -927,6 +939,7 @@ These are the props accepted by `<EnhancedSelectInput>` (`EnhancedSelectInputPro
 | `theme`                  | `Partial<Theme>`                            | see [Theming](#theming)       | Override default component colors; automatically disabled when `NO_COLOR` is set                                                                                                                                                                                                                                                                                                            |
 | `collapsible`            | `boolean`                                   | `false`                       | Make group headers focusable/collapsible — see [Collapsible Groups](#collapsible-groups)                                                                                                                                                                                                                                                                                                    |
 | `defaultCollapsedGroups` | `string[]`                                  | —                             | Group names to start collapsed; only used when `collapsible` is true, read once at mount                                                                                                                                                                                                                                                                                                    |
+| `stickyGroupHeaders`     | `boolean`                                   | `false`                       | Pin a group's header atop the window when scrolled mid-group; only used when `collapsible` is true — see [Sticky Group Headers](#sticky-group-headers)                                                                                                                                                                                                                                      |
 
 ### Item Shape
 

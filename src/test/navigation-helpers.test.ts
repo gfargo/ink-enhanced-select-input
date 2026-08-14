@@ -711,3 +711,60 @@ test('computeNavRowPageStarts: a collapsed group is excluded from page starts, n
   t.is(collapsedRows.length, 4)
   t.deepEqual(computeNavRowPageStarts(collapsedRows, 3), [0, 3])
 })
+
+test('computeNavRowPageStarts: stickyGroupHeaders defaults to false — behavior unchanged', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'First'),
+    mkGroupedItem('D', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, C, header:Second, D] — 6 rows, limit 3.
+  t.deepEqual(computeNavRowPageStarts(rows, 3), [0, 3])
+  t.deepEqual(computeNavRowPageStarts(rows, 3, false), [0, 3])
+})
+
+test('computeNavRowPageStarts: stickyGroupHeaders reserves a row on a page opening mid-group', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'First'),
+    mkGroupedItem('D', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, C, header:Second, D] — 6 rows, limit 3.
+  // Without sticky headers, page 2 (limit 3) would start at index 3 (C) —
+  // mid-"First", no header in view. With sticky headers on, that page
+  // reserves 1 row for the synthetic header EnhancedSelectInput will pin
+  // above it, so it only fits 2 real rows before the next page starts —
+  // landing exactly on header:Second, which needs no reservation of its own.
+  t.deepEqual(computeNavRowPageStarts(rows, 3, true), [0, 3, 5])
+})
+
+test('computeNavRowPageStarts: stickyGroupHeaders reserves nothing when a page opens on a real header', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'First'),
+    mkGroupedItem('D', 'Second'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, C, header:Second, D] — 6 rows, limit 4.
+  // Page 2 lands exactly on header:Second (a real header row, not a
+  // continuation) — no reservation needed, so it isn't charged one.
+  t.deepEqual(computeNavRowPageStarts(rows, 4, true), [0, 4])
+})
+
+test('computeNavRowPageStarts: stickyGroupHeaders reserves nothing when a page opens on an ungrouped item', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkItem('C'),
+    mkItem('D'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, C, D] — 5 rows, limit 3. Page 2 starts at
+  // "C", ungrouped — no header (real or sticky) applies to it at all.
+  t.deepEqual(computeNavRowPageStarts(rows, 3, true), [0, 3])
+})
