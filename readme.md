@@ -16,6 +16,44 @@ An enhanced, customizable select input component for [Ink](https://github.com/va
   <em>Every demo below is recorded from a real file in <a href="./examples">examples/</a> — see <a href="./demos">demos/</a>.</em>
 </p>
 
+## Table of Contents
+
+- [Features](#features)
+- [Compatibility](#compatibility)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Horizontal Layout](#horizontal-layout)
+  - [Multi-select](#multi-select)
+    - [Bulk selection & selection constraints](#bulk-selection--selection-constraints)
+  - [Controlled Mode](#controlled-mode)
+  - [Per-Item Indicators](#per-item-indicators)
+  - [Pagination (`limit`)](#pagination-limit)
+  - [Grouped Items](#grouped-items)
+    - [Collapsible Groups](#collapsible-groups)
+    - [Sticky Group Headers](#sticky-group-headers)
+  - [Descriptions, Hints & Disabled Reasons](#descriptions-hints--disabled-reasons)
+  - [Separator Items](#separator-items)
+  - [Searchable Mode](#searchable-mode)
+    - [Custom Filtering, Fuzzy Matching & Highlighting](#custom-filtering-fuzzy-matching--highlighting)
+    - [Live/Async Search](#liveasync-search)
+  - [Type-ahead Jump](#type-ahead-jump)
+  - [Truncating Long Labels](#truncating-long-labels)
+  - [Avoiding Key Conflicts (`keyMap`)](#avoiding-key-conflicts-keymap)
+  - [Help Footer (`showHelp`)](#help-footer-showhelp)
+  - [Custom Components](#custom-components)
+  - [Theming](#theming)
+  - [Headless Hook](#headless-hook)
+  - [Nested Items](#nested-items)
+  - [Focus Management](#focus-management)
+- [Props](#props)
+  - [Item Shape](#item-shape)
+- [Keyboard Navigation](#keyboard-navigation)
+- [Development](#development)
+  - [Examples](#examples)
+  - [Demo assets](#demo-assets)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - **Orientation:** Choose between vertical or horizontal layouts.
