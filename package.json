@@ -2,6 +2,19 @@
   "name": "ink-enhanced-select-input",
   "version": "1.4.0",
   "description": "An enhanced variant of the select input component for Ink",
+  "keywords": [
+    "ink",
+    "cli",
+    "tui",
+    "select",
+    "select-input",
+    "multi-select",
+    "prompt",
+    "react",
+    "terminal",
+    "interactive",
+    "component"
+  ],
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
   "repository": {
@@ -48,7 +61,8 @@
     "dist/index.d.ts",
     "dist/headless.js",
     "dist/headless.d.ts",
-    "dist/enhanced-select-input"
+    "dist/enhanced-select-input",
+    "changelog.md"
   ],
   "peerDependencies": {
     "ink": "^6 || ^7",
