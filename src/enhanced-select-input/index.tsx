@@ -1445,19 +1445,24 @@ function resolveSearchCursorIntent<V>(
 
   if (orientation !== 'vertical') return undefined
 
-  if (key.home) {
+  // Home/End and ←/→ stay gated on their own `keyMap` groups even here, where
+  // they mean "move the search cursor" rather than "move the highlight".
+  // `keyMap` exists so a parent app can claim a key globally, and a key the
+  // caller disabled must not keep acting just because searchable mode
+  // repurposed it.
+  if (km.homeEnd && key.home) {
     return { type: 'search-cursor-home' }
   }
 
-  if (key.end) {
+  if (km.homeEnd && key.end) {
     return { type: 'search-cursor-end' }
   }
 
-  if (key.leftArrow) {
+  if (km.arrows && key.leftArrow) {
     return { type: 'search-cursor-left' }
   }
 
-  if (key.rightArrow) {
+  if (km.arrows && key.rightArrow) {
     return { type: 'search-cursor-right' }
   }
 
@@ -3118,8 +3123,13 @@ export function useEnhancedSelectInput<V>({
     ((minSelections === undefined || selectionCount >= minSelections) &&
       (maxSelections === undefined || selectionCount <= maxSelections))
 
+  // Resolved against `navRows` — the same projection `selectedIndex` indexes
+  // into everywhere else (selectedItem, visibleItems, handleSubmit, toggle).
+  // Resolving against `filteredItems` instead would be off by the number of
+  // group-header rows in `collapsible` mode, silently landing the highlight
+  // on the wrong row and clamping the reachable range short of the last item.
   const setSelectedIndexPublic = (index: number) => {
-    updateSelection(resolveInitialIndex(filteredItems, index))
+    updateSelection(resolveInitialIndex(navRows, index))
   }
 
   const setSearchQueryPublic = (query: string) => {
@@ -3317,6 +3327,20 @@ export function useEnhancedSelectInput<V>({
 
         case 'descend': {
           const children = intent.item.children!
+          // Resolve the child's initial highlight against the same navigable-
+          // row projection the level will actually be indexed by. In
+          // `collapsible` mode that projection carries group-header rows, so
+          // an index resolved against the plain children array is shifted by
+          // one per preceding header — landing the cursor on whatever row
+          // happens to sit there, including a `disabled` item that
+          // `isNavigable` was supposed to skip.
+          const childItems = reorderByGroups(children, groups)
+          const childNavRows: Array<NavRow<V>> = collapsible
+            ? buildNavigableRows(childItems, collapsedGroups)
+            : childItems
+          const childSelectedIndex = resolveInitialSelection(childNavRows, {
+            autoSelectFirstEnabled: true,
+          })
           setStack((previous) => {
             const currentTop = previous.at(-1)!
             const updatedCurrentTop: Level<V> = {
@@ -3326,12 +3350,7 @@ export function useEnhancedSelectInput<V>({
             const childFrame: Level<V> = {
               parent: intent.item,
               items: children,
-              selectedIndex: resolveInitialSelection(
-                reorderByGroups(children, groups),
-                {
-                  autoSelectFirstEnabled: true,
-                }
-              ),
+              selectedIndex: childSelectedIndex,
               rotateIndex: 0,
             }
             return [...previous.slice(0, -1), updatedCurrentTop, childFrame]

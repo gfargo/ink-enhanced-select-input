@@ -10,6 +10,7 @@ import {
   useEnhancedSelectInput,
   computePageStarts,
   isGroupHeaderRow,
+  isSelectable,
   isSeparator,
   reorderByGroups,
   type Item,
@@ -12126,5 +12127,305 @@ test.serial(
     await waitFor(() => confirmed !== undefined)
 
     t.deepEqual(confirmed, [])
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Regression: the navigable-row projection (`navRows`) is the single index
+// space `selectedIndex` lives in. Call sites that resolved an index against
+// the flat `filteredItems` array instead were off by the number of group
+// header rows whenever `collapsible` was true.
+// ---------------------------------------------------------------------------
+
+const COLLAPSIBLE_GROUPED_ITEMS: Array<Item<unknown>> = [
+  { label: 'Apple', value: 'apple', group: 'Fruit' },
+  { label: 'Banana', value: 'banana', group: 'Fruit' },
+  { label: 'Carrot', value: 'carrot', group: 'Veg' },
+]
+
+test.serial(
+  'collapsible: setSelectedIndex resolves against the navigable rows, not filteredItems',
+  async (t) => {
+    // Rows: 0 header Fruit · 1 Apple · 2 Banana · 3 header Veg · 4 Carrot
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    render(
+      <HookHarness
+        collapsible
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSelectedIndex(1)
+    await waitFor(() => result?.selectedItem?.label === 'Apple')
+    t.is(result?.selectedItem?.label, 'Apple')
+
+    result?.setSelectedIndex(2)
+    await waitFor(() => result?.selectedItem?.label === 'Banana')
+    t.is(result?.selectedItem?.label, 'Banana')
+
+    // The last item sits at navRow index 4. Before the fix the index was
+    // clamped to filteredItems.length - 1 (2), leaving Carrot unreachable
+    // through any argument at all.
+    result?.setSelectedIndex(4)
+    await waitFor(() => result?.selectedItem?.label === 'Carrot')
+    t.is(result?.selectedItem?.label, 'Carrot')
+
+    // Out-of-range still clamps to the last navigable row rather than
+    // overshooting or falling back to the wrong projection.
+    result?.setSelectedIndex(99)
+    await waitFor(() => result?.selectedItem?.label === 'Carrot')
+    t.is(result?.selectedItem?.label, 'Carrot')
+  }
+)
+
+test.serial(
+  'collapsible: setSelectedIndex on a header row keeps the header highlighted',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    render(
+      <HookHarness
+        collapsible
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    // Row 3 is the "Veg" header — a navigable row, but not an item.
+    result?.setSelectedIndex(3)
+    await waitFor(() => result?.selectedIndex === 3)
+    t.is(result?.selectedIndex, 3)
+    t.is(result?.selectedItem, undefined)
+    t.true(isGroupHeaderRow(result?.visibleItems[3]))
+  }
+)
+
+test.serial(
+  'setSelectedIndex is unaffected without collapsible (control)',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    render(
+      <HookHarness
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSelectedIndex(2)
+    await waitFor(() => result?.selectedItem?.label === 'Carrot')
+    t.is(result?.selectedItem?.label, 'Carrot')
+  }
+)
+
+test.serial(
+  'collapsible: descending into a grouped submenu never lands the highlight on a disabled row',
+  async (t) => {
+    // Child navRows: 0 header G1 · 1 Child A (disabled) · 2 Child B.
+    // Resolving the initial index against the plain children array instead
+    // yielded 1 — the first *enabled* entry in that array, but the *disabled*
+    // item once the header row shifts everything down by one.
+    const items: Array<Item<unknown>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: [
+          { label: 'Child A', value: 'a', group: 'G1', disabled: true },
+          { label: 'Child B', value: 'b', group: 'G1' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const selected: string[] = []
+
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        onSelect={(item) => {
+          selected.push(item.label)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    stdin.write(ENTER) // Descend
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.depth, 1)
+
+    // Whatever row the highlight lands on, it must be a navigable one — a
+    // disabled item is never a legal resting place for the cursor.
+    const landedOn = result?.visibleItems[result.selectedIndex]
+    t.true(
+      isGroupHeaderRow(landedOn) ||
+        (isSelectable(landedOn) && !landedOn.disabled),
+      'highlight must land on a navigable row, not a disabled item'
+    )
+    t.not(result?.selectedItem?.label, 'Child A')
+
+    // Enter on a disabled item would silently do nothing; from a header it
+    // collapses the group, and from an enabled item it selects.
+    stdin.write(ENTER)
+    await delay()
+    t.deepEqual(selected, [])
+  }
+)
+
+test.serial(
+  'descending into a submenu without collapsible is unaffected (control)',
+  async (t) => {
+    const items: Array<Item<unknown>> = [
+      {
+        label: 'Parent',
+        value: 'parent',
+        children: [
+          { label: 'Child A', value: 'a', group: 'G1' },
+          { label: 'Child B', value: 'b', group: 'G1' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.selectedItem?.label, 'Child A')
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Regression: in searchable mode ←/→ and Home/End are repurposed to move the
+// search cursor, but they must still honour the `keyMap` group that owns
+// them — `keyMap` is how a caller stops the component reacting to a key its
+// own app has bound globally.
+// ---------------------------------------------------------------------------
+
+test.serial(
+  'searchable: keyMap.arrows=false disables the search-cursor arrows',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        keyMap={{ arrows: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    stdin.write('ap')
+    await waitFor(() => result?.searchQuery === 'ap')
+    t.is(result?.searchCursor, 2)
+
+    stdin.write(ARROW_LEFT)
+    await delay()
+    t.is(result?.searchCursor, 2) // Must not move
+
+    stdin.write(ARROW_RIGHT)
+    await delay()
+    t.is(result?.searchCursor, 2)
+
+    // The query itself is untouched — the keys are ignored, not swallowed
+    // into the search text.
+    t.is(result?.searchQuery, 'ap')
+  }
+)
+
+test.serial(
+  'searchable: keyMap.homeEnd=false disables the search-cursor Home/End',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        keyMap={{ homeEnd: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    stdin.write('ap')
+    await waitFor(() => result?.searchQuery === 'ap')
+    t.is(result?.searchCursor, 2)
+
+    stdin.write(HOME)
+    await delay()
+    t.is(result?.searchCursor, 2) // Must not jump to the start
+
+    stdin.write(ARROW_LEFT)
+    await delay()
+    t.is(result?.searchCursor, 1) // Arrows still enabled
+
+    stdin.write(END)
+    await delay()
+    t.is(result?.searchCursor, 1) // Must not jump to the end
+    t.is(result?.searchQuery, 'ap')
+  }
+)
+
+test.serial(
+  'searchable: search-cursor keys still work when their keyMap groups are enabled',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    stdin.write('ap')
+    await waitFor(() => result?.searchQuery === 'ap')
+
+    stdin.write(ARROW_LEFT)
+    await waitFor(() => result?.searchCursor === 1)
+    t.is(result?.searchCursor, 1)
+
+    stdin.write(HOME)
+    await waitFor(() => result?.searchCursor === 0)
+    t.is(result?.searchCursor, 0)
+
+    stdin.write(END)
+    await waitFor(() => result?.searchCursor === 2)
+    t.is(result?.searchCursor, 2)
   }
 )
