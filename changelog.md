@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.1](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.5.0...v1.5.1) (2026-09-03)
+
+
+### 🐞 Bug Fixes
+
+* **enhanced-select-input:** resolve indices against the navigable-row projection and honour keyMap in searchable mode ([#193](https://github.com/gfargo/ink-enhanced-select-input/issues/193)) ([e011a05](https://github.com/gfargo/ink-enhanced-select-input/commit/e011a05b7b5bdeb49c3b43dd8ce87f1265fa9eae))
+
+
+### 📝 Documentation
+
+* add contributor guide with branch naming convention ([#195](https://github.com/gfargo/ink-enhanced-select-input/issues/195)) ([135cf00](https://github.com/gfargo/ink-enhanced-select-input/commit/135cf0094f5cb9fe7ddcc7028e225d83e37a1dca))
+
 ## [1.5.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.4.0...v1.5.0) (2026-08-14)
 
 
