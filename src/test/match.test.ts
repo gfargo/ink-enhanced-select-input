@@ -100,3 +100,66 @@ test('computeMatchRanges: fuzzy keeps non-adjacent astral and BMP matches as sep
   t.is(text.slice(...ranges[0]!), '🍎')
   t.is(text.slice(...ranges[1]!), 'e')
 })
+
+// ── computeMatchRanges: toLowerCase() length changes (İ U+0130) ──────────
+
+test('computeMatchRanges: includes ranges are slice-correct when toLowerCase() expands a character', (t) => {
+  // U+0130 (İ) lowercases to 'i' + combining dot above (U+0307) — two units
+  // from one — so normalized-space offsets no longer line up with `text`.
+  const text = 'İstanbul'
+  const ranges = computeMatchRanges(text, 'stan', 'includes')
+  t.deepEqual(ranges, [[1, 5]])
+  t.is(text.slice(...ranges[0]!), 'stan')
+})
+
+test('computeMatchRanges: fuzzy ranges are slice-correct when toLowerCase() expands a character', (t) => {
+  const text = 'İstanbul'
+  const ranges = computeMatchRanges(text, 'sta', 'fuzzy')
+  t.deepEqual(ranges, [[1, 4]])
+  t.is(text.slice(...ranges[0]!), 'sta')
+})
+
+test('computeMatchRanges: includes range is slice-correct when the expanding character is inside the match', (t) => {
+  const text = 'Diyarbakİr'
+  const ranges = computeMatchRanges(text, 'kİr', 'includes')
+  t.deepEqual(ranges, [[7, 10]])
+  t.is(text.slice(...ranges[0]!), 'kİr')
+})
+
+test('computeMatchRanges: stays in bounds when the query itself expands under toLowerCase()', (t) => {
+  // 'İ'.toLowerCase() is 2 units; naively using normalizedQuery.length as the
+  // original span would previously have produced an out-of-range end.
+  const ranges = computeMatchRanges('istanbul', 'İ', 'includes')
+  t.true(Array.isArray(ranges))
+  for (const [start, end] of ranges) {
+    t.true(start >= 0)
+    t.true(end <= 'istanbul'.length)
+    t.true(start < end)
+  }
+})
+
+test('computeMatchRanges: fuzzy collapses duplicate normalized matches into one non-overlapping range', (t) => {
+  // Both units of İ's lowercase form ('i' + combining dot) map back to the
+  // same original character — the merge logic must absorb, not overlap.
+  const text = 'İstanbul'
+  const ranges = computeMatchRanges(text, 'i̇', 'fuzzy')
+  t.deepEqual(ranges, [[0, 1]])
+  t.is(text.slice(...ranges[0]!), 'İ')
+})
+
+test('computeMatchRanges: parity with matchesQuery for Greek final sigma', (t) => {
+  // 'ΟΔΟΣ'.toLowerCase() is 'οδος' (final sigma becomes regular sigma) — a
+  // per-character lowercase would instead produce 'οδοσ' and break this.
+  const cases: Array<[string, string, 'includes' | 'fuzzy']> = [
+    ['ΟΔΟΣ', 'ος', 'includes'],
+    ['ΟΔΟΣ', 'ος', 'fuzzy'],
+    ['Apple', 'ppl', 'includes'],
+    ['Apple', 'xyz', 'includes'],
+  ]
+  for (const [text, query, mode] of cases) {
+    t.is(
+      matchesQuery(text, query, mode),
+      computeMatchRanges(text, query, mode).length > 0
+    )
+  }
+})

@@ -514,7 +514,7 @@ By default, searchable mode matches the query as a case-insensitive substring of
 />
 ```
 
-The default `<ItemComponent>` bolds the matched characters in the label. A custom `itemComponent` receives the same information via the `matches` prop — an array of `[start, end)` character ranges into `label`, computed against the active `matchMode` (ranges are best-effort against `label` even when a custom `filter` matched on a different field, and are `undefined` outside searchable mode or when the query is empty):
+The default `<ItemComponent>` bolds the matched characters in the label. A custom `itemComponent` receives the same information via the `matches` prop — an array of `[start, end)` character ranges into `label` (always aligned to whole characters, even for the rare character whose lowercase form spans more UTF-16 units than the original), computed against the active `matchMode` (ranges are best-effort against `label` even when a custom `filter` matched on a different field, and are `undefined` outside searchable mode or when the query is empty):
 
 ```tsx
 function MyItem({ label, matches, isSelected }: ItemProps) {
