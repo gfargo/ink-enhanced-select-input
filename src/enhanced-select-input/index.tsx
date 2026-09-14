@@ -2577,13 +2577,15 @@ export function useEnhancedSelectInput<V>({
   // render, so this is the same "compute once" contract a useState
   // initializer would give, without needing an unused setter.
   const uncontrolledCheckedKeysSeedReference = useRef<
-    { keys: Set<string>; clamped: boolean } | undefined
+    { keys: Set<string>; clamped: boolean; cap: number | undefined } | undefined
   >(undefined)
-  uncontrolledCheckedKeysSeedReference.current ??= resolveInitialCheckedKeys(
-    items,
-    defaultSelectedKeys,
-    multiple ? maxSelections : undefined
-  )
+  if (uncontrolledCheckedKeysSeedReference.current === undefined) {
+    const cap = multiple ? maxSelections : undefined
+    uncontrolledCheckedKeysSeedReference.current = {
+      ...resolveInitialCheckedKeys(items, defaultSelectedKeys, cap),
+      cap,
+    }
+  }
 
   const uncontrolledCheckedKeysSeed =
     uncontrolledCheckedKeysSeedReference.current
@@ -2957,16 +2959,25 @@ export function useEnhancedSelectInput<V>({
   const initialCheckedKeysClamped = isKeysControlled
     ? Boolean(controlledCheckedKeysResult?.clamped)
     : uncontrolledCheckedKeysSeed.clamped
+  // The cap that actually did the dropping — live `maxSelections` for the
+  // controlled path (re-clamped every render), but frozen at the value the
+  // mount-only uncontrolled seed used. Using the live prop here for the
+  // uncontrolled path would let a later `maxSelections` change re-fire this
+  // effect (it's a dependency) with a cap that didn't do the clamping,
+  // producing a warning that asserts something false.
+  const initialCheckedKeysClampedCap = isKeysControlled
+    ? maxSelections
+    : uncontrolledCheckedKeysSeed.cap
 
   useEffect(() => {
     // eslint-disable-next-line n/prefer-global/process
     if (process.env['NODE_ENV'] === 'production') return
     if (!initialCheckedKeysClamped) return
     console.warn(
-      `[ink-enhanced-select-input] More initial selected keys were provided than maxSelections (${maxSelections}) allows — ` +
-        `the extra keys were dropped, keeping the first ${maxSelections} in items order.`
+      `[ink-enhanced-select-input] More initial selected keys were provided than maxSelections (${initialCheckedKeysClampedCap}) allows — ` +
+        `the extra keys were dropped, keeping the first ${initialCheckedKeysClampedCap} in items order.`
     )
-  }, [initialCheckedKeysClamped, maxSelections])
+  }, [initialCheckedKeysClamped, initialCheckedKeysClampedCap])
 
   // Warn in development when a controlled prop is passed without its change
   // handler — the analogue of React's "value prop without onChange" warning.

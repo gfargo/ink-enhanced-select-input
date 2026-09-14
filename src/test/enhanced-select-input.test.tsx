@@ -4116,6 +4116,58 @@ test.serial(
   }
 )
 
+test.serial(
+  'dev warning: raising maxSelections after mount does not re-fire the clamp warning with a stale cap',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      const { rerender } = render(
+        <EnhancedSelectInput
+          multiple
+          items={items}
+          maxSelections={2}
+          defaultSelectedKeys={['a', 'b', 'c']}
+        />
+      )
+      await delay()
+      t.true(warnings.some((message) => message.includes('maxSelections (2)')))
+
+      warnings.length = 0
+      rerender(
+        <EnhancedSelectInput
+          multiple
+          items={items}
+          maxSelections={5}
+          defaultSelectedKeys={['a', 'b', 'c']}
+        />
+      )
+      await delay()
+      t.false(warnings.some((message) => message.includes('maxSelections (5)')))
+      t.is(warnings.length, 0)
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
 test.serial('Ctrl+A selects all enabled items via keyboard', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
