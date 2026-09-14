@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.1](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.5.0...v1.5.1) (2026-09-14)
+
+
+### 🐞 Bug Fixes
+
+* **enhanced-select-input:** clamp the initial checked set to maxSelections ([#199](https://github.com/gfargo/ink-enhanced-select-input/issues/199)) ([20de52f](https://github.com/gfargo/ink-enhanced-select-input/commit/20de52f0cf8b8ec4653d5e0942f66fad27692a4d))
+* **enhanced-select-input:** honour autoSelectFirstEnabled when descending into a submenu ([#198](https://github.com/gfargo/ink-enhanced-select-input/issues/198)) ([ab38ac9](https://github.com/gfargo/ink-enhanced-select-input/commit/ab38ac9973f97429b14cd2a5ad414da50ef5d3f4))
+* **enhanced-select-input:** map match ranges back to original label offsets ([#200](https://github.com/gfargo/ink-enhanced-select-input/issues/200)) ([cdffc4a](https://github.com/gfargo/ink-enhanced-select-input/commit/cdffc4a5e54546d835ff5d13c1ac8ae34e4fee8a))
+* **enhanced-select-input:** resolve indices against the navigable-row projection and honour keyMap in searchable mode ([#193](https://github.com/gfargo/ink-enhanced-select-input/issues/193)) ([e011a05](https://github.com/gfargo/ink-enhanced-select-input/commit/e011a05b7b5bdeb49c3b43dd8ce87f1265fa9eae))
+
+
+### 📝 Documentation
+
+* add contributor guide with branch naming convention ([#195](https://github.com/gfargo/ink-enhanced-select-input/issues/195)) ([135cf00](https://github.com/gfargo/ink-enhanced-select-input/commit/135cf0094f5cb9fe7ddcc7028e225d83e37a1dca))
+
 ## [1.5.0](https://github.com/gfargo/ink-enhanced-select-input/compare/v1.4.0...v1.5.0) (2026-08-14)
 
 
