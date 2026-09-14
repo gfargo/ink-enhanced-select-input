@@ -10078,6 +10078,24 @@ test.serial(
   }
 )
 
+test.serial(
+  'maxWidth: astral (emoji) label truncates on code-point boundaries, no lone surrogate',
+  (t) => {
+    const items = [{ label: '👍👍👍👍👍', value: 'a' }]
+
+    const { lastFrame } = render(
+      <EnhancedSelectInput items={items} maxWidth={4} />
+    )
+
+    const frame = lastFrame()!
+    t.true(frame.includes('👍👍👍…'))
+    t.notRegex(
+      frame,
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    )
+  }
+)
+
 // --- OSS-1515: controlled mode ---
 
 test.serial(

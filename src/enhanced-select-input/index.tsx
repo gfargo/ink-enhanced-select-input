@@ -972,10 +972,14 @@ export function findLastValidIndex<V>(items: Array<NavRow<V>>): number {
 export type TruncateMode = 'end' | 'middle' | 'start'
 
 /**
- * Ellipsizes `label` down to exactly `maxWidth` characters when it exceeds
- * that width; shorter labels are returned unchanged. Character-length based
- * (UTF-16 code units), not terminal-column aware — fine for ASCII/file-path
- * labels, but wide/CJK/emoji labels won't be column-perfect.
+ * Ellipsizes `label` down to exactly `maxWidth` Unicode code points when it
+ * exceeds that width; shorter labels are returned unchanged. Slices on code
+ * points (via a spread), so a cut never lands inside a surrogate pair and
+ * the result is always well-formed UTF-16. Not terminal-column aware, so
+ * wide/CJK/emoji labels won't be column-perfect and the returned string may
+ * exceed `maxWidth` UTF-16 code units. Grapheme clusters (ZWJ emoji
+ * sequences, flags, combining marks) span multiple code points and can
+ * still be split apart, though never into invalid UTF-16.
  */
 export function truncateLabel(
   label: string,
@@ -987,20 +991,24 @@ export function truncateLabel(
   const ellipsis = '…'
   if (maxWidth === 1) return ellipsis
 
+  const chars = [...label]
+  if (chars.length <= maxWidth) return label
+
   const room = maxWidth - 1
-  if (mode === 'start') return ellipsis + label.slice(label.length - room)
+  if (mode === 'start')
+    return ellipsis + chars.slice(chars.length - room).join('')
 
   if (mode === 'middle') {
     const left = Math.ceil(room / 2)
     const right = room - left
     return (
-      label.slice(0, left) +
+      chars.slice(0, left).join('') +
       ellipsis +
-      (right > 0 ? label.slice(label.length - right) : '')
+      (right > 0 ? chars.slice(chars.length - right).join('') : '')
     )
   }
 
-  return label.slice(0, room) + ellipsis
+  return chars.slice(0, room).join('') + ellipsis
 }
 
 /**

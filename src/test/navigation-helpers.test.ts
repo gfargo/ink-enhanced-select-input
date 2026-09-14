@@ -17,6 +17,7 @@ import {
   type ItemOrSeparator,
   type NavRow,
   type SeparatorItem,
+  type TruncateMode,
 } from '../enhanced-select-input/index.js'
 
 /** Reference O(pages) linear scan — mirrors the pre-binary-search behaviour. */
@@ -513,6 +514,58 @@ test('truncateLabel: default mode is end', (t) => {
     truncateLabel('somelonglabel', 11),
     truncateLabel('somelonglabel', 11, 'end')
   )
+})
+
+// ── truncateLabel: astral code points (surrogate pairs) ─────────────────────
+
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+
+const THUMBS = '👍👍👍👍👍'
+
+test('truncateLabel: end mode on astral label slices on code points', (t) => {
+  t.is(truncateLabel(THUMBS, 4, 'end'), '👍👍👍…')
+})
+
+test('truncateLabel: end mode on astral label at small maxWidth', (t) => {
+  t.is(truncateLabel(THUMBS, 2, 'end'), '👍…')
+})
+
+test('truncateLabel: start mode on astral label slices on code points', (t) => {
+  t.is(truncateLabel(THUMBS, 4, 'start'), '…👍👍👍')
+})
+
+test('truncateLabel: middle mode on astral label slices on code points', (t) => {
+  t.is(truncateLabel(THUMBS, 4, 'middle'), '👍👍…👍')
+})
+
+test('truncateLabel: astral label within code-point budget is unchanged', (t) => {
+  t.is(truncateLabel(THUMBS, 6, 'middle'), THUMBS)
+})
+
+test('truncateLabel: astral label boundary case that was accidentally correct pre-fix', (t) => {
+  t.is(truncateLabel(THUMBS, 3, 'end'), '👍👍…')
+})
+
+test('truncateLabel: truncated astral label has exactly maxWidth code points', (t) => {
+  t.is([...truncateLabel(THUMBS, 4, 'end')].length, 4)
+})
+
+test('truncateLabel: never emits a lone surrogate across modes and widths', (t) => {
+  const modes: TruncateMode[] = ['end', 'start', 'middle']
+  const labels = [THUMBS, 'a👍b👍c👍d']
+  for (const label of labels) {
+    for (const mode of modes) {
+      for (let maxWidth = 1; maxWidth <= 12; maxWidth++) {
+        const result = truncateLabel(label, maxWidth, mode)
+        t.notRegex(
+          result,
+          LONE_SURROGATE,
+          `lone surrogate for label=${JSON.stringify(label)} maxWidth=${maxWidth} mode=${mode}: ${JSON.stringify(result)}`
+        )
+      }
+    }
+  }
 })
 
 // ── separators ───────────────────────────────────────────────────────────────
