@@ -1247,11 +1247,49 @@ export function matchesQuery(
 }
 
 /**
+ * Maps every UTF-16 unit offset of `text.toLowerCase()` back to the original
+ * start/end offsets of the `text` character that produced it. Needed because
+ * a handful of characters (notably `İ` U+0130) expand under
+ * `toLowerCase()`, so normalized offsets are not 1:1 with original offsets.
+ * Returns `undefined` if the accumulated normalized length doesn't match
+ * `normalizedLength` — a defensive bail-out, not expected to trigger under
+ * current ICU (nothing is known to shrink).
+ */
+function buildLowercaseOffsetMap(
+  text: string,
+  normalizedLength: number
+): { startOf: number[]; endOf: number[] } | undefined {
+  const startOf: number[] = []
+  const endOf: number[] = []
+  let i = 0
+  while (i < text.length) {
+    const codePoint = text.codePointAt(i)!
+    const charLength = codePoint > 0xff_ff ? 2 : 1
+    const lowerLength = String.fromCodePoint(codePoint).toLowerCase().length
+    for (let n = 0; n < lowerLength; n++) {
+      startOf.push(i)
+      endOf.push(i + charLength)
+    }
+
+    i += charLength
+  }
+
+  startOf.push(text.length)
+  endOf.push(text.length)
+
+  return startOf.length - 1 === normalizedLength
+    ? { startOf, endOf }
+    : undefined
+}
+
+/**
  * Matched character ranges (`[start, end)`, ascending, non-overlapping) of
- * `query` within `text` under the given {@link MatchMode}. Returns `[]` for
- * an empty query or no match. `'includes'` yields a single range at the
- * substring's position; `'fuzzy'` yields one range per matched character,
- * merging adjacent indices into contiguous ranges.
+ * `query` within `text` under the given {@link MatchMode}, indexed against
+ * the original `text` (not its lowercased form) and always covering whole
+ * characters. Returns `[]` for an empty query or no match. `'includes'`
+ * yields a single range at the substring's position; `'fuzzy'` yields one
+ * range per matched character, merging adjacent/overlapping ranges into
+ * contiguous ones.
  */
 export function computeMatchRanges(
   text: string,
@@ -1261,6 +1299,16 @@ export function computeMatchRanges(
   if (!query) return []
   const normalizedText = text.toLowerCase()
   const normalizedQuery = query.toLowerCase()
+
+  const identity = normalizedText.length === text.length
+  const map = identity
+    ? undefined
+    : buildLowercaseOffsetMap(text, normalizedText.length)
+  if (!identity && !map) return []
+
+  const toStart = (i: number) => (map ? map.startOf[i]! : i)
+  const toEnd = (exclusiveEnd: number) =>
+    map ? map.endOf[exclusiveEnd - 1]! : exclusiveEnd
 
   if (mode === 'fuzzy') {
     const ranges: Array<[number, number]> = []
@@ -1284,11 +1332,15 @@ export function computeMatchRanges(
 
       if (matchIndex === -1) return []
 
+      const start = toStart(matchIndex)
+      const end = toEnd(matchEnd)
       const lastRange = ranges.at(-1)
-      if (lastRange && lastRange[1] === matchIndex) {
-        lastRange[1] = matchEnd
+      if (lastRange && start < lastRange[1]) {
+        lastRange[1] = Math.max(lastRange[1], end)
+      } else if (lastRange && lastRange[1] === start) {
+        lastRange[1] = end
       } else {
-        ranges.push([matchIndex, matchEnd])
+        ranges.push([start, end])
       }
 
       searchFrom = matchEnd
@@ -1299,7 +1351,9 @@ export function computeMatchRanges(
   }
 
   const index = normalizedText.indexOf(normalizedQuery)
-  return index === -1 ? [] : [[index, index + normalizedQuery.length]]
+  return index === -1
+    ? []
+    : [[toStart(index), toEnd(index + normalizedQuery.length)]]
 }
 
 /** Fully-resolved key map — every group explicitly enabled or disabled. */
