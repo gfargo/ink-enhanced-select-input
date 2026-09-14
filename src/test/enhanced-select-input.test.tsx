@@ -2325,6 +2325,271 @@ test.serial('← ascends back to the parent list', async (t) => {
 })
 
 test.serial(
+  'autoSelectFirstEnabled false: descending into a submenu leaves it unhighlighted',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const highlighted: string[] = []
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        autoSelectFirstEnabled={false}
+        onHighlight={(item) => {
+          highlighted.push(item.label)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    // Seed the root highlight (mount starts with none) then descend into it.
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    t.is(result?.depth, 1)
+    t.is(result?.selectedIndex, -1)
+    t.is(result?.selectedItem, undefined)
+    t.false(highlighted.includes('Apple'))
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled default: descending into a submenu highlights its first item',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    t.is(result?.depth, 1)
+    t.is(result?.selectedIndex, 0)
+    t.is(labelOf(result?.selectedItem), 'Apple')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: arrow down from an unhighlighted submenu seeds the first child',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        autoSelectFirstEnabled={false}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => labelOf(result?.selectedItem) === 'Apple')
+    t.is(labelOf(result?.selectedItem), 'Apple')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: arrow up from an unhighlighted submenu seeds the last child',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        autoSelectFirstEnabled={false}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write(ARROW_UP)
+    await waitFor(() => labelOf(result?.selectedItem) === 'Cherry')
+    t.is(labelOf(result?.selectedItem), 'Cherry')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: Enter from an unhighlighted submenu is inert, Escape still ascends',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let selected: string | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={nestedItems()}
+        autoSelectFirstEnabled={false}
+        onSelect={(item) => {
+          selected = String(item.value)
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    stdin.write(ENTER)
+    await delay()
+    t.is(selected, undefined)
+    t.is(result?.depth, 1)
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.depth === 0)
+    t.is(result?.depth, 0)
+    t.is(labelOf(result?.selectedItem), 'Fruits')
+  }
+)
+
+test.serial(
+  'autoSelectFirstEnabled false: a nested grandchild submenu is also unhighlighted on descend',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Fruits',
+        value: 'fruits',
+        children: [
+          {
+            label: 'Citrus',
+            value: 'citrus',
+            children: [
+              { label: 'Lemon', value: 'lemon' },
+              { label: 'Lime', value: 'lime' },
+            ],
+          },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        items={items}
+        autoSelectFirstEnabled={false}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+    t.is(result?.selectedIndex, -1)
+
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 2)
+
+    t.is(result?.depth, 2)
+    t.is(result?.selectedIndex, -1)
+    t.is(result?.selectedItem, undefined)
+  }
+)
+
+test.serial(
+  'collapsible: autoSelectFirstEnabled false leaves a descended submenu without a highlighted row',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Fruits',
+        value: 'fruits',
+        children: [
+          { label: 'Apple', value: 'apple', group: 'Red' },
+          { label: 'Banana', value: 'banana', group: 'Yellow' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        autoSelectFirstEnabled={false}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await waitFor(() => result?.selectedIndex === 0)
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    // Rows: [header:Red, Apple, header:Yellow, Banana] — no row highlighted.
+    t.is(result?.selectedIndex, -1)
+    t.is(result?.visibleItems.length, 4)
+  }
+)
+
+test.serial(
+  'collapsible: autoSelectFirstEnabled default highlights the first row (a group header) on descend',
+  async (t) => {
+    const items: Array<Item<string>> = [
+      {
+        label: 'Fruits',
+        value: 'fruits',
+        children: [
+          { label: 'Apple', value: 'apple', group: 'Red' },
+          { label: 'Banana', value: 'banana', group: 'Yellow' },
+        ],
+      },
+    ]
+
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    const { stdin } = render(
+      <HookHarness
+        collapsible
+        items={items}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+
+    await delay()
+    stdin.write(ENTER)
+    await waitFor(() => result?.depth === 1)
+
+    // Row 0 is the "Red" group header — headers count as navigable rows.
+    t.is(result?.selectedIndex, 0)
+    t.is(result?.visibleItems.length, 4)
+  }
+)
+
+test.serial(
   'Escape at the root still calls onCancel even when items have children',
   async (t) => {
     let cancelled = false
@@ -3195,6 +3460,8 @@ type HookHarnessProperties = {
   readonly items: Array<ItemOrSeparator<unknown>>
   readonly groups?: string[]
   readonly initialIndex?: number
+  // eslint-disable-next-line react/boolean-prop-naming
+  readonly autoSelectFirstEnabled?: boolean
   readonly selectedIndex?: number
   readonly onIndexChange?: (index: number) => void
   readonly limit?: number
@@ -3222,6 +3489,7 @@ type HookHarnessProperties = {
   readonly onSelect?: (item: Item<unknown>) => void
   readonly onConfirm?: (items: Array<Item<unknown>>) => void
   readonly onCancel?: () => void
+  readonly onHighlight?: (item: Item<unknown>) => void
   // eslint-disable-next-line react/boolean-prop-naming
   readonly collapsible?: boolean
   readonly defaultCollapsedGroups?: string[]

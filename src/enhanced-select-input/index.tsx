@@ -311,6 +311,12 @@ export type UseEnhancedSelectInputProps<V> = {
    * item. Set to `false` to start with no highlight instead — `selectedItem`
    * is `undefined`, `onHighlight` does not fire, and no cursor is rendered,
    * until the user navigates. Default: true.
+   *
+   * Applies at every level, not just the root: descending into an item's
+   * `children` resolves the submenu's initial highlight through this same
+   * fallback (the initial-target props are mount-only and do not apply to a
+   * submenu), so `false` leaves a freshly-descended submenu unhighlighted
+   * too.
    */
   readonly autoSelectFirstEnabled?: boolean
   /**
@@ -3334,12 +3340,17 @@ export function useEnhancedSelectInput<V>({
           // one per preceding header — landing the cursor on whatever row
           // happens to sit there, including a `disabled` item that
           // `isNavigable` was supposed to skip.
+          //
+          // `autoSelectFirstEnabled` governs this fallback at every level,
+          // not just the root — pass the caller's value through instead of
+          // forcing `true`, so a submenu honours `autoSelectFirstEnabled:
+          // false` the same way the root does.
           const childItems = reorderByGroups(children, groups)
           const childNavRows: Array<NavRow<V>> = collapsible
             ? buildNavigableRows(childItems, collapsedGroups)
             : childItems
           const childSelectedIndex = resolveInitialSelection(childNavRows, {
-            autoSelectFirstEnabled: true,
+            autoSelectFirstEnabled,
           })
           setStack((previous) => {
             const currentTop = previous.at(-1)!
