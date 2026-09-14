@@ -368,6 +368,10 @@ export type UseEnhancedSelectInputProps<V> = {
   /**
    * Pre-selected item keys in multi-select mode.
    * Each entry should match an item's `key` field (or `String(value)` fallback).
+   * If more keys are provided than `maxSelections` allows, the set is
+   * clamped at mount to the first `maxSelections` matches in `items` order
+   * (a dev-mode warning fires when this happens). Consulted only on the
+   * initial render — a later change to `maxSelections` does not re-clamp it.
    */
   readonly defaultSelectedKeys?: string[]
   /**
@@ -377,7 +381,11 @@ export type UseEnhancedSelectInputProps<V> = {
    * back for the checkboxes to update. Combine with `onSelectedKeysChange`
    * for a fully controlled multi-select. Do not pass alongside
    * `defaultSelectedKeys`, which is ignored once this is set. Only used
-   * when `multiple` is true.
+   * when `multiple` is true. Like `defaultSelectedKeys`, resolved keys are
+   * clamped to `maxSelections` (first match in `items` order) — but unlike
+   * the uncontrolled default, this re-clamps on every render, and the
+   * dropped keys are reported back to the parent via
+   * `onSelectedKeysChange`.
    */
   readonly selectedKeys?: string[]
   /**
@@ -413,8 +421,10 @@ export type UseEnhancedSelectInputProps<V> = {
   /**
    * Maximum number of items that may be checked at once in multi-select
    * mode. `toggle` (and bulk select-all/invert) refuse to check additional
-   * items once this many are checked; unchecking is always allowed. Only
-   * used when `multiple` is true.
+   * items once this many are checked; unchecking is always allowed. Also
+   * bounds the initial checked set — see `defaultSelectedKeys` and
+   * `selectedKeys` — so the component can never mount (or resolve) above
+   * this cap. Only used when `multiple` is true.
    */
   readonly maxSelections?: number
   /**
@@ -883,6 +893,45 @@ export function resolveInitialSelection<V>(
   }
 
   return autoSelectFirstEnabled === false ? -1 : resolveInitialIndex(items, 0)
+}
+
+/**
+ * Resolves the checked-keys set a multi-select should mount/resolve with,
+ * capping it at `maxSelections` so the component can never start (or a
+ * controlled `selectedKeys` resolve to) a permanently-unconfirmable state.
+ * Iterates `items` — not `requestedKeys` — so unknown and disabled keys are
+ * dropped for free and the kept keys are always the first `maxSelections`
+ * matches in `items` order, matching `selectAll`/`toggleGroup`/
+ * `invertSelection`. `clamped` is true only when the cap itself dropped a
+ * key that was otherwise valid (not when a key was dropped merely for being
+ * unknown or disabled) — that's the condition the caller should warn on.
+ */
+function resolveInitialCheckedKeys<V>(
+  items: Array<ItemOrSeparator<V>>,
+  requestedKeys: string[] | undefined,
+  maxSelections: number | undefined
+): { keys: Set<string>; clamped: boolean } {
+  if (!requestedKeys || requestedKeys.length === 0) {
+    return { keys: new Set(), clamped: false }
+  }
+
+  const requested = new Set(requestedKeys)
+  const keys = new Set<string>()
+  let matched = 0
+  for (const item of items) {
+    if (isSeparator(item) || item.disabled) continue
+    const k = itemKey(item)
+    if (!requested.has(k)) continue
+    matched += 1
+    if (maxSelections === undefined || keys.size < maxSelections) {
+      keys.add(k)
+    }
+  }
+
+  return {
+    keys,
+    clamped: maxSelections !== undefined && matched > maxSelections,
+  }
 }
 
 export function findNextValidIndex<V>(
@@ -2519,21 +2568,28 @@ export function useEnhancedSelectInput<V>({
   const onSelectedKeysChangeReference = useRef(onSelectedKeysChange)
   onSelectedKeysChangeReference.current = onSelectedKeysChange
   const isKeysControlled = controlledKeys !== undefined
+  // Mount-only seed: `defaultSelectedKeys` is only ever consulted on the
+  // initial render (README-documented `default*` semantics), so a later
+  // change to `maxSelections` does not re-clamp it — see `handleSubmit`'s
+  // own min/max guard, which stays reachable via a runtime-lowered cap.
+  // Lazy ref init (not useState) since only the first computed value ever
+  // matters — the guard makes it idempotent under StrictMode's double
+  // render, so this is the same "compute once" contract a useState
+  // initializer would give, without needing an unused setter.
+  const uncontrolledCheckedKeysSeedReference = useRef<
+    { keys: Set<string>; clamped: boolean } | undefined
+  >(undefined)
+  uncontrolledCheckedKeysSeedReference.current ??= resolveInitialCheckedKeys(
+    items,
+    defaultSelectedKeys,
+    multiple ? maxSelections : undefined
+  )
+
+  const uncontrolledCheckedKeysSeed =
+    uncontrolledCheckedKeysSeedReference.current
   const [uncontrolledCheckedKeys, setUncontrolledCheckedKeys] = useState<
     Set<string>
-  >(() => {
-    const disabledKeys = new Set(
-      items
-        .filter(
-          (item): item is Item<V> =>
-            !isSeparator(item) && Boolean(item.disabled)
-        )
-        .map((item) => itemKey(item))
-    )
-    return new Set(
-      (defaultSelectedKeys ?? []).filter((key) => !disabledKeys.has(key))
-    )
-  })
+  >(uncontrolledCheckedKeysSeed.keys)
   // Shared by both the controlled and uncontrolled pruning below so a single
   // pass over `items` serves both paths.
   const itemKeySets = useMemo(() => {
@@ -2553,21 +2609,24 @@ export function useEnhancedSelectInput<V>({
 
     return { validKeys, disabledKeys, duplicateSignature }
   }, [items])
-  const controlledCheckedKeys = useMemo(() => {
+  const controlledCheckedKeysResult = useMemo(() => {
     if (!isKeysControlled) return undefined
     // Drop keys for items that no longer exist in `items` at all — not just
     // ones that became disabled — otherwise a checked item removed from
     // `items` (e.g. a remote search results page being replaced) leaves a
     // phantom key behind, and a later `items` array that happens to reuse
     // the same key would render pre-checked despite the user never checking
-    // it this time.
-    return new Set(
-      controlledKeys.filter(
-        (key) =>
-          itemKeySets.validKeys.has(key) && !itemKeySets.disabledKeys.has(key)
-      )
+    // it this time. Also caps at `maxSelections`, in `items` order, so a
+    // controlled `selectedKeys` can never resolve to more than the bound
+    // allows — unlike the uncontrolled seed below, this re-clamps every
+    // render since it's a memo over the live `controlledKeys` prop.
+    return resolveInitialCheckedKeys(
+      items,
+      controlledKeys,
+      multiple ? maxSelections : undefined
     )
-  }, [isKeysControlled, controlledKeys, itemKeySets])
+  }, [isKeysControlled, items, controlledKeys, multiple, maxSelections])
+  const controlledCheckedKeys = controlledCheckedKeysResult?.keys
   // Uncontrolled counterpart of the pruning above, computed synchronously
   // (mirroring `controlledCheckedKeys`) rather than via a `useEffect` —
   // otherwise a same-tick `items` change followed by Enter would read
@@ -2888,6 +2947,26 @@ export function useEnhancedSelectInput<V>({
       )
     }
   }, [isKeysControlled, defaultSelectedKeys])
+
+  // Warn in development when the initial checked set — `defaultSelectedKeys`
+  // uncontrolled, or `selectedKeys` controlled — had more keys than
+  // `maxSelections` allows. The extra keys are silently dropped (see
+  // `resolveInitialCheckedKeys` above), keeping the component confirmable at
+  // mount; without this warning that drop is invisible to the caller.
+  // Depend on the derived `clamped` booleans only, never the raw key arrays.
+  const initialCheckedKeysClamped = isKeysControlled
+    ? Boolean(controlledCheckedKeysResult?.clamped)
+    : uncontrolledCheckedKeysSeed.clamped
+
+  useEffect(() => {
+    // eslint-disable-next-line n/prefer-global/process
+    if (process.env['NODE_ENV'] === 'production') return
+    if (!initialCheckedKeysClamped) return
+    console.warn(
+      `[ink-enhanced-select-input] More initial selected keys were provided than maxSelections (${maxSelections}) allows — ` +
+        `the extra keys were dropped, keeping the first ${maxSelections} in items order.`
+    )
+  }, [initialCheckedKeysClamped, maxSelections])
 
   // Warn in development when a controlled prop is passed without its change
   // handler — the analogue of React's "value prop without onChange" warning.

@@ -3753,6 +3753,143 @@ test('maxSelections caps selectAll deterministically in filteredItems order', as
   t.false(result?.checkedKeys.has('c'))
 })
 
+test('defaultSelectedKeys is clamped to maxSelections at mount', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b', 'c']}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.true(result?.checkedKeys.has('b'))
+  t.false(result?.checkedKeys.has('c'))
+  t.true(result?.isSelectionValid)
+  t.is(result?.selectedIndex, 0)
+})
+
+test('the clamp keeps the first maxSelections keys in items order', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['c', 'a']}
+      maxSelections={1}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 1)
+  t.true(result?.checkedKeys.has('a'))
+  t.false(result?.checkedKeys.has('c'))
+})
+
+test('the clamp composes with disabled pruning', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b', disabled: true },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      defaultSelectedKeys={['a', 'b', 'c']}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.true(result?.checkedKeys.has('c'))
+  t.false(result?.checkedKeys.has('b'))
+})
+
+test('the clamp is a no-op when multiple is false', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  render(
+    <HookHarness
+      items={items}
+      defaultSelectedKeys={['a', 'b', 'c']}
+      maxSelections={2}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 3)
+})
+
+test('controlled selectedKeys is clamped to maxSelections and syncs back', async (t) => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+
+  let result: UseEnhancedSelectInputResult<unknown> | undefined
+  let synced: string[] | undefined
+  render(
+    <HookHarness
+      multiple
+      items={items}
+      selectedKeys={['a', 'b', 'c']}
+      maxSelections={2}
+      onSelectedKeysChange={(keys) => {
+        synced = keys
+      }}
+      onResult={(r) => {
+        result = r
+      }}
+    />
+  )
+
+  await delay()
+  t.is(result?.checkedKeys.size, 2)
+  t.true(result?.checkedKeys.has('a'))
+  t.true(result?.checkedKeys.has('b'))
+  t.false(result?.checkedKeys.has('c'))
+  t.deepEqual(synced, ['a', 'b'])
+})
+
 test('isSelectionValid and selectionCount reflect minSelections/maxSelections', async (t) => {
   const items = [
     { label: 'A', value: 'a' },
@@ -3826,10 +3963,53 @@ test.serial(
 )
 
 test.serial(
-  'maxSelections blocks onConfirm when the checked count exceeds the cap',
+  'maxSelections blocks onConfirm when the cap is lowered after mount',
   async (t) => {
-    // A caller could pass defaultSelectedKeys that already exceed
-    // maxSelections — Enter must still refuse to confirm in that case.
+    // The uncontrolled defaultSelectedKeys seed is clamped at mount (see the
+    // "defaultSelectedKeys is clamped to maxSelections at mount" test below),
+    // so the only way to reach handleSubmit's own min/max guard is a
+    // maxSelections prop that gets *lowered* on a later render.
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    let confirmed: string[] | undefined
+    const { stdin, rerender } = render(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        maxSelections={2}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+
+    await delay()
+    rerender(
+      <EnhancedSelectInput
+        multiple
+        items={items}
+        maxSelections={1}
+        defaultSelectedKeys={['a', 'b']}
+        onConfirm={(selected) => {
+          confirmed = selected.map((item) => String(item.value))
+        }}
+      />
+    )
+    await delay()
+    stdin.write(ENTER)
+    await delay()
+    t.is(confirmed, undefined)
+  }
+)
+
+test.serial(
+  'defaultSelectedKeys over maxSelections mounts confirmable and Enter fires with the clamped set',
+  async (t) => {
     const items = [
       { label: 'A', value: 'a' },
       { label: 'B', value: 'b' },
@@ -3841,8 +4021,8 @@ test.serial(
       <EnhancedSelectInput
         multiple
         items={items}
-        maxSelections={1}
-        defaultSelectedKeys={['a', 'b']}
+        maxSelections={2}
+        defaultSelectedKeys={['a', 'b', 'c']}
         onConfirm={(selected) => {
           confirmed = selected.map((item) => String(item.value))
         }}
@@ -3852,7 +4032,87 @@ test.serial(
     await delay()
     stdin.write(ENTER)
     await delay()
-    t.is(confirmed, undefined)
+    t.not(confirmed, undefined)
+    t.is(confirmed!.length, 2)
+    t.deepEqual(confirmed, ['a', 'b'])
+  }
+)
+
+test.serial(
+  'dev warning: defaultSelectedKeys exceeding maxSelections logs a warning',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={items}
+          maxSelections={2}
+          defaultSelectedKeys={['a', 'b', 'c']}
+        />
+      )
+      await delay()
+      t.true(warnings.some((message) => message.includes('maxSelections (2)')))
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
+  }
+)
+
+test.serial(
+  'dev warning: no warning when defaultSelectedKeys is within maxSelections',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a' },
+      { label: 'B', value: 'b' },
+      { label: 'C', value: 'c' },
+    ]
+
+    const originalWarn = console.warn
+    // eslint-disable-next-line n/prefer-global/process
+    const originalNodeEnv = process.env['NODE_ENV']
+    const warnings: string[] = []
+    console.warn = (...arguments_: unknown[]) => {
+      warnings.push(String(arguments_[0]))
+    }
+
+    // eslint-disable-next-line n/prefer-global/process
+    process.env['NODE_ENV'] = 'development'
+
+    try {
+      render(
+        <EnhancedSelectInput
+          multiple
+          items={items}
+          maxSelections={2}
+          defaultSelectedKeys={['a', 'b']}
+        />
+      )
+      await delay()
+      t.false(warnings.some((message) => message.includes('maxSelections')))
+    } finally {
+      console.warn = originalWarn
+      // eslint-disable-next-line n/prefer-global/process
+      process.env['NODE_ENV'] = originalNodeEnv
+    }
   }
 )
 
