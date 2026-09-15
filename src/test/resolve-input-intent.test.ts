@@ -535,6 +535,140 @@ test('km.search disabled stops printable characters from being captured in searc
   t.deepEqual(intent, { type: 'none' })
 })
 
+// --- km.search disabled also gates deletion, clearing, and cursor movement
+// (#192): the flag disables the whole search line, not just character
+// capture, so a caller-owned query (via `searchQuery`/`setSearchQuery`)
+// cannot be edited or cleared while `search` is off.
+
+test('km.search disabled stops backspace/delete from editing the query', (t) => {
+  const backspace = resolveInputIntent(
+    '',
+    key({ backspace: true }),
+    context({
+      searchable: true,
+      searchQuery: 'apple',
+      searchCursor: 5,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(backspace, { type: 'none' })
+
+  const forwardDelete = resolveInputIntent(
+    '',
+    key({ delete: true }),
+    context({
+      searchable: true,
+      searchQuery: 'apple',
+      searchCursor: 5,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(forwardDelete, { type: 'none' })
+})
+
+test('km.search disabled stops Ctrl+W and Ctrl+U from editing the query', (t) => {
+  const ctrlW = resolveInputIntent(
+    'w',
+    key({ ctrl: true }),
+    context({
+      searchable: true,
+      searchQuery: 'foo bar',
+      searchCursor: 7,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(ctrlW, { type: 'none' })
+
+  const ctrlU = resolveInputIntent(
+    'u',
+    key({ ctrl: true }),
+    context({
+      searchable: true,
+      searchQuery: 'foo bar',
+      searchCursor: 4,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(ctrlU, { type: 'none' })
+})
+
+test('km.search disabled makes Escape fall through to cancel/ascend instead of clearing', (t) => {
+  const cancels = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({
+      searchable: true,
+      searchQuery: 'apple',
+      km: { search: false, cancel: true },
+    })
+  )
+  t.deepEqual(cancels, { type: 'cancel' })
+
+  const cancelDisabled = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({
+      searchable: true,
+      searchQuery: 'apple',
+      km: { search: false, cancel: false },
+    })
+  )
+  t.deepEqual(cancelDisabled, { type: 'none' })
+
+  const ascends = resolveInputIntent(
+    '',
+    key({ escape: true }),
+    context({
+      searchable: true,
+      searchQuery: 'apple',
+      depth: 1,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(ascends, { type: 'ascend' })
+})
+
+test('km.search disabled stops ←/→/Home/End/Ctrl+A/Ctrl+E from moving the search cursor', (t) => {
+  const left = resolveInputIntent(
+    '',
+    key({ leftArrow: true }),
+    context({
+      searchable: true,
+      searchQuery: 'ab',
+      searchCursor: 1,
+      km: { search: false },
+    })
+  )
+  // Vertical orientation has no list navigation on ←, so this is a no-op —
+  // the point is that it is NOT a search-cursor intent either.
+  t.deepEqual(left, { type: 'none' })
+
+  const home = resolveInputIntent(
+    '',
+    key({ home: true }),
+    context({
+      searchable: true,
+      searchQuery: 'ab',
+      searchCursor: 2,
+      km: { search: false },
+    })
+  )
+  // With search disabled, Home resumes ordinary list-boundary jumping.
+  t.deepEqual(home, { type: 'jump', index: 0 })
+
+  const ctrlA = resolveInputIntent(
+    'a',
+    key({ ctrl: true }),
+    context({
+      searchable: true,
+      searchQuery: 'ab',
+      searchCursor: 2,
+      km: { search: false },
+    })
+  )
+  t.deepEqual(ctrlA, { type: 'none' })
+})
+
 // --- Search-line cursor movement (F3: search field ergonomics) ---
 
 test('searchable left/right arrows move the search cursor in vertical orientation', (t) => {
