@@ -1487,7 +1487,8 @@ export type Intent<V> =
 
 /**
  * Search-line word/line delete, backspace, and Escape-while-querying,
- * scoped to searchable mode.
+ * scoped to searchable mode and gated (via {@link resolveSearchEditIntent})
+ * on `keyMap.search`.
  */
 function resolveSearchDeleteIntent<V>(
   key: Key,
@@ -1558,7 +1559,8 @@ function resolveSearchCursorIntent<V>(
   // they mean "move the search cursor" rather than "move the highlight".
   // `keyMap` exists so a parent app can claim a key globally, and a key the
   // caller disabled must not keep acting just because searchable mode
-  // repurposed it.
+  // repurposed it. (This function itself only runs when `km.search` is
+  // enabled — see {@link resolveSearchEditIntent}.)
   if (km.homeEnd && key.home) {
     return { type: 'search-cursor-home' }
   }
@@ -1589,7 +1591,12 @@ function resolveSearchEditIntent<V>(
   input: string,
   context: InputIntentContext<V>
 ): Intent<V> | undefined {
-  if (!context.searchable) return undefined
+  // `keyMap.search` governs the whole search line, not just character
+  // capture: a caller that disabled it must not have Backspace/Ctrl+W/
+  // Ctrl+U/Escape silently edit a query it owns via `searchQuery`/
+  // `setSearchQuery`, nor have ←/→/Home/End swallowed by an uneditable
+  // cursor. See #192.
+  if (!context.searchable || !context.km.search) return undefined
 
   return (
     resolveSearchDeleteIntent(key, input, context) ??

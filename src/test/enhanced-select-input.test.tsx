@@ -9193,7 +9193,7 @@ test.serial(
     await delay()
     stdin.write(END)
     await delay()
-    stdin.write('')
+    stdin.write('\u007F')
     await waitFor(() => !lastFrame()!.includes('/ Xapp'))
 
     t.true(lastFrame()!.includes('/ Xap'))
@@ -9218,7 +9218,7 @@ test.serial(
     stdin.write(ARROW_LEFT)
     await delay()
     // Cursor is now before "b" (between "a" and "bc") — backspace removes "a".
-    stdin.write('')
+    stdin.write('\u007F')
     await waitFor(() => lastFrame()!.includes('/ bc'))
 
     t.true(lastFrame()!.includes('/ bc'))
@@ -13007,5 +13007,142 @@ test.serial(
     stdin.write(END)
     await waitFor(() => result?.searchCursor === 2)
     t.is(result?.searchCursor, 2)
+  }
+)
+
+// --- keyMap.search=false gates the whole search line, not just typing (#192) ---
+
+test.serial(
+  'searchable: keyMap.search=false stops Backspace/Ctrl+W/Ctrl+U from editing a query set via setSearchQuery',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        keyMap={{ search: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSearchQuery('apple')
+    await waitFor(() => result?.searchQuery === 'apple')
+    t.is(result?.searchCursor, 5)
+
+    stdin.write('\u007F') // Backspace
+    await delay()
+    t.is(result?.searchQuery, 'apple')
+    t.is(result?.searchCursor, 5)
+
+    stdin.write(CTRL_W)
+    await delay()
+    t.is(result?.searchQuery, 'apple')
+
+    stdin.write(CTRL_U)
+    await delay()
+    t.is(result?.searchQuery, 'apple')
+  }
+)
+
+test.serial(
+  'searchable: keyMap.search=false makes Escape call onCancel instead of clearing the query',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let cancelled = false
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        keyMap={{ search: false }}
+        onCancel={() => {
+          cancelled = true
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSearchQuery('apple')
+    await waitFor(() => result?.searchQuery === 'apple')
+
+    stdin.write(ESCAPE)
+    await waitFor(() => cancelled)
+    t.true(cancelled)
+    t.is(result?.searchQuery, 'apple')
+  }
+)
+
+test.serial(
+  'searchable: keyMap.search=false stops ←/Home from moving the search cursor',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        keyMap={{ search: false }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSearchQuery('apple')
+    await waitFor(() => result?.searchQuery === 'apple')
+    t.is(result?.searchCursor, 5)
+
+    stdin.write(ARROW_LEFT)
+    await delay()
+    t.is(result?.searchCursor, 5)
+
+    stdin.write(HOME)
+    await delay()
+    t.is(result?.searchCursor, 5)
+  }
+)
+
+// Control test: the exact same edits, without keyMap.search disabled, DO
+// mutate the query and cursor — proves the assertions above are gated by the
+// flag rather than being globally broken.
+test.serial(
+  'searchable: control — without keyMap.search=false, Backspace and Escape still edit and clear the query',
+  async (t) => {
+    let result: UseEnhancedSelectInputResult<unknown> | undefined
+    let cancelled = false
+
+    const { stdin } = render(
+      <HookHarness
+        searchable
+        items={COLLAPSIBLE_GROUPED_ITEMS}
+        onCancel={() => {
+          cancelled = true
+        }}
+        onResult={(r) => {
+          result = r
+        }}
+      />
+    )
+    await delay()
+
+    result?.setSearchQuery('apple')
+    await waitFor(() => result?.searchQuery === 'apple')
+
+    stdin.write('\u007F') // Backspace
+    await waitFor(() => result?.searchQuery === 'appl')
+    t.is(result?.searchQuery, 'appl')
+
+    stdin.write(ESCAPE)
+    await waitFor(() => result?.searchQuery === '')
+    t.is(result?.searchQuery, '')
+    t.false(cancelled)
   }
 )
