@@ -8,6 +8,7 @@ import {
   findNextValidIndex,
   findPageIndex,
   isGroupHeaderRow,
+  isSeparator,
   pageIndexOfStart,
   pageStartFor,
   resolveInitialIndex,
@@ -767,4 +768,61 @@ test('computeNavRowPageStarts: stickyGroupHeaders reserves nothing when a page o
   // Rows: [header:First, A, B, C, D] — 5 rows, limit 3. Page 2 starts at
   // "C", ungrouped — no header (real or sticky) applies to it at all.
   t.deepEqual(computeNavRowPageStarts(rows, 3, true), [0, 3])
+})
+
+const stickyCostOf = (row: NavRow<string>): 0 | 1 =>
+  !isGroupHeaderRow(row) && !isSeparator(row) && row.group !== undefined ? 1 : 0
+
+test('computeNavRowPageStarts: stickyGroupHeaders — every page respects the reserved-row budget, across many groups', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'First'),
+    mkGroupedItem('D', 'First'),
+    mkGroupedItem('E', 'Second'),
+    mkGroupedItem('F', 'Second'),
+    mkGroupedItem('G', 'Third'),
+    mkGroupedItem('H', 'Third'),
+    mkGroupedItem('I', 'Third'),
+    mkItem('J'),
+    mkItem('K'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  const limit = 4
+  const starts = computeNavRowPageStarts(rows, limit, true)
+
+  for (const [i, start] of starts.entries()) {
+    const nextStart = i + 1 < starts.length ? starts[i + 1]! : rows.length
+    const pageRowCount = nextStart - start
+    const cost = pageRowCount + stickyCostOf(rows[start]!)
+    t.true(
+      cost <= limit,
+      `page starting at index ${start} costs ${cost} rows, exceeding limit ${limit}`
+    )
+  }
+})
+
+test('computeNavRowPageStarts: stickyGroupHeaders with limit === 1 — a mid-group page still exceeds limit by one row', (t) => {
+  const items = [
+    mkGroupedItem('A', 'First'),
+    mkGroupedItem('B', 'First'),
+    mkGroupedItem('C', 'First'),
+  ]
+  const rows = buildNavigableRows(items, new Set())
+  // Rows: [header:First, A, B, C] — 4 rows, limit 1. Every page holds
+  // exactly one real row (a page is never left empty — see
+  // computePageStarts' matching degenerate-limit rule), so a page opening
+  // mid-group (B or C) costs 1 (the row) + 1 (its reserved sticky header) =
+  // 2, one over limit. This is the documented, pre-existing quirk, not a
+  // bug to fix here.
+  const starts = computeNavRowPageStarts(rows, 1, true)
+  t.deepEqual(starts, [0, 1, 2, 3])
+
+  const midGroupStarts = starts.filter(
+    (start) => stickyCostOf(rows[start]!) === 1
+  )
+  t.true(midGroupStarts.length > 0)
+  for (const start of midGroupStarts) {
+    t.is(1 + stickyCostOf(rows[start]!), 2)
+  }
 })

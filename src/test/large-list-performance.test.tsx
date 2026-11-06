@@ -209,3 +209,35 @@ test('10k grouped items: End jumps to the last group and item, frame stays bound
   t.true(frame.includes(`── Group ${ITEM_COUNT / 100 - 1} (continued) ──`))
   t.true(frame.includes(`Item ${ITEM_COUNT - 1}`))
 })
+
+test('10k grouped items: collapsible + stickyGroupHeaders End jumps to the last group, frame stays bounded', async (t) => {
+  const groupLimit = 20
+  let highlighted = ''
+  const { stdin, lastFrame } = render(
+    <EnhancedSelectInput
+      collapsible
+      stickyGroupHeaders
+      showScrollIndicators
+      items={bigGroupedItems}
+      limit={groupLimit}
+      onHighlight={(item) => {
+        highlighted = item.label
+      }}
+    />
+  )
+
+  await delay()
+  stdin.write(END)
+  await waitFor(() => highlighted === `Item ${ITEM_COUNT - 1}`)
+
+  t.is(highlighted, `Item ${ITEM_COUNT - 1}`)
+  const frame = lastFrame()!
+  // The pinned sticky-header row is reserved for in computeNavRowPageStarts,
+  // so it never pushes the frame past the pre-existing limit + 2 (scroll
+  // indicators) budget — no double-counting against `limit` at scale.
+  t.true(countNonEmptyLines(frame) <= groupLimit + 2)
+  // Collapsible mode's default renderer prefixes headers with ▾/▸, unlike
+  // the non-collapsible control test above.
+  t.true(frame.includes(`── ▾ Group ${ITEM_COUNT / 100 - 1} (continued) ──`))
+  t.true(frame.includes(`Item ${ITEM_COUNT - 1}`))
+})

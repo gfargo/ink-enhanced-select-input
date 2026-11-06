@@ -382,6 +382,8 @@ The pinned header is a read-only visual aid, not a navigable row — it's never 
 
 In `paginationMode: 'page'` (the default), the pinned header's row is budgeted for — a page that would otherwise open mid-group renders one fewer real row so the total still fits `limit`. In `paginationMode: 'scroll'` it isn't budgeted, so the rendered row count may exceed `limit` by one on the ticks where a sticky header is shown — this mirrors the same pre-existing, unbudgeted-header behavior non-`collapsible` groups already have in scroll mode. `stickyGroupHeaders` is a no-op when `collapsible` is false.
 
+With `showScrollIndicators` also enabled, the pinned header **adds a row inside the item column** — it never replaces or suppresses the `▲ N more` / `▼ N more` indicator lines, which live outside the item column and were never charged against `limit` in the first place. In vertical orientation this means the `▲ N more` line, the pinned `(continued)` header, and the first real item render as three separate lines, in that order. `▲ N more`'s count still includes the group's real, off-window header row — that's correct: the real header is still above the window and reachable by scrolling further up, independent of the pinned copy shown in its place. In horizontal orientation the pinned header is simply the leftmost cell of the item row, between the `◀` indicator and the first item's cell — no cell's text is shared with another.
+
 ### Descriptions, Hints & Disabled Reasons
 
 Give an item a `description` (rendered dimmed on its own line beneath the label) and/or a `hint` (rendered dimmed to the right of the label) for a command-palette look. A `disabledReason` renders dimmed beside the label of a `disabled` item to explain why it can't be selected.
