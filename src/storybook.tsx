@@ -9,6 +9,7 @@ type StorybookView =
   | 'custom-item'
   | 'groups'
   | 'collapsible-groups'
+  | 'sticky-group-headers'
   | 'group-select-all'
   | 'multi-select'
   | 'searchable'
@@ -102,6 +103,11 @@ export function Storybook() {
                 group: 'New in 1.0',
               },
               {
+                label: 'Sticky Group Headers',
+                value: 'sticky-group-headers',
+                group: 'New in 1.0',
+              },
+              {
                 label: 'Group Select-All',
                 value: 'group-select-all',
                 group: 'New in 1.0',
@@ -183,6 +189,41 @@ export function Storybook() {
               { label: 'Go', value: 'go', group: 'Languages' },
               { label: 'React', value: 'react', group: 'Frameworks' },
               { label: 'Ink', value: 'ink', group: 'Frameworks' },
+              { label: 'Go Back', value: 'back', hotkey: 'b' },
+            ]}
+            onSelect={(item) => {
+              if (item.value === 'back') {
+                setCurrentView(undefined)
+              }
+            }}
+          />
+        </Box>
+      )}
+
+      {currentView === 'sticky-group-headers' && orientation && (
+        <Box flexDirection="column">
+          <Text dimColor>
+            Sticky Group Headers — limit=5 with scroll indicators; scroll past a
+            group&apos;s own header and a pinned &ldquo;(continued)&rdquo; copy
+            stays at the top of the window:
+          </Text>
+          <EnhancedSelectInput
+            collapsible
+            stickyGroupHeaders
+            showScrollIndicators
+            orientation={orientation}
+            limit={5}
+            items={[
+              { label: 'Apple', value: 'apple', group: 'Fruits' },
+              { label: 'Banana', value: 'banana', group: 'Fruits' },
+              { label: 'Cherry', value: 'cherry', group: 'Fruits' },
+              { label: 'Date', value: 'date', group: 'Fruits' },
+              { label: 'Carrot', value: 'carrot', group: 'Vegetables' },
+              { label: 'Potato', value: 'potato', group: 'Vegetables' },
+              { label: 'Onion', value: 'onion', group: 'Vegetables' },
+              { label: 'Rice', value: 'rice', group: 'Grains' },
+              { label: 'Wheat', value: 'wheat', group: 'Grains' },
+              { label: 'Oats', value: 'oats', group: 'Grains' },
               { label: 'Go Back', value: 'back', hotkey: 'b' },
             ]}
             onSelect={(item) => {

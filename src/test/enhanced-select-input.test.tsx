@@ -7039,6 +7039,162 @@ test.serial(
   }
 )
 
+test.serial(
+  'stickyGroupHeaders: coexists with showScrollIndicators without visual collision (vertical)',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    // Rows: [header:First, A, B, C, header:Second, D] — 6 rows, limit 3.
+    // Page 2 opens on "C" — mid-"First" — so both the "▲ N more" indicator
+    // and the pinned continuation header are in play on the same frame.
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        stickyGroupHeaders
+        showScrollIndicators
+        items={items}
+        limit={3}
+      />
+    )
+
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    const frame = lastFrame()!
+    const lines = frame.split('\n')
+    const indexerOf = (needle: string) =>
+      lines.findIndex((line) => line.includes(needle))
+
+    const aboveLine = indexerOf('▲')
+    const stickyHeaderLine = indexerOf('── ▾ First (continued) ──')
+    const itemCLine = lines.findIndex((line) => line.includes('C'))
+    const belowLine = indexerOf('▼')
+
+    t.true(aboveLine !== -1)
+    t.true(stickyHeaderLine !== -1)
+    t.true(itemCLine !== -1)
+    t.true(belowLine !== -1)
+    // Three distinct lines, in order: the scroll indicator above the
+    // window, then the pinned header, then the first real item.
+    t.true(aboveLine < stickyHeaderLine)
+    t.true(stickyHeaderLine < itemCLine)
+    t.true(itemCLine < belowLine)
+
+    // No single line carries both the indicator text and the pinned
+    // header's "(continued)" marker — they never share a row.
+    for (const line of lines) {
+      t.false(line.includes('more') && line.includes('(continued)'))
+    }
+  }
+)
+
+test.serial(
+  'stickyGroupHeaders: coexists with showScrollIndicators without visual collision (horizontal)',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        collapsible
+        stickyGroupHeaders
+        showScrollIndicators
+        orientation="horizontal"
+        items={items}
+        limit={3}
+      />
+    )
+
+    // → is reserved to toggle a focused header's collapsed state
+    // (resolveToggleCollapseIntent fires on any rightArrow while a header is
+    // highlighted, regardless of orientation), so it can't be used to move
+    // past header:First here. The vim forward key for horizontal
+    // orientation ('l') isn't intercepted by that rule and moves normally.
+    await delay()
+    stdin.write('l')
+    await delay()
+    stdin.write('l')
+    await delay()
+    stdin.write('l')
+    await delay()
+
+    const frame = lastFrame()!
+    t.true(frame.includes('◀'))
+    t.true(frame.includes('── ▾ First (continued) ──'))
+    t.true(frame.includes('── ▾ Second ──'))
+    // The indicator text and the pinned header's own text are rendered in
+    // separate cells — neither string is a substring of the other, and the
+    // frame does not fuse them into a single "N more(continued)" token.
+    t.false(frame.includes('more(continued)'))
+    t.false(frame.includes('(continued)more'))
+  }
+)
+
+test.serial(
+  'stickyGroupHeaders: non-collapsible control — incidental continuation header is unaffected by showScrollIndicators',
+  async (t) => {
+    const items = [
+      { label: 'A', value: 'a', group: 'First' },
+      { label: 'B', value: 'b', group: 'First' },
+      { label: 'C', value: 'c', group: 'First' },
+      { label: 'D', value: 'd', group: 'Second' },
+    ]
+
+    // Same fixture, but non-collapsible: stickyGroupHeaders is a documented
+    // no-op there, and the existing incidental-header-on-page-open behavior
+    // (CLAUDE.md: pair a collapsible test with a non-collapsible control)
+    // must be unchanged by this ticket's work.
+    const { stdin, lastFrame } = render(
+      <EnhancedSelectInput
+        stickyGroupHeaders
+        showScrollIndicators
+        items={items}
+        limit={3}
+      />
+    )
+
+    // Non-collapsible mode has no explicit header rows, so selectedIndex
+    // indexes filteredItems directly (0=A) rather than navRows (0=header:
+    // First) — landing on "C" takes 2 presses here, not the 3 the
+    // collapsible tests above need to cross their extra header row.
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+    stdin.write(ARROW_DOWN)
+    await delay()
+
+    const frame = lastFrame()!
+    const lines = frame.split('\n')
+    const indexerOf = (needle: string) =>
+      lines.findIndex((line) => line.includes(needle))
+
+    const aboveLine = indexerOf('▲')
+    // Non-collapsible mode has no ▾/▸ affordance on its headers.
+    const continuationLine = indexerOf('── First (continued) ──')
+    const itemCLine = lines.findIndex((line) => line.includes('C'))
+
+    t.true(aboveLine !== -1)
+    t.true(continuationLine !== -1)
+    t.true(itemCLine !== -1)
+    t.true(aboveLine < continuationLine)
+    t.true(continuationLine < itemCLine)
+  }
+)
+
 // ── group-level select-all (Ctrl+A on a focused header, multiple mode) ────────
 
 test.serial(
